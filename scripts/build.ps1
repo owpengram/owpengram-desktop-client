@@ -44,13 +44,15 @@ function Patch-Server([string]$Address, [int]$Port) {
         throw 'Active kBuiltInDcs blocks not found in mtproto_dc_options.cpp'
     }
 
+    $ip = $Address
+    $portNum = $Port
     $newContent = [regex]::Replace($content, $pattern, {
         param($m)
-        $m.Groups[1].Value + $Host + $m.Groups[3].Value + $Port + $m.Groups[5].Value
+        $m.Groups[1].Value + $ip + $m.Groups[3].Value + $portNum + $m.Groups[5].Value
     })
 
     [System.IO.File]::WriteAllText($DcOptionsFile, $newContent, (New-Object System.Text.UTF8Encoding $false))
-    Write-Ok "Server patched: ${Host}:$Port"
+    Write-Ok "Server patched: ${ip}:$portNum"
 }
 
 function Find-VcVars {
