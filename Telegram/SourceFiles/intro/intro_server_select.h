@@ -23,13 +23,21 @@ public:
 	void activate() override;
 	void submit() override;
 	[[nodiscard]] rpl::producer<QString> nextButtonText() const override;
+	[[nodiscard]] bool hasBack() const override {
+		return true;
+	}
 	void resizeEvent(QResizeEvent *e) override;
+	void showEvent(QShowEvent *e) override;
 private:
 	void rebuildCards();
 	void joinServer(const Owpengram::Server &server);
 	void proceedJoin(const Owpengram::Server &server);
+	void updateScrollGeometry();
 	void updateCardsGeometry();
 	void updateAddButtonGeometry();
+	[[nodiscard]] int scrollWidth() const;
+	[[nodiscard]] int effectiveScrollWidth() const;
+	[[nodiscard]] int columnCount() const;
 	object_ptr<Ui::RoundButton> _addServer;
 	object_ptr<Ui::ScrollArea> _scroll;
 	not_null<Ui::RpWidget*> _grid;

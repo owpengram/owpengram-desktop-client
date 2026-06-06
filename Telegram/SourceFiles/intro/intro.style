@@ -194,14 +194,16 @@ introQrSkipTop: 360px;
 introQrCenterSize: 44px;
 
 introServerGridWidth: 880px;
-introServerGridColumns: 2;
+introServerGridMaxColumns: 3;
 introServerGridSpacing: 16px;
 introServerGridTop: 24px;
-introServerCardHeight: 220px;
+introServerCardMinWidth: 280px;
+introServerCardHeight: 260px;
 introServerCardRadius: 12px;
 introServerCardRipple: defaultRippleAnimation;
-introServerCardLogo: 48px;
-introServerCardPadding: margins(16px, 16px, 16px, 16px);
+introServerCardLogo: 56px;
+introServerCardStatusDot: 8px;
+introServerCardPadding: margins(20px, 20px, 20px, 20px);
 introServerCardName: FlatLabel(defaultFlatLabel) {
 	textFg: windowActiveTextFg;
 	style: TextStyle(defaultTextStyle) {

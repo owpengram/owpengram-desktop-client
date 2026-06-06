@@ -6,7 +6,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "base/weak_ptr.h"
 #include "intro/intro_server_select.h"
-#include "intro/intro_start.h"
 #include "intro/intro_qr.h"
 #include "intro/intro_widget.h"
 #include "boxes/abstract_box.h"
@@ -92,7 +91,7 @@ ServerCard::ServerCard(
 			_join(_server);
 		}
 	});
-	resize(st::introServerGridWidth / st::introServerGridColumns, st::introServerCardHeight);
+	resize(st::introServerCardMinWidth, st::introServerCardHeight);
 	updateGeometryInner();
 }
 void ServerCard::setOnline(bool online) {
@@ -112,11 +111,24 @@ void ServerCard::paintEvent(QPaintEvent *e) {
 	const auto inner = rect().marginsRemoved(st::introServerCardPadding);
 	const auto radius = st::introServerCardRadius;
 	p.setPen(Qt::NoPen);
-	p.setBrush(st::windowBg);
+	p.setBrush(st::boxBg);
 	p.drawRoundedRect(inner, radius, radius);
 	p.setPen(st::boxDividerFg);
 	p.setBrush(Qt::NoBrush);
 	p.drawRoundedRect(inner, radius, radius);
+	if (_online.has_value()) {
+		const auto dotSize = st::introServerCardStatusDot;
+		const auto dotLeft = inner.x();
+		const auto dotTop = inner.y() + inner.height()
+			- _joinButton->height()
+			- st::introServerCardPadding.bottom()
+			- _status->height() / 2
+			- dotSize / 2;
+		p.setPen(Qt::NoPen);
+		p.setBrush(*_online ? st::windowActiveTextFg : st::attentionButtonFg);
+		p.drawEllipse(
+			QRectF(dotLeft, dotTop, dotSize, dotSize));
+	}
 	paintRipple(p, 0, 0);
 }
 void ServerCard::resizeEvent(QResizeEvent *e) {
@@ -127,29 +139,34 @@ void ServerCard::updateGeometryInner() {
 	const auto padding = st::introServerCardPadding;
 	const auto inner = rect().marginsRemoved(padding);
 	const auto logoSize = st::introServerCardLogo;
+	const auto joinHeight = _joinButton->height();
+	const auto statusDotSkip = st::introServerCardStatusDot + padding.left() / 2;
 	_logo->move(inner.x(), inner.y());
 	const auto textLeft = inner.x() + logoSize + padding.left();
-	const auto textWidth = inner.width() - logoSize - padding.left();
+	const auto textWidth = std::max(
+		inner.width() - logoSize - padding.left(),
+		1);
 	_name->resizeToWidth(textWidth);
 	_name->moveToLeft(textLeft, inner.y());
 	_endpoint->resizeToWidth(textWidth);
-	_endpoint->moveToLeft(textLeft, _name->y() + _name->height() + padding.top() / 2);
+	_endpoint->moveToLeft(
+		textLeft,
+		_name->y() + _name->height() + padding.top() / 3);
+	const auto contentTop = std::max(
+		_logo->y() + logoSize,
+		_endpoint->y() + _endpoint->height())
+		+ padding.top();
 	_description->resizeToWidth(inner.width());
-	_description->moveToLeft(
+	_description->moveToLeft(inner.x(), contentTop);
+	const auto footerTop = inner.y() + inner.height() - joinHeight
+		- padding.bottom() / 2
+		- _status->height();
+	_status->resizeToWidth(inner.width() - statusDotSkip);
+	_status->moveToLeft(inner.x() + statusDotSkip, footerTop);
+	_joinButton->resize(inner.width(), joinHeight);
+	_joinButton->moveToLeft(
 		inner.x(),
-		_endpoint->y() + _endpoint->height() + padding.top() / 2);
-	const auto joinHeight = _joinButton->height();
-	const auto joinWidth = std::min(
-		_joinButton->width(),
-		inner.width() / 3);
-	_joinButton->resize(joinWidth, joinHeight);
-	_joinButton->move(
-		inner.x() + inner.width() - joinWidth,
 		inner.y() + inner.height() - joinHeight);
-	_status->resizeToWidth(inner.width() - joinWidth - padding.left());
-	_status->moveToLeft(
-		inner.x(),
-		inner.y() + inner.height() - _status->height());
 }
 } // namespace
 ServerSelectWidget::ServerSelectWidget(
@@ -168,9 +185,11 @@ ServerSelectWidget::ServerSelectWidget(
 	_addServer->setClickedCallback([=] {
 		const auto weak = base::make_weak(this);
 		Ui::show(Box<AddServerBox>([=](Owpengram::Server server) {
-			if (weak) {
-				rebuildCards();
-			}
+			Ui::PostponeCall(weak, [=] {
+				if (weak) {
+					rebuildCards();
+				}
+			});
 		}));
 	});
 	_statusTimer.setCallback([=] { rebuildCards(); });
@@ -178,13 +197,45 @@ ServerSelectWidget::ServerSelectWidget(
 }
 void ServerSelectWidget::activate() {
 	Step::activate();
-	rebuildCards();
+	_scroll->show();
+	_addServer->show();
+	_statusTimer.cancel();
 	_statusTimer.callEach(30000);
+	Ui::PostponeCall(this, [=] {
+		updateScrollGeometry();
+		rebuildCards();
+	});
+}
+void ServerSelectWidget::showEvent(QShowEvent *e) {
+	Step::showEvent(e);
+	Ui::PostponeCall(this, [=] {
+		updateScrollGeometry();
+		updateCardsGeometry();
+	});
 }
 void ServerSelectWidget::submit() {
 }
 rpl::producer<QString> ServerSelectWidget::nextButtonText() const {
 	return rpl::single(QString());
+}
+int ServerSelectWidget::scrollWidth() const {
+	return std::min(
+		width() - 2 * st::introSettingsSkip,
+		st::introServerGridWidth);
+}
+int ServerSelectWidget::effectiveScrollWidth() const {
+	return std::max(_scroll->width(), scrollWidth());
+}
+int ServerSelectWidget::columnCount() const {
+	const auto width = effectiveScrollWidth();
+	const auto minWidth = st::introServerCardMinWidth;
+	const auto spacing = st::introServerGridSpacing;
+	const auto maxColumns = st::introServerGridMaxColumns;
+	if (width <= minWidth) {
+		return 1;
+	}
+	const auto columns = (width + spacing) / (minWidth + spacing);
+	return std::clamp(columns, 1, maxColumns);
 }
 void ServerSelectWidget::rebuildCards() {
 	for (const auto card : _cards) {
@@ -195,10 +246,16 @@ void ServerSelectWidget::rebuildCards() {
 		joinServer(server);
 	};
 	for (const auto &server : Owpengram::ListServers()) {
+		if (!server.valid() && !server.isOfficial) {
+			continue;
+		}
 		const auto card = Ui::CreateChild<ServerCard>(_grid, server, join);
+		card->show();
 		_cards.push_back(card);
 		Owpengram::CheckServerOnline(server, crl::guard(card, [=](bool online) {
-			card->setOnline(online);
+			if (card) {
+				card->setOnline(online);
+			}
 		}));
 	}
 	updateCardsGeometry();
@@ -221,23 +278,24 @@ void ServerSelectWidget::joinServer(const Owpengram::Server &server) {
 }
 void ServerSelectWidget::proceedJoin(const Owpengram::Server &server) {
 	Owpengram::ApplyServerToAccount(&account(), server);
-	if (getData()->enterPoint == EnterPoint::Qr) {
-		goNext<QrWidget>();
-	} else {
-		goNext<StartWidget>();
-	}
+	goNext<QrWidget>();
 }
 void ServerSelectWidget::resizeEvent(QResizeEvent *e) {
 	Step::resizeEvent(e);
 	updateAddButtonGeometry();
+	updateScrollGeometry();
+}
+void ServerSelectWidget::updateScrollGeometry() {
 	const auto scrollTop = coverDescriptionBottom() + st::introServerGridTop;
 	const auto scrollHeight = height() - scrollTop - st::introSettingsSkip;
-	const auto scrollWidth = std::min(width() - 2 * st::introSettingsSkip, st::introServerGridWidth);
+	const auto width = scrollWidth();
 	_scroll->setGeometry(
-		(width() - scrollWidth) / 2,
+		(this->width() - width) / 2,
 		scrollTop,
-		scrollWidth,
-		std::max(scrollHeight, st::introServerCardHeight + st::introServerGridSpacing));
+		width,
+		std::max(
+			scrollHeight,
+			st::introServerCardHeight + st::introServerGridSpacing));
 	updateCardsGeometry();
 }
 void ServerSelectWidget::updateAddButtonGeometry() {
@@ -250,10 +308,11 @@ void ServerSelectWidget::updateCardsGeometry() {
 	if (_cards.empty()) {
 		return;
 	}
-	const auto columns = st::introServerGridColumns;
+	const auto columns = columnCount();
 	const auto spacing = st::introServerGridSpacing;
-	const auto cardWidth = (_scroll->width()
-		- spacing * (columns - 1)) / columns;
+	const auto scrollAreaWidth = effectiveScrollWidth();
+	const auto cardWidth = (scrollAreaWidth - spacing * (columns - 1))
+		/ columns;
 	const auto cardHeight = st::introServerCardHeight;
 	const auto rows = (_cards.size() + columns - 1) / columns;
 	for (auto i = 0; i != _cards.size(); ++i) {
@@ -262,17 +321,17 @@ void ServerSelectWidget::updateCardsGeometry() {
 		const auto column = i % columns;
 		const auto cardsInRow = std::min<int>(
 			columns,
-			_cards.size() - row * columns);
+			int(_cards.size()) - row * columns);
 		const auto rowWidth = cardsInRow * cardWidth
 			+ (cardsInRow - 1) * spacing;
-		const auto rowOffset = (_scroll->width() - rowWidth) / 2;
+		const auto rowOffset = (scrollAreaWidth - rowWidth) / 2;
 		card->resize(cardWidth, cardHeight);
 		card->moveToLeft(
 			rowOffset + column * (cardWidth + spacing),
 			row * (cardHeight + spacing));
 	}
 	const auto maxHeight = rows * cardHeight + (rows - 1) * spacing;
-	_grid->resize(_scroll->width(), maxHeight);
+	_grid->resize(scrollAreaWidth, maxHeight);
 }
 } // namespace details
 } // namespace Intro

@@ -19,7 +19,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_account.h"
 #include "base/qt/qt_common_adapters.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
@@ -69,6 +71,7 @@ constexpr auto kCheckTimeoutMs = 3000;
 
 void WriteCustomServersJson(const QJsonArray &array) {
 	const auto path = ServersFilePath();
+	QDir().mkpath(QFileInfo(path).absolutePath());
 	QFile file(path);
 	if (!file.open(QIODevice::WriteOnly)) {
 		return;
@@ -134,6 +137,9 @@ Server OfficialServer() {
 	if (const auto endpoint = ReadOfficialEndpoint()) {
 		result.host = endpoint->first;
 		result.port = endpoint->second;
+	} else {
+		result.host = u"192.168.100.10"_q;
+		result.port = 10443;
 	}
 	return result;
 }

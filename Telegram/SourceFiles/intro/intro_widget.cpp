@@ -107,13 +107,13 @@ Widget::Widget(
 
 	switch (point) {
 	case EnterPoint::Start:
-		appendStep(new ServerSelectWidget(this, _account, getData()));
+		appendStep(new StartWidget(this, _account, getData()));
 		break;
 	case EnterPoint::Phone:
 		appendStep(new PhoneWidget(this, _account, getData()));
 		break;
 	case EnterPoint::Qr:
-		appendStep(new ServerSelectWidget(this, _account, getData()));
+		appendStep(new StartWidget(this, _account, getData()));
 		break;
 	default: Unexpected("Enter point in Intro::Widget::Widget.");
 	}
