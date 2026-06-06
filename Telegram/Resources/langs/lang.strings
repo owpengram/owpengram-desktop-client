@@ -7615,5 +7615,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_details_description" = "Description";
 "lng_owpengram_server_details_status" = "Connection status";
 "lng_owpengram_server_checking" = "Checking…";
+"lng_owpengram_server_page_prev" = "◀";
+"lng_owpengram_server_page_next" = "▶";
+"lng_owpengram_server_page" = "{current} / {total}";
 
 // Keys finished

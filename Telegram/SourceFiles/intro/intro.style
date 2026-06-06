@@ -193,39 +193,31 @@ introQrStepMargins: margins(20px, 8px, 0px, 0px);
 introQrSkipTop: 360px;
 introQrCenterSize: 44px;
 
-introServerGridWidth: 920px;
-introServerGridMaxColumns: 3;
-introServerGridSpacing: 20px;
-introServerGridTop: 20px;
-introServerCardWidth: 290px;
-introServerCardHeight: 280px;
-introServerCardRadius: 14px;
-introServerCardRipple: defaultRippleAnimation;
+introServerListTop: 12px;
+introServerListBottom: 16px;
+introServerRowLogo: 36px;
+introServerRowSubtext: FlatLabel(defaultFlatLabel) {
+	textFg: windowSubTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px);
+		lineHeight: 16px;
+	}
+}
+introServerRowSubtextMargin: margins(60px, 0px, 16px, 0px);
+introServerRowDescription: FlatLabel(introServerRowSubtext) {
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px);
+		lineHeight: 16px;
+	}
+}
+introServerRowDescriptionMargin: margins(60px, 0px, 16px, 8px);
 introServerCardLogo: 44px;
 introServerCardStatusDot: 8px;
-introServerCardPadding: margins(18px, 18px, 18px, 18px);
-introServerCardHeaderSkip: 12px;
-introServerCardFooterSkip: 10px;
-introServerCardFooterHeight: 48px;
-introServerCardDescriptionMaxHeight: 60px;
 introServerCardStatusDotSkip: 5px;
 introServerCardName: FlatLabel(defaultFlatLabel) {
 	textFg: windowFg;
 	style: TextStyle(defaultTextStyle) {
 		font: font(14px semibold);
-	}
-}
-introServerCardEndpoint: FlatLabel(defaultFlatLabel) {
-	textFg: windowSubTextFg;
-	style: TextStyle(defaultTextStyle) {
-		font: font(12px);
-	}
-}
-introServerCardDescription: FlatLabel(defaultFlatLabel) {
-	textFg: windowSubTextFg;
-	style: TextStyle(defaultTextStyle) {
-		font: font(12px);
-		lineHeight: 17px;
 	}
 }
 introServerCardStatusOnline: FlatLabel(defaultFlatLabel) {
@@ -241,23 +233,6 @@ introServerCardStatusLatency: FlatLabel(introServerCardStatusOnline) {
 	textFg: windowSubTextFg;
 	style: TextStyle(defaultTextStyle) {
 		font: font(11px);
-	}
-}
-introServerCardJoinButton: RoundButton(defaultActiveButton) {
-	width: 80px;
-	height: 32px;
-	radius: 8px;
-	textTop: 8px;
-	style: TextStyle(semiboldTextStyle) {
-		font: font(12px semibold);
-	}
-}
-introServerAddButton: RoundButton(defaultLightButton) {
-	height: 32px;
-	radius: 6px;
-	textTop: 7px;
-	style: TextStyle(semiboldTextStyle) {
-		font: font(13px semibold);
 	}
 }
 introServerPickLabel: FlatLabel(defaultFlatLabel) {

@@ -270,8 +270,12 @@ void Step::resizeEvent(QResizeEvent *e) {
 void Step::updateLabelsPosition() {
 	Ui::SendPendingMoveResizeEvents(_description->entity());
 	if (hasCover()) {
-		_title->moveToLeft((width() - _title->width()) / 2, contentTop() + st::introCoverTitleTop);
-		_description->moveToLeft((width() - _description->width()) / 2, contentTop() + st::introCoverDescriptionTop);
+		_title->moveToLeft(
+			(width() - _title->width()) / 2,
+			contentTop() + coverTitleTop());
+		_description->moveToLeft(
+			(width() - _description->width()) / 2,
+			contentTop() + coverDescriptionTop());
 	} else {
 		_title->moveToLeft(contentLeft() + st::buttonRadius, contentTop() + st::introTitleTop);
 		_description->resizeToWidth(st::introDescription.minWidth);
@@ -503,11 +507,24 @@ int Step::contentTop() const {
 	return result;
 }
 
-int Step::coverDescriptionBottom() const {
+int Step::coverTitleTop() const {
+	return st::introCoverTitleTop;
+}
+
+int Step::coverDescriptionTop() const {
+	return st::introCoverDescriptionTop;
+}
+
+int Step::descriptionBottom() const {
 	Ui::SendPendingMoveResizeEvents(_description->entity());
-	return contentTop()
-		+ st::introCoverDescriptionTop
-		+ _description->entity()->height();
+	const auto descriptionTop = _hasCover
+		? (contentTop() + coverDescriptionTop())
+		: (contentTop() + st::introDescriptionTop);
+	return descriptionTop + _description->entity()->height();
+}
+
+int Step::coverDescriptionBottom() const {
+	return descriptionBottom();
 }
 
 void Step::setErrorCentered(bool centered) {
