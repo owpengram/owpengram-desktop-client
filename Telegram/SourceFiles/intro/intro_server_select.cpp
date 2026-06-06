@@ -23,9 +23,23 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/scroll_area.h"
 #include "styles/style_intro.h"
 #include "styles/style_layers.h"
+
+#include <QRegion>
 namespace Intro {
 namespace details {
 namespace {
+[[nodiscard]] QString FormatIpLine(const Owpengram::Server &server) {
+	return tr::lng_owpengram_server_ip_line(
+		tr::now,
+		lt_host,
+		server.host);
+}
+[[nodiscard]] QString FormatPortLine(const Owpengram::Server &server) {
+	return tr::lng_owpengram_server_port_line(
+		tr::now,
+		lt_port,
+		server.port > 0 ? QString::number(server.port) : u"—"_q);
+}
 class ServerCard final : public Ui::RippleButton {
 public:
 	ServerCard(
@@ -44,12 +58,14 @@ private:
 	Fn<void(const Owpengram::Server&)> _details;
 	object_ptr<Ui::RpWidget> _logo;
 	object_ptr<Ui::FlatLabel> _name;
-	object_ptr<Ui::FlatLabel> _endpoint;
+	object_ptr<Ui::FlatLabel> _ip;
+	object_ptr<Ui::FlatLabel> _port;
 	object_ptr<Ui::FlatLabel> _description;
 	object_ptr<Ui::FlatLabel> _status;
 	object_ptr<Ui::FlatLabel> _latency;
 	object_ptr<Ui::RoundButton> _joinButton;
 	std::optional<bool> _online;
+	QPoint _statusDotCenter;
 };
 ServerCard::ServerCard(
 	QWidget *parent,
@@ -62,7 +78,8 @@ ServerCard::ServerCard(
 , _details(std::move(details))
 , _logo(this)
 , _name(this, server.name, st::introServerCardName)
-, _endpoint(this, Owpengram::FormatEndpoint(server), st::introServerCardEndpoint)
+, _ip(this, FormatIpLine(server), st::introServerCardEndpoint)
+, _port(this, FormatPortLine(server), st::introServerCardEndpoint)
 , _description(this, server.description, st::introServerCardDescription)
 , _status(this, tr::lng_owpengram_server_checking(tr::now), st::introServerCardStatusOnline)
 , _latency(this, QString(), st::introServerCardStatusLatency)
@@ -74,18 +91,25 @@ ServerCard::ServerCard(
 	) | rpl::on_next([=] {
 		auto p = QPainter(_logo.data());
 		PainterHighQualityEnabler hq(p);
+		const auto size = st::introServerCardLogo;
+		p.setPen(Qt::NoPen);
+		p.setBrush(st::boxBg);
+		p.drawEllipse(0, 0, size, size);
 		const auto image = QPixmap(_server.logoPath).scaled(
-			st::introServerCardLogo,
-			st::introServerCardLogo,
-			Qt::KeepAspectRatio,
+			size,
+			size,
+			Qt::KeepAspectRatioByExpanding,
 			Qt::SmoothTransformation);
-		const auto left = (st::introServerCardLogo - image.width()) / 2;
-		const auto top = (st::introServerCardLogo - image.height()) / 2;
+		const auto left = (size - image.width()) / 2;
+		const auto top = (size - image.height()) / 2;
+		p.setClipRect(0, 0, size, size);
+		p.setClipRegion(QRegion(0, 0, size, size, QRegion::Ellipse));
 		p.drawPixmap(left, top, image);
 	}, _logo->lifetime());
 	for (const auto label : {
 		_name.data(),
-		_endpoint.data(),
+		_ip.data(),
+		_port.data(),
 		_description.data(),
 		_status.data(),
 		_latency.data(),
@@ -135,12 +159,14 @@ void ServerCard::paintEvent(QPaintEvent *e) {
 	p.drawRoundedRect(inner, radius, radius);
 	if (_online.has_value()) {
 		const auto dotSize = st::introServerCardStatusDot;
-		const auto skip = st::introServerCardHeaderSkip;
-		const auto dotLeft = inner.x() + skip / 2;
-		const auto dotTop = _status->y() + (_status->height() - dotSize) / 2;
 		p.setPen(Qt::NoPen);
 		p.setBrush(*_online ? st::windowActiveTextFg : st::attentionButtonFg);
-		p.drawEllipse(QRectF(dotLeft, dotTop, dotSize, dotSize));
+		p.drawEllipse(
+			QRectF(
+				_statusDotCenter.x() - dotSize / 2.,
+				_statusDotCenter.y() - dotSize / 2.,
+				dotSize,
+				dotSize));
 	}
 	paintRipple(p, 0, 0);
 }
@@ -155,40 +181,54 @@ void ServerCard::updateGeometryInner() {
 	const auto skip = st::introServerCardHeaderSkip;
 	const auto joinWidth = st::introServerCardJoinButton.width;
 	const auto joinHeight = st::introServerCardJoinButton.height;
+	const auto footerHeight = st::introServerCardFooterHeight;
+	const auto footerTop = inner.y() + inner.height() - footerHeight;
+	const auto nameLineHeight = st::introServerCardName.style.font->height;
 	_logo->move(inner.x(), inner.y());
 	const auto nameLeft = inner.x() + logoSize + skip;
 	const auto nameWidth = std::max(inner.right() - nameLeft + 1, 1);
 	_name->resizeToWidth(nameWidth);
+	_name->resize(nameWidth, nameLineHeight);
 	_name->moveToLeft(
 		nameLeft,
-		inner.y() + (logoSize - _name->height()) / 2);
+		inner.y() + (logoSize - nameLineHeight) / 2);
 	const auto headerBottom = inner.y() + logoSize;
-	_endpoint->resizeToWidth(inner.width());
-	_endpoint->moveToLeft(inner.x(), headerBottom + skip);
-	const auto descriptionTop = _endpoint->y() + _endpoint->height() + skip;
+	_ip->resizeToWidth(inner.width());
+	_ip->moveToLeft(inner.x(), headerBottom + skip);
+	_port->resizeToWidth(inner.width());
+	_port->moveToLeft(inner.x(), _ip->y() + _ip->height());
+	const auto descriptionTop = _port->y() + _port->height() + skip;
+	const auto descriptionMaxHeight = st::introServerCardDescriptionMaxHeight;
+	const auto descriptionBottom = footerTop - skip;
 	const auto descriptionHeight = std::max(
-		inner.bottom() - joinHeight - skip - descriptionTop + 1,
-		st::introServerCardDescription.style.font->height * 2);
+		descriptionBottom - descriptionTop,
+		st::introServerCardDescription.style.font->height);
 	_description->resizeToWidth(inner.width());
-	if (_description->height() > descriptionHeight) {
-		_description->resize(inner.width(), descriptionHeight);
-	}
+	_description->resize(
+		inner.width(),
+		std::min(_description->height(), std::min(descriptionHeight, descriptionMaxHeight)));
 	_description->moveToLeft(inner.x(), descriptionTop);
 	_joinButton->resize(joinWidth, joinHeight);
 	_joinButton->moveToLeft(
 		inner.right() - joinWidth + 1,
-		inner.bottom() - joinHeight + 1);
+		footerTop + footerHeight - joinHeight);
 	_joinButton->raise();
-	const auto statusLeft = inner.x() + st::introServerCardStatusDot + skip / 2;
+	const auto statusLeft = inner.x()
+		+ st::introServerCardStatusDot
+		+ st::introServerCardStatusDotSkip;
 	const auto statusWidth = std::max(
 		inner.width() - joinWidth - skip * 2,
 		1);
 	_status->resizeToWidth(statusWidth);
-	_status->moveToLeft(
-		statusLeft,
-		inner.bottom() - joinHeight - _status->height() + 1);
-	_latency->resizeToWidth(statusWidth);
-	_latency->moveToLeft(statusLeft, _status->y() + _status->height());
+	_status->moveToLeft(statusLeft, footerTop);
+	_latency->resizeToWidth(joinWidth);
+	_latency->moveToLeft(
+		inner.right() - joinWidth + 1,
+		footerTop);
+	const auto dotSize = st::introServerCardStatusDot;
+	_statusDotCenter = QPoint(
+		inner.x() + st::introServerCardStatusDotSkip + dotSize / 2,
+		_status->y() + _status->height() / 2);
 }
 } // namespace
 ServerSelectWidget::ServerSelectWidget(

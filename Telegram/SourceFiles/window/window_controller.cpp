@@ -396,7 +396,7 @@ void Controller::clearSetupEmailLock() {
 
 void Controller::setupIntro(QPixmap oldContentCache) {
 	const auto point = Core::App().domain().maybeLastOrSomeAuthedAccount()
-		? Intro::EnterPoint::Qr
+		? Intro::EnterPoint::ServerSelect
 		: Intro::EnterPoint::Start;
 	_widget.setupIntro(point, std::move(oldContentCache));
 }

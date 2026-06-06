@@ -7591,11 +7591,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_mac_hold_to_quit" = "Hold {text} to Quit";
 
 "lng_owpengram_server_selection_title" = "Server Selection";
-"lng_owpengram_server_selection_subtitle" = "Choose a server or add a new one";
-"lng_owpengram_server_add" = "Add Server";
-"lng_owpengram_server_join" = "Join";
+"lng_owpengram_server_selection_subtitle" = "Оберіть сервер або додайте новий";
+"lng_owpengram_server_add" = "Додати сервер";
+"lng_owpengram_server_join" = "Приєднатися";
 "lng_owpengram_server_online" = "Online";
 "lng_owpengram_server_offline" = "Offline";
+"lng_owpengram_server_ip_line" = "IP: {host}";
+"lng_owpengram_server_port_line" = "Port: {port}";
+"lng_owpengram_server_host_hint" = "IP-адреса або host:port";
 "lng_owpengram_server_official_name" = "Official OwpenGram";
 "lng_owpengram_server_official_description" = "Default OwpenGram server configured for this client.";
 "lng_owpengram_server_add_title" = "Add Server";

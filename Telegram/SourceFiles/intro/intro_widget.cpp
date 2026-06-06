@@ -115,6 +115,9 @@ Widget::Widget(
 	case EnterPoint::Qr:
 		appendStep(new StartWidget(this, _account, getData()));
 		break;
+	case EnterPoint::ServerSelect:
+		appendStep(new ServerSelectWidget(this, _account, getData()));
+		break;
 	default: Unexpected("Enter point in Intro::Widget::Widget.");
 	}
 

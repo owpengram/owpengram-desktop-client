@@ -28,13 +28,9 @@ protected:
 	void prepare() override;
 
 private:
-	void addField(const QString &label, const QString &value);
-	void updateStatus(bool online, int latencyMs);
-
 	Owpengram::Server _server;
 	Fn<void(const Owpengram::Server&)> _connect;
 	object_ptr<Ui::VerticalLayout> _content;
-	QPointer<Ui::FlatLabel> _status;
-	QPointer<Ui::FlatLabel> _latency;
+	QPointer<Ui::RpWidget> _statusBlock;
 
 };

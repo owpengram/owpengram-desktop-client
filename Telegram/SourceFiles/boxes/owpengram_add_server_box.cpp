@@ -11,7 +11,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/toast/toast.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/labels.h"
+#include "ui/wrap/padding_wrap.h"
 #include "ui/wrap/vertical_layout.h"
+#include "styles/style_intro.h"
 #include "styles/style_layers.h"
 
 AddServerBox::AddServerBox(
@@ -27,12 +29,17 @@ AddServerBox::AddServerBox(
 			tr::lng_owpengram_server_name()),
 		st::boxRowPadding);
 
+	_content->add(
+		object_ptr<Ui::FixedHeightWidget>(
+			_content,
+			st::introServerAddSectionSkip));
+
 	addLabel(tr::lng_owpengram_server_host(tr::now));
 	_host = _content->add(
 		object_ptr<Ui::InputField>(
 			_content,
 			st::defaultInputField,
-			tr::lng_owpengram_server_host()),
+			tr::lng_owpengram_server_host_hint()),
 		st::boxRowPadding);
 
 	addLabel(tr::lng_owpengram_server_port(tr::now));
@@ -42,6 +49,11 @@ AddServerBox::AddServerBox(
 			st::defaultInputField,
 			tr::lng_owpengram_server_port()),
 		st::boxRowPadding);
+
+	_content->add(
+		object_ptr<Ui::FixedHeightWidget>(
+			_content,
+			st::introServerAddSectionSkip));
 
 	addLabel(tr::lng_owpengram_server_description(tr::now));
 	_description = _content->add(
@@ -87,8 +99,19 @@ void AddServerBox::save() {
 			port = parts[1].trimmed().toInt();
 		}
 	}
-	if (name.isEmpty() || host.isEmpty() || port <= 0) {
+	if (name.isEmpty()) {
 		Ui::Toast::Show(tr::lng_owpengram_server_invalid(tr::now));
+		_name->setFocusFast();
+		return;
+	}
+	if (host.isEmpty()) {
+		Ui::Toast::Show(tr::lng_owpengram_server_invalid(tr::now));
+		_host->setFocusFast();
+		return;
+	}
+	if (port <= 0) {
+		Ui::Toast::Show(tr::lng_owpengram_server_invalid(tr::now));
+		_portField->setFocusFast();
 		return;
 	}
 	if (const auto server = Owpengram::AddCustomServer(

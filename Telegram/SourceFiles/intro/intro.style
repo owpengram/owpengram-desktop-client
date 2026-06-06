@@ -198,7 +198,7 @@ introServerGridMaxColumns: 3;
 introServerGridSpacing: 16px;
 introServerGridTop: 24px;
 introServerCardWidth: 276px;
-introServerCardHeight: 248px;
+introServerCardHeight: 268px;
 introServerCardRadius: 18px;
 introServerCardRipple: defaultRippleAnimation;
 introServerCardLogo: 48px;
@@ -206,6 +206,9 @@ introServerCardStatusDot: 10px;
 introServerCardPadding: margins(20px, 20px, 20px, 20px);
 introServerCardHeaderSkip: 12px;
 introServerCardFooterSkip: 12px;
+introServerCardFooterHeight: 52px;
+introServerCardDescriptionMaxHeight: 54px;
+introServerCardStatusDotSkip: 6px;
 introServerCardName: FlatLabel(defaultFlatLabel) {
 	textFg: windowActiveTextFg;
 	style: TextStyle(defaultTextStyle) {
@@ -265,4 +268,22 @@ introServerPickLabel: FlatLabel(defaultFlatLabel) {
 	}
 }
 introServerPickTop: 16px;
+introServerDetailsHeaderSkip: 16px;
+introServerDetailsRowSkip: 10px;
+introServerDetailsLabelWidth: 120px;
+introServerDetailsLabel: FlatLabel(defaultFlatLabel) {
+	textFg: windowSubTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(13px);
+	}
+}
+introServerDetailsValue: FlatLabel(defaultFlatLabel) {
+	textFg: windowActiveTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(13px);
+	}
+}
+introServerDetailsStatusBlock: margins(16px, 16px, 16px, 16px);
+introServerAddSectionSkip: 16px;
+introServerAddDescriptionMinHeight: 72px;
 introQrPlane: icon {{ "intro_qr_plane", activeButtonFg }};

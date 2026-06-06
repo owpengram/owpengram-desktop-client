@@ -30,6 +30,7 @@ public:
 	rpl::producer<> nextButtonFocusRequests() const override;
 	void activate() override;
 	void setInnerFocus() override;
+	[[nodiscard]] bool hasBack() const override;
 
 private:
 	rpl::event_stream<> _nextButtonFocusRequests;

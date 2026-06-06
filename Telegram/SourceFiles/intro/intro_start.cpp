@@ -14,7 +14,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/labels.h"
 #include "main/main_account.h"
 #include "main/main_app_config.h"
+#include "main/main_domain.h"
+#include "core/application.h"
 #include "core/branding.h"
+#include "intro/intro_widget.h"
 
 namespace Intro {
 namespace details {
@@ -50,6 +53,11 @@ void StartWidget::activate() {
 
 void StartWidget::setInnerFocus() {
 	_nextButtonFocusRequests.fire({});
+}
+
+bool StartWidget::hasBack() const {
+	return getData()->enterPoint != EnterPoint::Start
+		|| Core::App().domain().maybeLastOrSomeAuthedAccount() != nullptr;
 }
 
 } // namespace details

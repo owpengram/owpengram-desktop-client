@@ -39,6 +39,7 @@ enum class EnterPoint : uchar {
 	Start,
 	Phone,
 	Qr,
+	ServerSelect,
 };
 
 namespace details {
