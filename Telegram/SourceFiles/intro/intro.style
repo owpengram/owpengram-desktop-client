@@ -195,6 +195,7 @@ introQrCenterSize: 44px;
 
 introServerListTop: 12px;
 introServerListBottom: 16px;
+introServerListMinHeight: 220px;
 introServerRowLogo: 36px;
 introServerRowSubtext: FlatLabel(defaultFlatLabel) {
 	textFg: windowSubTextFg;
