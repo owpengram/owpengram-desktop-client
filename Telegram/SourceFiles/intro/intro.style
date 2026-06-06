@@ -197,21 +197,6 @@ introServerListTop: 12px;
 introServerListBottom: 16px;
 introServerListMinHeight: 220px;
 introServerRowLogo: 36px;
-introServerRowSubtext: FlatLabel(defaultFlatLabel) {
-	textFg: windowSubTextFg;
-	style: TextStyle(defaultTextStyle) {
-		font: font(12px);
-		lineHeight: 16px;
-	}
-}
-introServerRowSubtextMargin: margins(60px, 0px, 16px, 0px);
-introServerRowDescription: FlatLabel(introServerRowSubtext) {
-	style: TextStyle(defaultTextStyle) {
-		font: font(12px);
-		lineHeight: 16px;
-	}
-}
-introServerRowDescriptionMargin: margins(60px, 0px, 16px, 8px);
 introServerCardLogo: 44px;
 introServerCardStatusDot: 8px;
 introServerCardStatusDotSkip: 5px;
