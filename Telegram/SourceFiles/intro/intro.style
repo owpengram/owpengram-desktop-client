@@ -291,11 +291,18 @@ introServerPickLabel: FlatLabel(defaultFlatLabel) {
 introServerPickTop: 16px;
 introServerDetailsHeaderSkip: 16px;
 introServerDetailsRowSkip: 10px;
+introServerDetailsSectionSkip: 16px;
 introServerDetailsLabelWidth: 120px;
 introServerDetailsLabel: FlatLabel(defaultFlatLabel) {
 	textFg: windowSubTextFg;
 	style: TextStyle(defaultTextStyle) {
 		font: font(13px);
+	}
+}
+introServerDetailsSectionTitle: FlatLabel(introServerDetailsLabel) {
+	textFg: windowSubTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px semibold);
 	}
 }
 introServerDetailsValue: FlatLabel(defaultFlatLabel) {
@@ -304,7 +311,18 @@ introServerDetailsValue: FlatLabel(defaultFlatLabel) {
 		font: font(13px);
 	}
 }
-introServerDetailsStatusBlock: margins(16px, 16px, 16px, 16px);
+introServerDetailsDescriptionRadius: 8px;
+introServerDetailsDescriptionPadding: margins(12px, 14px, 12px, 14px);
+introServerDetailsDescriptionMinHeight: 72px;
+introServerDetailsDescription: FlatLabel(defaultFlatLabel) {
+	textFg: windowFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(13px);
+		lineHeight: 18px;
+	}
+}
+introServerDetailsStatusRadius: 8px;
+introServerDetailsStatusBlock: margins(12px, 14px, 12px, 14px);
 introServerAddSectionSkip: 16px;
 introServerAddDescriptionMinHeight: 72px;
 introQrPlane: icon {{ "intro_qr_plane", activeButtonFg }};

@@ -7615,6 +7615,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_latency" = "latency: {latency}ms";
 "lng_owpengram_server_details_host" = "IP address";
 "lng_owpengram_server_details_port" = "Port";
+"lng_owpengram_server_details_title" = "Server Info";
 "lng_owpengram_server_details_description" = "Description";
 "lng_owpengram_server_details_status" = "Connection status";
 "lng_owpengram_server_delete" = "Delete";

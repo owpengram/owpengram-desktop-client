@@ -49,15 +49,80 @@ void DetailRow::resizeEvent(QResizeEvent *e) {
 	RpWidget::resizeEvent(e);
 	const auto labelWidth = st::introServerDetailsLabelWidth;
 	_label->resizeToWidth(labelWidth);
-	_label->moveToLeft(0, 0);
 	const auto valueWidth = std::max(width() - labelWidth - st::introServerDetailsRowSkip, 1);
 	_value->resizeToWidth(valueWidth);
-	_value->moveToLeft(labelWidth + st::introServerDetailsRowSkip, 0);
 	const auto rowHeight = std::max(_label->height(), _value->height());
+	_label->moveToLeft(0, (rowHeight - _label->height()) / 2);
+	_value->moveToLeft(
+		labelWidth + st::introServerDetailsRowSkip,
+		(rowHeight - _value->height()) / 2);
 	if (height() != rowHeight) {
 		resize(width(), rowHeight);
 	}
 }
+
+class DescriptionSection final : public Ui::RpWidget {
+public:
+	DescriptionSection(QWidget *parent, const QString &text);
+
+protected:
+	void resizeEvent(QResizeEvent *e) override;
+
+private:
+	object_ptr<Ui::FlatLabel> _title;
+	object_ptr<Ui::RpWidget> _box;
+	object_ptr<Ui::FlatLabel> _text;
+};
+
+DescriptionSection::DescriptionSection(QWidget *parent, const QString &text)
+: RpWidget(parent)
+, _title(
+	this,
+	tr::lng_owpengram_server_details_description(tr::now),
+	st::introServerDetailsSectionTitle)
+, _box(this)
+, _text(this, text, st::introServerDetailsDescription) {
+	_text->setBreakEverywhere(true);
+	_box->setAttribute(Qt::WA_TransparentForMouseEvents);
+	_box->paintRequest(
+	) | rpl::on_next([=] {
+		auto p = QPainter(_box);
+		PainterHighQualityEnabler hq(p);
+		p.setPen(Qt::NoPen);
+		p.setBrush(st::windowBgOver);
+		const auto radius = st::introServerDetailsDescriptionRadius;
+		p.drawRoundedRect(_box->rect(), radius, radius);
+	}, _box->lifetime());
+	resize(parent->width(), _title->height());
+}
+
+void DescriptionSection::resizeEvent(QResizeEvent *e) {
+	RpWidget::resizeEvent(e);
+	const auto titleSkip = st::introServerDetailsRowSkip;
+	const auto padding = st::introServerDetailsDescriptionPadding;
+	const auto boxWidth = width();
+	const auto textWidth = std::max(
+		boxWidth - padding.left() - padding.right(),
+		1);
+
+	_title->resizeToWidth(boxWidth);
+	_title->moveToLeft(0, 0);
+
+	const auto boxTop = _title->height() + titleSkip;
+
+	_text->resizeToWidth(textWidth);
+	const auto boxHeight = std::max(
+		_text->height() + padding.top() + padding.bottom(),
+		st::introServerDetailsDescriptionMinHeight);
+	_box->setGeometry(0, boxTop, boxWidth, boxHeight);
+	_text->moveToLeft(padding.left(), boxTop + padding.top());
+
+	const auto totalHeight = boxTop + boxHeight;
+	if (height() != totalHeight) {
+		resize(boxWidth, totalHeight);
+	}
+}
+
 class HeaderRow final : public Ui::RpWidget {
 public:
 	HeaderRow(
@@ -151,6 +216,13 @@ void StatusBlock::setOnline(bool online, int latencyMs) {
 void StatusBlock::paintEvent(QPaintEvent *e) {
 	Painter p(this);
 	p.setClipRect(e->rect());
+	PainterHighQualityEnabler hq(p);
+
+	p.setPen(Qt::NoPen);
+	p.setBrush(st::windowBgOver);
+	const auto radius = st::introServerDetailsStatusRadius;
+	p.drawRoundedRect(rect(), radius, radius);
+
 	if (_online.has_value()) {
 		const auto padding = st::introServerDetailsStatusBlock;
 		const auto dotSize = st::introServerCardStatusDot;
@@ -199,6 +271,17 @@ ServerDetailsBox::ServerDetailsBox(
 , _connect(std::move(connect))
 , _removed(std::move(removed))
 , _content(this) {
+	const auto rowMargin = st::boxRowPadding + QMargins(
+		0,
+		st::introServerDetailsRowSkip,
+		0,
+		0);
+	const auto sectionMargin = st::boxRowPadding + QMargins(
+		0,
+		st::introServerDetailsSectionSkip,
+		0,
+		0);
+
 	_content->add(
 		object_ptr<HeaderRow>(
 			_content,
@@ -210,27 +293,30 @@ ServerDetailsBox::ServerDetailsBox(
 			_content,
 			tr::lng_owpengram_server_details_host(tr::now),
 			_server.host),
-		st::boxRowPadding + QMargins(0, st::introServerDetailsRowSkip, 0, 0));
+		rowMargin);
 	_content->add(
 		object_ptr<DetailRow>(
 			_content,
 			tr::lng_owpengram_server_details_port(tr::now),
 			_server.port > 0 ? QString::number(_server.port) : u"—"_q),
-		st::boxRowPadding + QMargins(0, st::introServerDetailsRowSkip, 0, 0));
-	if (!_server.description.isEmpty()) {
-		_content->add(
-			object_ptr<DetailRow>(
-				_content,
-				tr::lng_owpengram_server_details_description(tr::now),
-				_server.description),
-			st::boxRowPadding + QMargins(0, st::introServerDetailsRowSkip, 0, 0));
-	}
+		rowMargin);
+	_content->add(
+		object_ptr<DescriptionSection>(
+			_content,
+			_server.description.isEmpty() ? u"—"_q : _server.description),
+		sectionMargin);
+	_content->add(
+		object_ptr<Ui::FlatLabel>(
+			_content,
+			tr::lng_owpengram_server_details_status(tr::now),
+			st::introServerDetailsSectionTitle),
+		sectionMargin);
 	_statusBlock = _content->add(
 		object_ptr<StatusBlock>(_content),
 		st::boxRowPadding + QMargins(0, st::introServerDetailsRowSkip, 0, 0));
 }
 void ServerDetailsBox::prepare() {
-	setTitle(rpl::single(_server.name));
+	setTitle(tr::lng_owpengram_server_details_title());
 	if (!_server.isOfficial) {
 		const auto weak = base::make_weak(this);
 		addLeftButton(tr::lng_owpengram_server_delete(), [=] {
