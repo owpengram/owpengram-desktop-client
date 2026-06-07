@@ -193,17 +193,67 @@ introQrStepMargins: margins(20px, 8px, 0px, 0px);
 introQrSkipTop: 360px;
 introQrCenterSize: 44px;
 
+introServerListWidth: 380px;
 introServerListTop: 12px;
 introServerListBottom: 16px;
 introServerListMinHeight: 220px;
-introServerListRadius: 8px;
-introServerListSeparatorLeft: 60px;
-introServerListAddTop: 24px;
-introServerListButton: SettingsButton(defaultSettingsButton) {
-	padding: margins(60px, 12px, 16px, 12px);
-	iconLeft: 20px;
+introServerRowHeight: 68px;
+introServerRowPadding: margins(12px, 10px, 12px, 10px);
+introServerRowRadius: 10px;
+introServerRowSpacing: 6px;
+introServerRowAvatarSize: 42px;
+introServerRowAvatarSkip: 12px;
+introServerRowStatusWidth: 80px;
+introServerRowStatusDot: 7px;
+introServerRowStatusDotSkip: 5px;
+introServerRowJoinSkip: 8px;
+introServerRowName: FlatLabel(defaultFlatLabel) {
+	textFg: windowFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(14px semibold);
+	}
 }
-introServerRowLogo: 36px;
+introServerRowEndpoint: FlatLabel(defaultFlatLabel) {
+	textFg: windowSubTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px);
+	}
+}
+introServerRowStatus: FlatLabel(defaultFlatLabel) {
+	textFg: windowActiveTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px semibold);
+	}
+}
+introServerRowLatency: FlatLabel(defaultFlatLabel) {
+	textFg: windowSubTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(11px);
+	}
+}
+introServerOfficialBadge: FlatLabel(defaultFlatLabel) {
+	textFg: windowActiveTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(10px semibold);
+	}
+}
+introServerRowJoinButton: RoundButton(defaultActiveButton) {
+	width: 64px;
+	height: 32px;
+	radius: 8px;
+	textTop: 7px;
+	style: TextStyle(semiboldTextStyle) {
+		font: font(12px semibold);
+	}
+}
+introServerAddButton: RoundButton(defaultLightButton) {
+	height: 32px;
+	radius: 6px;
+	textTop: 7px;
+	style: TextStyle(semiboldTextStyle) {
+		font: font(13px semibold);
+	}
+}
 introServerCardLogo: 44px;
 introServerCardStatusDot: 8px;
 introServerCardStatusDotSkip: 5px;

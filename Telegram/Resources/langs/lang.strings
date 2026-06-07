@@ -7592,7 +7592,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 "lng_owpengram_server_selection_title" = "Server Selection";
 "lng_owpengram_server_selection_subtitle" = "Choose a server or add your own";
-"lng_owpengram_server_add" = "Add Server";
+"lng_owpengram_server_add" = "+ Add Server";
+"lng_owpengram_server_endpoint_short" = "{host} · Port {port}";
+"lng_owpengram_server_official_badge" = "official";
+"lng_owpengram_server_latency_short" = "{latency} ms";
 "lng_owpengram_server_join" = "Join";
 "lng_owpengram_server_online" = "Online";
 "lng_owpengram_server_offline" = "Offline";

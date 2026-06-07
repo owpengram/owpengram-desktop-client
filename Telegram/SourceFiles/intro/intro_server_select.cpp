@@ -16,50 +16,95 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
 #include "owpengram/owpengram_servers.h"
-#include "settings/settings_common.h"
 #include "ui/boxes/confirm_box.h"
+#include "ui/effects/animations.h"
+#include "ui/effects/ripple_animation.h"
 #include "ui/painter.h"
 #include "ui/toast/toast.h"
 #include "ui/ui_utility.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
-#include "ui/wrap/vertical_layout.h"
+#include "ui/widgets/scroll_area.h"
 #include "styles/style_intro.h"
 
 #include <QRegion>
+
+#include <cmath>
 
 namespace Intro {
 namespace details {
 namespace {
 
-[[nodiscard]] QString FormatStatusText(bool online) {
-	return online
-		? tr::lng_owpengram_server_online(tr::now)
-		: tr::lng_owpengram_server_offline(tr::now);
-}
+class ServerRow final : public Ui::RippleButton {
+public:
+	ServerRow(
+		QWidget *parent,
+		Owpengram::Server server,
+		Fn<void()> details,
+		Fn<void()> join);
 
-void AddServerLogo(
-		not_null<Ui::SettingsButton*> button,
-		const QString &logoPath) {
-	const auto icon = Ui::CreateChild<Ui::RpWidget>(button.get());
-	const auto size = st::introServerRowLogo;
-	icon->resize(size, size);
-	icon->setAttribute(Qt::WA_TransparentForMouseEvents);
-	button->sizeValue(
-	) | rpl::on_next([=](const QSize &widgetSize) {
-		icon->moveToLeft(
-			st::introServerListButton.iconLeft,
-			(widgetSize.height() - size) / 2,
-			widgetSize.width());
-	}, icon->lifetime());
-	icon->paintRequest(
-	) | rpl::on_next([=] {
-		auto p = QPainter(icon);
+private:
+	void setStatus(bool online, int latencyMs);
+	void updateLayout();
+	void paintEvent(QPaintEvent *e) override;
+	void resizeEvent(QResizeEvent *e) override;
+	QImage prepareRippleMask() const override;
+
+	const Owpengram::Server _server;
+	const Fn<void()> _details;
+	const Fn<void()> _join;
+
+	object_ptr<Ui::RpWidget> _logo;
+	object_ptr<Ui::FlatLabel> _name;
+	object_ptr<Ui::FlatLabel> _endpoint;
+	Ui::RpWidget *_badgeBg = nullptr;
+	Ui::FlatLabel *_officialBadge = nullptr;
+	object_ptr<Ui::FlatLabel> _status;
+	object_ptr<Ui::FlatLabel> _latency;
+	object_ptr<Ui::RoundButton> _joinButton;
+
+	std::optional<bool> _online;
+	Ui::Animations::Basic _checkingAnimation;
+	QRect _dotRect;
+};
+
+ServerRow::ServerRow(
+	QWidget *parent,
+	Owpengram::Server server,
+	Fn<void()> details,
+	Fn<void()> join)
+: RippleButton(parent, st::defaultRippleAnimation)
+, _server(std::move(server))
+, _details(std::move(details))
+, _join(std::move(join))
+, _logo(this)
+, _name(this, _server.name, st::introServerRowName)
+, _endpoint(
+	this,
+	tr::lng_owpengram_server_endpoint_short(
+		tr::now,
+		lt_host,
+		_server.host,
+		lt_port,
+		QString::number(_server.port)),
+	st::introServerRowEndpoint)
+, _status(this, tr::lng_owpengram_server_checking(tr::now), st::introServerRowStatus)
+, _latency(this, QString(), st::introServerRowLatency)
+, _joinButton(
+	this,
+	rpl::single(tr::lng_owpengram_server_join(tr::now)),
+	st::introServerRowJoinButton) {
+	const auto size = st::introServerRowAvatarSize;
+	_logo->resize(size, size);
+	_logo->setAttribute(Qt::WA_TransparentForMouseEvents);
+	_logo->paintRequest(
+	) | rpl::on_next([=, path = _server.logoPath] {
+		auto p = QPainter(_logo);
 		PainterHighQualityEnabler hq(p);
 		p.setPen(Qt::NoPen);
-		p.setBrush(st::windowBg);
+		p.setBrush(_server.isOfficial ? st::windowBgOver : st::boxBg);
 		p.drawEllipse(0, 0, size, size);
-		const auto image = QPixmap(logoPath).scaled(
+		const auto image = QPixmap(path).scaled(
 			size,
 			size,
 			Qt::KeepAspectRatioByExpanding,
@@ -69,23 +114,197 @@ void AddServerLogo(
 		p.setClipRect(0, 0, size, size);
 		p.setClipRegion(QRegion(0, 0, size, size, QRegion::Ellipse));
 		p.drawPixmap(left, top, image);
-	}, icon->lifetime());
-	icon->show();
+	}, _logo->lifetime());
+
+	if (_server.isOfficial) {
+		_badgeBg = Ui::CreateChild<Ui::RpWidget>(this);
+		_badgeBg->setAttribute(Qt::WA_TransparentForMouseEvents);
+		_badgeBg->paintRequest(
+		) | rpl::on_next([=] {
+			auto p = QPainter(_badgeBg);
+			PainterHighQualityEnabler hq(p);
+			p.setPen(Qt::NoPen);
+			p.setBrush(st::windowBgOver);
+			p.drawRoundedRect(
+				_badgeBg->rect(),
+				_badgeBg->height() / 2,
+				_badgeBg->height() / 2);
+		}, _badgeBg->lifetime());
+		_officialBadge = Ui::CreateChild<Ui::FlatLabel>(
+			this,
+			tr::lng_owpengram_server_official_badge(tr::now),
+			st::introServerOfficialBadge);
+		_officialBadge->setAttribute(Qt::WA_TransparentForMouseEvents);
+	}
+
+	_name->setAttribute(Qt::WA_TransparentForMouseEvents);
+	_endpoint->setAttribute(Qt::WA_TransparentForMouseEvents);
+	_status->setAttribute(Qt::WA_TransparentForMouseEvents);
+	_latency->setAttribute(Qt::WA_TransparentForMouseEvents);
+
+	_latency->hide();
+
+	setClickedCallback(_details);
+	_joinButton->setClickedCallback([=] {
+		_join();
+	});
+
+	_checkingAnimation.init([=](crl::time) {
+		if (_online.has_value()) {
+			return false;
+		}
+		update();
+		return true;
+	});
+	_checkingAnimation.start();
+
+	Owpengram::CheckServerOnline(_server, crl::guard(this, [=](
+			bool online,
+			int latencyMs) {
+		setStatus(online, latencyMs);
+	}));
+
+	resize(parent->width(), st::introServerRowHeight);
+	updateLayout();
 }
 
-void AddThinSeparator(not_null<Ui::VerticalLayout*> container) {
-	const auto separator = container->add(object_ptr<Ui::RpWidget>(container));
-	separator->resize(0, st::lineWidth);
-	separator->paintRequest(
-	) | rpl::on_next([=] {
-		auto p = QPainter(separator);
-		p.fillRect(
-			st::introServerListSeparatorLeft,
-			0,
-			separator->width() - st::introServerListSeparatorLeft,
-			st::lineWidth,
-			st::inputBorderFg);
-	}, separator->lifetime());
+void ServerRow::setStatus(bool online, int latencyMs) {
+	_online = online;
+	_checkingAnimation.stop();
+	_status->setText(online
+		? tr::lng_owpengram_server_online(tr::now)
+		: tr::lng_owpengram_server_offline(tr::now));
+	_status->setTextColorOverride(online
+		? st::windowActiveTextFg->c
+		: st::attentionButtonFg->c);
+	if (online && latencyMs >= 0) {
+		_latency->setText(tr::lng_owpengram_server_latency_short(
+			tr::now,
+			lt_latency,
+			QString::number(latencyMs)));
+		_latency->show();
+	} else {
+		_latency->setText(QString());
+		_latency->hide();
+	}
+	updateLayout();
+	update();
+}
+
+void ServerRow::updateLayout() {
+	const auto padding = st::introServerRowPadding;
+	const auto avatarSize = st::introServerRowAvatarSize;
+	const auto joinWidth = st::introServerRowJoinButton.width;
+	const auto joinHeight = st::introServerRowJoinButton.height;
+	const auto statusWidth = st::introServerRowStatusWidth;
+
+	const auto joinLeft = width() - padding.right() - joinWidth;
+	const auto joinTop = (height() - joinHeight) / 2;
+	_joinButton->moveToLeft(joinLeft, joinTop);
+
+	const auto statusRight = joinLeft - st::introServerRowJoinSkip;
+	const auto statusLeft = statusRight - statusWidth;
+
+	_status->resizeToWidth(statusWidth);
+	_latency->resizeToWidth(statusWidth);
+	const auto statusBlockHeight = _status->height()
+		+ (_latency->isHidden() ? 0 : (_latency->height() + 2));
+	const auto statusTop = (height() - statusBlockHeight) / 2;
+	_status->moveToLeft(statusLeft, statusTop);
+	_latency->moveToLeft(statusLeft, statusTop + _status->height() + 2);
+
+	const auto dotSize = st::introServerRowStatusDot;
+	const auto dotTop = statusTop + (_status->height() - dotSize) / 2;
+	_dotRect = QRect(
+		statusLeft - dotSize - st::introServerRowStatusDotSkip,
+		dotTop,
+		dotSize,
+		dotSize);
+
+	const auto infoLeft = padding.left() + avatarSize + st::introServerRowAvatarSkip;
+	const auto infoRight = statusLeft - st::introServerRowJoinSkip;
+	const auto infoWidth = std::max(infoRight - infoLeft, 1);
+
+	const auto badgeSkip = 6;
+	auto badgeWidth = 0;
+	if (_officialBadge) {
+		_officialBadge->resizeToNaturalWidth(200);
+		badgeWidth = _officialBadge->width() + badgeSkip;
+		const auto badgeHeight = _officialBadge->height() + 4;
+		_badgeBg->resize(_officialBadge->width() + 14, badgeHeight);
+	}
+
+	const auto nameWidth = std::max(infoWidth - badgeWidth, 1);
+	_name->resizeToWidth(nameWidth);
+	_endpoint->resizeToWidth(infoWidth);
+
+	const auto textBlockHeight = _name->height() + 3 + _endpoint->height();
+	const auto textTop = (height() - textBlockHeight) / 2;
+	_name->moveToLeft(infoLeft, textTop);
+	_endpoint->moveToLeft(infoLeft, textTop + _name->height() + 3);
+
+	if (_officialBadge) {
+		const auto badgeLeft = infoLeft + nameWidth + badgeSkip;
+		_badgeBg->moveToLeft(badgeLeft, textTop + (_name->height() - _badgeBg->height()) / 2);
+		_officialBadge->moveToLeft(
+			badgeLeft + (_badgeBg->width() - _officialBadge->width()) / 2,
+			textTop + (_name->height() - _officialBadge->height()) / 2);
+	}
+
+	_logo->moveToLeft(
+		padding.left(),
+		(height() - avatarSize) / 2);
+}
+
+void ServerRow::paintEvent(QPaintEvent *e) {
+	auto p = Painter(this);
+	p.setClipRect(e->rect());
+	PainterHighQualityEnabler hq(p);
+
+	const auto radius = st::introServerRowRadius;
+	p.setPen(Qt::NoPen);
+	p.setBrush(isOver() ? st::windowBgOver : st::boxBg);
+	p.drawRoundedRect(rect(), radius, radius);
+
+	if (_server.isOfficial) {
+		auto pen = QPen(st::windowActiveTextFg);
+		pen.setWidthF(style::DevicePixelRatio());
+		p.setPen(pen);
+	} else {
+		p.setPen(st::boxDividerFg);
+	}
+	p.setBrush(Qt::NoBrush);
+	p.drawRoundedRect(
+		rect().marginsRemoved({ 1, 1, 1, 1 }),
+		radius - 1,
+		radius - 1);
+
+	if (_dotRect.isValid()) {
+		p.setPen(Qt::NoPen);
+		if (!_online.has_value()) {
+			const auto phase = (crl::now() - _checkingAnimation.started()) % 1200;
+			const auto wave = 0.5 + 0.5 * std::sin(phase / 1200. * 6.283185307);
+			auto color = st::windowSubTextFg->c;
+			color.setAlpha(int(80 + 175 * wave));
+			p.setBrush(color);
+		} else {
+			p.setBrush(*_online ? st::windowActiveTextFg : st::attentionButtonFg);
+		}
+		p.drawEllipse(_dotRect);
+	}
+
+	paintRipple(p, 0, 0);
+}
+
+void ServerRow::resizeEvent(QResizeEvent *e) {
+	RippleButton::resizeEvent(e);
+	updateLayout();
+}
+
+QImage ServerRow::prepareRippleMask() const {
+	return Ui::RippleAnimation::RoundRectMask(
+		size(),
+		st::introServerRowRadius);
 }
 
 } // namespace
@@ -95,27 +314,17 @@ ServerSelectWidget::ServerSelectWidget(
 	not_null<Main::Account*> account,
 	not_null<Data*> data)
 : Step(parent, account, data, false)
-, _panel(Ui::CreateChild<Ui::RpWidget>(this))
-, _list(Ui::CreateChild<Ui::VerticalLayout>(_panel.get()))
+, _scroll(Ui::CreateChild<Ui::ScrollArea>(this))
+, _rowsContainer(_scroll->setOwnedWidget(object_ptr<Ui::RpWidget>(_scroll)))
+, _addServer(
+	this,
+	rpl::single(tr::lng_owpengram_server_add(tr::now)),
+	st::introServerAddButton)
 , _statusTimer([=] { rebuildList(); }) {
 	setTitleText(tr::lng_owpengram_server_selection_title());
 	setDescriptionText(tr::lng_owpengram_server_selection_subtitle());
 
-	_panel->paintRequest(
-	) | rpl::on_next([=] {
-		auto p = QPainter(_panel);
-		PainterHighQualityEnabler hq(p);
-		const auto radius = st::introServerListRadius;
-		p.setPen(st::inputBorderFg);
-		p.setBrush(st::windowBg);
-		p.drawRoundedRect(_panel->rect(), radius, radius);
-	}, _panel->lifetime());
-
-	_addLink = Ui::CreateChild<Ui::LinkButton>(
-		this,
-		tr::lng_owpengram_server_add(tr::now),
-		st::introLink);
-	_addLink->setClickedCallback([=] {
+	_addServer->setClickedCallback([=] {
 		const auto weak = base::make_weak(this);
 		Ui::show(Box<AddServerBox>([=](Owpengram::Server server) {
 			Ui::PostponeCall(weak, [=] {
@@ -125,7 +334,6 @@ ServerSelectWidget::ServerSelectWidget(
 			});
 		}));
 	});
-	_addLink->show();
 }
 
 void ServerSelectWidget::finishInit() {
@@ -136,14 +344,15 @@ void ServerSelectWidget::finishInit() {
 void ServerSelectWidget::activate() {
 	Step::activate();
 	updateListGeometry();
-	if (!_list->count()) {
+	if (!_rowsContainer->children().isEmpty()) {
+		rebuildList();
+	} else {
 		rebuildList();
 	}
 	showChildren();
-	_panel->show();
-	_list->show();
-	_list->showChildren();
-	_addLink->show();
+	_scroll->show();
+	_rowsContainer->show();
+	_addServer->show();
 	_statusTimer.cancel();
 	_statusTimer.callEach(30000);
 }
@@ -156,7 +365,7 @@ rpl::producer<QString> ServerSelectWidget::nextButtonText() const {
 }
 
 int ServerSelectWidget::listWidth() const {
-	return st::introNextButton.width;
+	return st::introServerListWidth;
 }
 
 int ServerSelectWidget::listTop() const {
@@ -164,7 +373,10 @@ int ServerSelectWidget::listTop() const {
 }
 
 void ServerSelectWidget::rebuildList() {
-	_list->clear();
+	const auto children = _rowsContainer->children();
+	for (auto i = children.size() - 1; i >= 0; --i) {
+		delete children[i];
+	}
 
 	const auto join = [=](const Owpengram::Server &server) {
 		joinServer(server);
@@ -180,41 +392,22 @@ void ServerSelectWidget::rebuildList() {
 		}
 	}
 
-	for (auto i = 0; i != int(servers.size()); ++i) {
-		const auto &server = servers[i];
-		const auto button = Settings::AddButtonWithIcon(
-			_list,
-			rpl::single(server.name),
-			st::introServerListButton);
-		const auto status = button->lifetime().make_state<rpl::variable<QString>>(
-			tr::lng_owpengram_server_checking(tr::now));
-		Settings::CreateRightLabel(
-			button,
-			status->value(),
-			st::introServerListButton,
-			rpl::single(server.name));
-		AddServerLogo(button, server.logoPath);
-		button->addClickHandler([=] {
-			details(server);
-		});
-
-		const auto weak = base::make_weak(button);
-		Owpengram::CheckServerOnline(server, crl::guard(button, [=
-				](bool online, int) {
-			if (weak) {
-				*status = FormatStatusText(online);
-			}
-		}));
-
-		if (i + 1 != int(servers.size())) {
-			AddThinSeparator(_list);
-		}
+	const auto width = listWidth();
+	const auto rowHeight = st::introServerRowHeight;
+	const auto spacing = st::introServerRowSpacing;
+	auto y = 0;
+	for (const auto &server : servers) {
+		const auto row = Ui::CreateChild<ServerRow>(
+			_rowsContainer,
+			server,
+			[=] { details(server); },
+			[=] { join(server); });
+		row->setGeometry(0, y, width, rowHeight);
+		row->show();
+		y += rowHeight + spacing;
 	}
-
-	_list->resizeToWidth(listWidth());
+	_rowsContainer->resize(width, servers.empty() ? 0 : (y - spacing));
 	updateListGeometry();
-	_list->show();
-	_list->showChildren();
 }
 
 void ServerSelectWidget::joinServer(const Owpengram::Server &server) {
@@ -260,15 +453,38 @@ void ServerSelectWidget::resizeEvent(QResizeEvent *e) {
 	updateListGeometry();
 }
 
+void ServerSelectWidget::updateRowsGeometry() {
+	const auto width = listWidth();
+	const auto rowHeight = st::introServerRowHeight;
+	const auto spacing = st::introServerRowSpacing;
+	auto y = 0;
+	for (const auto child : _rowsContainer->children()) {
+		const auto row = static_cast<ServerRow*>(child);
+		row->setGeometry(0, y, width, rowHeight);
+		y += rowHeight + spacing;
+	}
+	if (y > 0) {
+		_rowsContainer->resize(width, y - spacing);
+	}
+}
+
 void ServerSelectWidget::updateListGeometry() {
 	const auto width = listWidth();
-	_list->resizeToWidth(width);
-	_panel->resize(width, _list->height());
-	_panel->moveToLeft(contentLeft(), listTop());
-	_list->moveToLeft(0, 0);
-	_addLink->moveToLeft(
-		contentLeft(),
-		_panel->y() + _panel->height() + st::introServerListAddTop);
+	const auto left = contentLeft();
+	const auto top = listTop();
+	const auto bottom = contentTop()
+		+ st::introStepHeight
+		- st::introServerListBottom;
+	const auto scrollHeight = std::max(
+		bottom - top,
+		st::introServerListMinHeight);
+	_scroll->setGeometry(left, top, width, scrollHeight);
+
+	_addServer->moveToLeft(
+		left + width - _addServer->width(),
+		contentTop() + st::introDescriptionTop);
+
+	updateRowsGeometry();
 }
 
 } // namespace details

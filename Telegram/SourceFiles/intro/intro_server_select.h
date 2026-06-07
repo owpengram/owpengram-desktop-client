@@ -12,9 +12,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "owpengram/owpengram_servers.h"
 
 namespace Ui {
-class LinkButton;
+class RoundButton;
 class RpWidget;
-class VerticalLayout;
+class ScrollArea;
 } // namespace Ui
 
 namespace Intro {
@@ -42,12 +42,13 @@ private:
 	void joinServer(const Owpengram::Server &server);
 	void proceedJoin(const Owpengram::Server &server);
 	void updateListGeometry();
+	void updateRowsGeometry();
 	[[nodiscard]] int listTop() const;
 	[[nodiscard]] int listWidth() const;
 
-	const not_null<Ui::RpWidget*> _panel;
-	const not_null<Ui::VerticalLayout*> _list;
-	Ui::LinkButton *_addLink = nullptr;
+	const not_null<Ui::ScrollArea*> _scroll;
+	const not_null<Ui::RpWidget*> _rowsContainer;
+	object_ptr<Ui::RoundButton> _addServer;
 	base::Timer _statusTimer;
 };
 
