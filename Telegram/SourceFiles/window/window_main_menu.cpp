@@ -818,15 +818,11 @@ void MainMenu::setupServerFooter() {
 void MainMenu::updateServerFooter() {
 	const auto server = Owpengram::CurrentServerForAccount(
 		&_controller->session().account());
+	const auto endpoint = server.host
+		+ u":"_q
+		+ QString::number(server.port);
 	_server->setMarkedText(tr::link(
-		tr::lng_owpengram_server_menu_footer(
-			tr::now,
-			lt_name,
-			server.name,
-			lt_host,
-			server.host,
-			lt_port,
-			QString::number(server.port)),
+		server.name + u"\n"_q + endpoint,
 		1));
 }
 

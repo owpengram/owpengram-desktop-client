@@ -113,7 +113,7 @@ mainMenuCoverNameTop: 84px;
 mainMenuCoverStatusLeft: mainMenuCoverNameLeft;
 mainMenuCoverStatusTop: 103px;
 mainMenuSkip: 6px;
-mainMenuFooterHeightMin: 98px;
+mainMenuFooterHeightMin: 114px;
 mainMenu: Menu(defaultMenu) {
 	itemFg: windowBoldFg;
 	itemFgOver: windowBoldFgOver;
