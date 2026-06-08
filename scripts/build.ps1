@@ -17,8 +17,31 @@ $LibrariesMarker = Join-Path $LibrariesRoot 'Libraries\win64\local'
 
 $TestApiId = '17349'
 $TestApiHash = '344583e45741c457fe1862106095a5eb'
+$ApiCredentialsFile = Join-Path $RepoRoot 'api_credentials.local.ps1'
 
 $script:VcVars = $null
+
+function Get-ApiCredentials {
+    if (Test-Path $ApiCredentialsFile) {
+        . $ApiCredentialsFile
+        if ([string]::IsNullOrWhiteSpace($TDESKTOP_API_ID) -or [string]::IsNullOrWhiteSpace($TDESKTOP_API_HASH)) {
+            throw 'api_credentials.local.ps1 must set $TDESKTOP_API_ID and $TDESKTOP_API_HASH'
+        }
+        return @{
+            Id = $TDESKTOP_API_ID.Trim()
+            Hash = $TDESKTOP_API_HASH.Trim()
+            Source = 'api_credentials.local.ps1'
+        }
+    }
+
+    Write-Host '[WARN] api_credentials.local.ps1 not found — using TEST credentials.' -ForegroundColor Yellow
+    Write-Host '       Copy api_credentials.local.ps1.example and add your api_id/api_hash for Telegram login.' -ForegroundColor Yellow
+    return @{
+        Id = $TestApiId
+        Hash = $TestApiHash
+        Source = 'test defaults'
+    }
+}
 
 function Write-Step([string]$Text) { Write-Host "`n>> $Text" -ForegroundColor Yellow }
 function Write-Ok([string]$Text)   { Write-Host "[OK] $Text" -ForegroundColor Green }
@@ -184,7 +207,9 @@ try {
     }
 
     Write-Step 'CMake configure'
-    $configure = "configure.bat x64 -D TDESKTOP_API_ID=$TestApiId -D TDESKTOP_API_HASH=$TestApiHash"
+    $api = Get-ApiCredentials
+    Write-Ok "API credentials: $($api.Source) (id $($api.Id))"
+    $configure = "configure.bat x64 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash)"
     Invoke-Vs -Command $configure -WorkingDirectory $TelegramDir -Label 'configure'
 
     Write-Step 'MSBuild Debug'
