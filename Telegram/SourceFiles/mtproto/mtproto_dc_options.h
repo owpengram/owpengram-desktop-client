@@ -84,6 +84,7 @@ public:
 	void addFromList(const MTPVector<MTPDcOption> &options);
 	void setOptionsLocked(bool locked);
 	[[nodiscard]] bool optionsLocked() const;
+	void setBuiltInPublicKeys(bool telegram);
 	void addFromOther(DcOptions &&options);
 
 	[[nodiscard]] std::vector<DcId> configEnumDcIds() const;

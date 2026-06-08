@@ -109,12 +109,18 @@ void WriteCustomServersJson(const QJsonArray &array) {
 	return object;
 }
 
+[[nodiscard]] MTP::DcId MainDcIdForServer(const Server &server) {
+	return server.isTelegram
+		? MTP::DcId(2)
+		: MTP::Instance::Fields::kDefaultMainDc;
+}
+
 [[nodiscard]] bool EndpointMatchesServer(
 		not_null<const MTP::Instance*> mtp,
 		const Server &server) {
 	const auto &options = mtp->dcOptions();
 	const auto variants = options.lookup(
-		MTP::Instance::Fields::kDefaultMainDc,
+		MainDcIdForServer(server),
 		MTP::DcType::Regular,
 		false);
 	for (auto address = 0; address != MTP::DcOptions::Variants::AddressTypeCount; ++address) {
@@ -144,16 +150,16 @@ void WriteCustomServersJson(const QJsonArray &array) {
 	return result;
 }
 
-constexpr auto kMainDcId = MTP::Instance::Fields::kDefaultMainDc;
-
 void ApplyServerToDcOptions(
 		not_null<MTP::DcOptions*> dcOptions,
 		const Server &server) {
+	const auto dcId = MainDcIdForServer(server);
 	const auto flags = MTPDdcOption::Flag::f_static;
+	dcOptions->setBuiltInPublicKeys(server.isTelegram);
 	dcOptions->setOptionsLocked(false);
 	dcOptions->setFromList(MTP_vector<MTPDcOption>(1, MTP_dcOption(
 		MTP_flags(flags),
-		MTP_int(kMainDcId),
+		MTP_int(dcId),
 		MTP_string(server.host),
 		MTP_int(server.port),
 		MTPbytes())));
@@ -175,7 +181,13 @@ void ApplyServerToDcOptions(
 	result.host = selection.host;
 	result.port = selection.port;
 	result.logoPath = DefaultLogoPath();
-	if (selection.id == QString::fromLatin1(kOfficialServerId)) {
+	if (selection.id == QString::fromLatin1(kTelegramServerId)) {
+		const auto telegram = TelegramServer();
+		result.name = telegram.name;
+		result.description = telegram.description;
+		result.isOfficial = true;
+		result.isTelegram = true;
+	} else if (selection.id == QString::fromLatin1(kOfficialServerId)) {
 		const auto official = OfficialServer();
 		result.name = official.name;
 		result.description = official.description;
@@ -189,6 +201,23 @@ void ApplyServerToDcOptions(
 
 QString DefaultLogoPath() {
 	return u":/gui/art/logo_256.png"_q;
+}
+
+QString TelegramLogoPath() {
+	return u":/gui/plane_white.svg"_q;
+}
+
+Server TelegramServer() {
+	auto result = Server();
+	result.id = QString::fromLatin1(kTelegramServerId);
+	result.name = tr::lng_owpengram_server_telegram_name(tr::now);
+	result.description = tr::lng_owpengram_server_telegram_description(tr::now);
+	result.host = u"149.154.167.51"_q;
+	result.port = 443;
+	result.logoPath = TelegramLogoPath();
+	result.isOfficial = true;
+	result.isTelegram = true;
+	return result;
 }
 
 Server OfficialServer() {
@@ -219,6 +248,7 @@ QString FormatEndpoint(const Server &server) {
 
 std::vector<Server> ListServers() {
 	auto result = std::vector<Server>();
+	result.push_back(TelegramServer());
 	result.push_back(OfficialServer());
 	for (const auto &custom : ReadCustomServers()) {
 		result.push_back(custom);
@@ -259,7 +289,8 @@ std::optional<Server> AddCustomServer(
 }
 
 bool RemoveCustomServer(const QString &id) {
-	if (id == QString::fromLatin1(kOfficialServerId)) {
+	if (id == QString::fromLatin1(kOfficialServerId)
+		|| id == QString::fromLatin1(kTelegramServerId)) {
 		return false;
 	}
 	auto array = ReadCustomServersJson();
@@ -307,9 +338,10 @@ void RestoreServerToAccount(not_null<Main::Account*> account) {
 	if (EndpointMatchesServer(&mtp, server)) {
 		return;
 	}
+	const auto dcId = MainDcIdForServer(server);
 	ApplyServerToDcOptions(&mtp.dcOptions(), server);
-	mtp.setMainDcId(kMainDcId);
-	mtp.reInitConnection(kMainDcId);
+	mtp.setMainDcId(dcId);
+	mtp.reInitConnection(dcId);
 }
 
 Server CurrentServerForAccount(not_null<Main::Account*> account) {
@@ -328,15 +360,16 @@ void ApplyServerToAccount(
 	Expects(server.valid());
 
 	auto &mtp = account->mtp();
+	const auto dcId = MainDcIdForServer(server);
 	mtp.restart();
 	ApplyServerToDcOptions(&mtp.dcOptions(), server);
-	mtp.setMainDcId(kMainDcId);
+	mtp.setMainDcId(dcId);
 	account->local().writeOwpengramServer(
 		server.id,
 		server.host,
 		server.port);
 	account->local().writeMtpConfig();
-	mtp.reInitConnection(kMainDcId);
+	mtp.reInitConnection(dcId);
 }
 
 void WaitForServerConnection(

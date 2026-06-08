@@ -106,6 +106,26 @@ AJ7eFAfPpOBf2w73ohXudSrJE0lbQ8pCWNpMY8cB9i8r+WBitcvouLDAvmtnTX7a\n\
 khoDzmKgpJBYliAY4qA73v7u5UIepE8QgV0jCOhxJCPubP8dg+/PlLLVKyxU5Cdi\n\
 QtZj2EMy4s9xlNKzX8XezE0MHEa6bQpnFwIDAQAB\n\
 -----END RSA PUBLIC KEY-----" };
+
+const char *kTelegramTestPublicRSAKeys[] = { "\
+-----BEGIN RSA PUBLIC KEY-----\n\
+MIIBCgKCAQEAyMEdY1aR+sCR3ZSJrtztKTKqigvO/vBfqACJLZtS7QMgCGXJ6XIR\n\
+yy7mx66W0/sOFa7/1mAZtEoIokDP3ShoqF4fVNb6XeqgQfaUHd8wJpDWHcR2OFwv\n\
+plUUI1PLTktZ9uW2WE23b+ixNwJjJGwBDJPQEQFBE+vfmH0JP503wr5INS1poWg/\n\
+j25sIWeYPHYeOrFp/eXaqhISP6G+q2IeTaWTXpwZj4LzXq5YOpk4bYEQ6mvRq7D1\n\
+aHWfYmlEGepfaYR8Q0YqvvhYtMte3ITnuSJs171+GDqpdKcSwHnd6FudwGO4pcCO\n\
+j4WcDuXc2CTHgH8gFTNhp/Y8/SpDOhvn9QIDAQAB\n\
+-----END RSA PUBLIC KEY-----" };
+
+const char *kTelegramPublicRSAKeys[] = { "\
+-----BEGIN RSA PUBLIC KEY-----\n\
+MIIBCgKCAQEA6LszBcC1LGzyr992NzE0ieY+BSaOW622Aa9Bd4ZHLl+TuFQ4lo4g\n\
+5nKaMBwK/BIb9xUfg0Q29/2mgIR6Zr9krM7HjuIcCzFvDtr+L0GQjae9H0pRB2OO\n\
+62cECs5HKhT5DZ98K33vmWiLowc621dQuwKWSQKjWf50XYFw42h21P2KXUGyp2y/\n\
++aEyZ+uVgLLQbRA1dEjSDZ2iGRy12Mk5gpYc397aYp438fsJoHIgJ2lgMv5h7WY9\n\
+t6N/byY9Nw9p21Og3AoXSL2q/2IJ1WRUhebgAdGVMlV1fkuOQoEzR7EdpqtQD9Cs\n\
+5+bfo3Nhmcyvk5ftB0WkJ9z6bNZ7yxrP8wIDAQAB\n\
+-----END RSA PUBLIC KEY-----" };
 // end patch
 
 } // namespace
@@ -171,9 +191,32 @@ bool DcOptions::ValidateSecret(bytes::const_span secret) {
 }
 
 void DcOptions::readBuiltInPublicKeys() {
+	_publicKeys.clear();
 	const auto builtin = (_environment == Environment::Test)
 		? gsl::make_span(kTestPublicRSAKeys)
 		: gsl::make_span(kPublicRSAKeys);
+	for (const auto key : builtin) {
+		const auto keyBytes = bytes::make_span(key, strlen(key));
+		auto parsed = RSAPublicKey(keyBytes);
+		if (parsed.valid()) {
+			_publicKeys.emplace(parsed.fingerprint(), std::move(parsed));
+		} else {
+			LOG(("MTP Error: could not read this public RSA key:"));
+			LOG((key));
+		}
+	}
+}
+
+void DcOptions::setBuiltInPublicKeys(bool telegram) {
+	WriteLocker lock(this);
+	_publicKeys.clear();
+	const auto builtin = (_environment == Environment::Test)
+		? (telegram
+			? gsl::make_span(kTelegramTestPublicRSAKeys)
+			: gsl::make_span(kTestPublicRSAKeys))
+		: (telegram
+			? gsl::make_span(kTelegramPublicRSAKeys)
+			: gsl::make_span(kPublicRSAKeys));
 	for (const auto key : builtin) {
 		const auto keyBytes = bytes::make_span(key, strlen(key));
 		auto parsed = RSAPublicKey(keyBytes);

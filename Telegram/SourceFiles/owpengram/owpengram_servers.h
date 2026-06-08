@@ -25,6 +25,7 @@ class Config;
 namespace Owpengram {
 
 inline constexpr auto kOfficialServerId = "official";
+inline constexpr auto kTelegramServerId = "telegram";
 
 struct Server {
 	QString id;
@@ -34,12 +35,14 @@ struct Server {
 	QString description;
 	QString logoPath;
 	bool isOfficial = false;
+	bool isTelegram = false;
 
 	[[nodiscard]] bool valid() const {
 		return !id.isEmpty() && !host.isEmpty() && port > 0;
 	}
 };
 
+[[nodiscard]] Server TelegramServer();
 [[nodiscard]] Server OfficialServer();
 [[nodiscard]] std::vector<Server> ListServers();
 [[nodiscard]] std::optional<Server> FindServer(const QString &id);
