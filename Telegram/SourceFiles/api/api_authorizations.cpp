@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/branding.h"
 #include "core/changelogs.h"
 #include "core/core_settings.h"
+#include "config.h"
 #include "lang/lang_keys.h"
 #include "main/main_app_config.h"
 #include "main/main_session_settings.h"
@@ -38,7 +39,7 @@ Authorizations::Entry ParseEntry(const MTPDauthorization &data) {
 		|| (apiId == SnapApiId)
 		|| isTest;
 
-	const auto appName = isDesktop
+	const auto appName = (apiId == ApiId)
 		? Branding::AppName.utf16() + (isTest ? u" (GitHub)"_q : QString())
 		: qs(data.vapp_name());// + u" for "_q + qs(d.vplatform());
 	const auto appVer = [&] {
