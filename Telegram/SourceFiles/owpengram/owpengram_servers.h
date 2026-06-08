@@ -76,6 +76,7 @@ void WaitForServerConnection(
 	Fn<void()> done);
 
 [[nodiscard]] QString DefaultLogoPath();
+[[nodiscard]] QString TelegramLogoPath();
 [[nodiscard]] QString FormatEndpoint(const Server &server);
 
 } // namespace Owpengram

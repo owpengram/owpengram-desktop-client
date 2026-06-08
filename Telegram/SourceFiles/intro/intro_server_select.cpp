@@ -99,18 +99,22 @@ ServerRow::ServerRow(
 	) | rpl::on_next([=, path = _server.logoPath] {
 		auto p = QPainter(_logo);
 		PainterHighQualityEnabler hq(p);
-		p.setPen(Qt::NoPen);
-		p.setBrush(_server.isOfficial ? st::windowBgOver : st::boxBg);
-		p.drawEllipse(0, 0, size, size);
 		const auto image = QPixmap(path).scaled(
 			size,
 			size,
-			Qt::KeepAspectRatioByExpanding,
+			_server.isTelegram
+				? Qt::KeepAspectRatio
+				: Qt::KeepAspectRatioByExpanding,
 			Qt::SmoothTransformation);
 		const auto left = (size - image.width()) / 2;
 		const auto top = (size - image.height()) / 2;
-		p.setClipRect(0, 0, size, size);
-		p.setClipRegion(QRegion(0, 0, size, size, QRegion::Ellipse));
+		if (!_server.isTelegram) {
+			p.setPen(Qt::NoPen);
+			p.setBrush(_server.isOfficial ? st::windowBgOver : st::boxBg);
+			p.drawEllipse(0, 0, size, size);
+			p.setClipRect(0, 0, size, size);
+			p.setClipRegion(QRegion(0, 0, size, size, QRegion::Ellipse));
+		}
 		p.drawPixmap(left, top, image);
 	}, _logo->lifetime());
 

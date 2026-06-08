@@ -316,6 +316,7 @@ introServerDetailsDescriptionPadding: margins(12px, 14px, 12px, 14px);
 introServerDetailsDescriptionMinHeight: 72px;
 introServerDetailsDescriptionMaxHeight: 120px;
 introServerDetailsDescription: FlatLabel(defaultFlatLabel) {
+	minWidth: 0px;
 	textFg: windowFg;
 	align: align(topleft);
 	style: TextStyle(defaultTextStyle) {

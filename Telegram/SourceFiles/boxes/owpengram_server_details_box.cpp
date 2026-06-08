@@ -154,7 +154,8 @@ public:
 	HeaderRow(
 		QWidget *parent,
 		const QString &name,
-		const QString &logoPath);
+		const QString &logoPath,
+		bool isTelegram);
 protected:
 	void resizeEvent(QResizeEvent *e) override;
 private:
@@ -164,7 +165,8 @@ private:
 HeaderRow::HeaderRow(
 	QWidget *parent,
 	const QString &name,
-	const QString &logoPath)
+	const QString &logoPath,
+	bool isTelegram)
 : RpWidget(parent)
 , _logo(this)
 , _name(this, name, st::introServerCardName) {
@@ -174,18 +176,20 @@ HeaderRow::HeaderRow(
 	) | rpl::on_next([=, path = logoPath] {
 		auto p = QPainter(_logo.data());
 		PainterHighQualityEnabler hq(p);
-		p.setPen(Qt::NoPen);
-		p.setBrush(st::boxBg);
-		p.drawEllipse(0, 0, logoSize, logoSize);
 		const auto image = QPixmap(path).scaled(
 			logoSize,
 			logoSize,
-			Qt::KeepAspectRatioByExpanding,
+			isTelegram ? Qt::KeepAspectRatio : Qt::KeepAspectRatioByExpanding,
 			Qt::SmoothTransformation);
 		const auto left = (logoSize - image.width()) / 2;
 		const auto top = (logoSize - image.height()) / 2;
-		p.setClipRect(0, 0, logoSize, logoSize);
-		p.setClipRegion(QRegion(0, 0, logoSize, logoSize, QRegion::Ellipse));
+		if (!isTelegram) {
+			p.setPen(Qt::NoPen);
+			p.setBrush(st::boxBg);
+			p.drawEllipse(0, 0, logoSize, logoSize);
+			p.setClipRect(0, 0, logoSize, logoSize);
+			p.setClipRegion(QRegion(0, 0, logoSize, logoSize, QRegion::Ellipse));
+		}
 		p.drawPixmap(left, top, image);
 	}, _logo->lifetime());
 	resize(parent->width(), logoSize);
@@ -307,7 +311,8 @@ ServerDetailsBox::ServerDetailsBox(
 		object_ptr<HeaderRow>(
 			_content,
 			_server.name,
-			_server.logoPath),
+			_server.logoPath,
+			_server.isTelegram),
 		st::boxRowPadding);
 	_content->add(
 		object_ptr<DetailRow>(

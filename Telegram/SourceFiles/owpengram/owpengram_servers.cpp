@@ -204,7 +204,7 @@ QString DefaultLogoPath() {
 }
 
 QString TelegramLogoPath() {
-	return u":/gui/plane_white.svg"_q;
+	return u":/gui/art/telegram_logo_256.png"_q;
 }
 
 Server TelegramServer() {
