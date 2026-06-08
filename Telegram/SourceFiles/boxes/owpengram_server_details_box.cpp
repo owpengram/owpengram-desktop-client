@@ -155,7 +155,7 @@ public:
 		QWidget *parent,
 		const QString &name,
 		const QString &logoPath,
-		bool isTelegram);
+		bool isOfficial);
 protected:
 	void resizeEvent(QResizeEvent *e) override;
 private:
@@ -166,7 +166,7 @@ HeaderRow::HeaderRow(
 	QWidget *parent,
 	const QString &name,
 	const QString &logoPath,
-	bool isTelegram)
+	bool isOfficial)
 : RpWidget(parent)
 , _logo(this)
 , _name(this, name, st::introServerCardName) {
@@ -176,14 +176,17 @@ HeaderRow::HeaderRow(
 	) | rpl::on_next([=, path = logoPath] {
 		auto p = QPainter(_logo.data());
 		PainterHighQualityEnabler hq(p);
+		const auto circleMask = !isOfficial;
 		const auto image = QPixmap(path).scaled(
 			logoSize,
 			logoSize,
-			isTelegram ? Qt::KeepAspectRatio : Qt::KeepAspectRatioByExpanding,
+			circleMask
+				? Qt::KeepAspectRatioByExpanding
+				: Qt::KeepAspectRatio,
 			Qt::SmoothTransformation);
 		const auto left = (logoSize - image.width()) / 2;
 		const auto top = (logoSize - image.height()) / 2;
-		if (!isTelegram) {
+		if (circleMask) {
 			p.setPen(Qt::NoPen);
 			p.setBrush(st::boxBg);
 			p.drawEllipse(0, 0, logoSize, logoSize);
@@ -312,7 +315,7 @@ ServerDetailsBox::ServerDetailsBox(
 			_content,
 			_server.name,
 			_server.logoPath,
-			_server.isTelegram),
+			_server.isOfficial),
 		st::boxRowPadding);
 	_content->add(
 		object_ptr<DetailRow>(

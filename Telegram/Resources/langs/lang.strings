@@ -7604,7 +7604,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_host_hint" = "IP address or host:port";
 "lng_owpengram_server_telegram_name" = "Telegram";
 "lng_owpengram_server_telegram_description" = "Official Telegram cloud. Sign in with your Telegram account.";
-"lng_owpengram_server_official_name" = "Official OwpenGram";
+"lng_owpengram_server_official_name" = "OwpenGram";
 "lng_owpengram_server_official_description" = "Default OwpenGram server configured for this client.";
 "lng_owpengram_server_add_title" = "Add Server";
 "lng_owpengram_server_name" = "Server name";
