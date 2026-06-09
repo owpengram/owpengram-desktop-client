@@ -225,6 +225,7 @@ Server TeamgramServer() {
 	result.host = kTeamgramDefaultHost;
 	result.port = kTeamgramDefaultPort;
 	result.logoPath = TeamgramLogoPath();
+	result.isOfficial = true;
 	return result;
 }
 
