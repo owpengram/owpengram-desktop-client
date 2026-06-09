@@ -11,6 +11,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $ScriptDir '..')).Path
 $TelegramDir = Join-Path $RepoRoot 'Telegram'
 $DcOptionsFile = Join-Path $RepoRoot 'Telegram\SourceFiles\mtproto\mtproto_dc_options.cpp'
+$OfficialServerFile = Join-Path $RepoRoot 'Telegram\SourceFiles\owpengram\owpengram_servers.cpp'
 $SolutionPath = Join-Path $RepoRoot 'out\Telegram.sln'
 $LibrariesRoot = (Resolve-Path (Join-Path $RepoRoot '..')).Path
 $LibrariesMarker = Join-Path $LibrariesRoot 'Libraries\win64\local'
@@ -79,6 +80,20 @@ function Patch-Server([string]$Address, [int]$Port) {
     })
 
     [System.IO.File]::WriteAllText($DcOptionsFile, $newContent, (New-Object System.Text.UTF8Encoding $false))
+
+    if (-not (Test-Path $OfficialServerFile)) {
+        throw "File not found: $OfficialServerFile"
+    }
+    $officialContent = Get-Content -Path $OfficialServerFile -Raw -Encoding UTF8
+    $hostPattern = '(const auto kOfficialDefaultHost = u")([^"]*)("_q;)'
+    $portPattern = '(constexpr auto kOfficialDefaultPort = )(\d+)(;)'
+    if (-not ([regex]::IsMatch($officialContent, $hostPattern) -and [regex]::IsMatch($officialContent, $portPattern))) {
+        throw 'kOfficialDefaultHost/kOfficialDefaultPort not found in owpengram_servers.cpp'
+    }
+    $officialContent = [regex]::Replace($officialContent, $hostPattern, { param($m) $m.Groups[1].Value + $ip + $m.Groups[3].Value })
+    $officialContent = [regex]::Replace($officialContent, $portPattern, "`${1}$portNum`${3}")
+    [System.IO.File]::WriteAllText($OfficialServerFile, $officialContent, (New-Object System.Text.UTF8Encoding $false))
+
     Write-Ok "Server patched: ${ip}:$portNum"
 }
 

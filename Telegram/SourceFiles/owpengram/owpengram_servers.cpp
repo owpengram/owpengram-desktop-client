@@ -35,27 +35,11 @@ namespace {
 
 const auto kServersFile = u"owpengram_servers.json"_q;
 constexpr auto kCheckTimeoutMs = 3000;
+const auto kOfficialDefaultHost = u"192.168.100.10"_q;
+constexpr auto kOfficialDefaultPort = 10443;
 
 [[nodiscard]] QString ServersFilePath() {
 	return cWorkingDir() + u"tdata/"_q + kServersFile;
-}
-
-[[nodiscard]] std::optional<std::pair<QString, int>> ReadOfficialEndpoint() {
-	const auto &options = Core::App().fallbackProductionConfig().dcOptions();
-	const auto variants = options.lookup(
-		MTP::Instance::Fields::kDefaultMainDc,
-		MTP::DcType::Regular,
-		false);
-	for (auto address = 0; address != MTP::DcOptions::Variants::AddressTypeCount; ++address) {
-		for (auto protocol = 0; protocol != MTP::DcOptions::Variants::ProtocolCount; ++protocol) {
-			for (const auto &endpoint : variants.data[address][protocol]) {
-				return std::make_pair(
-					QString::fromStdString(endpoint.ip),
-					endpoint.port);
-			}
-		}
-	}
-	return std::nullopt;
 }
 
 [[nodiscard]] QJsonArray ReadCustomServersJson() {
@@ -229,16 +213,8 @@ Server OfficialServer() {
 	result.description = tr::lng_owpengram_server_official_description(tr::now);
 	result.logoPath = DefaultLogoPath();
 	result.isOfficial = true;
-	if (const auto endpoint = ReadOfficialEndpoint()) {
-		result.host = endpoint->first;
-		result.port = endpoint->second;
-	}
-	if (result.host.isEmpty()) {
-		result.host = u"192.168.100.10"_q;
-	}
-	if (result.port <= 0) {
-		result.port = 10443;
-	}
+	result.host = kOfficialDefaultHost;
+	result.port = kOfficialDefaultPort;
 	return result;
 }
 

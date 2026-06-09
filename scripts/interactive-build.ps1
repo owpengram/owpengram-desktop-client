@@ -20,6 +20,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $ScriptDir '..')).Path
 $TelegramDir = Join-Path $RepoRoot 'Telegram'
 $DcOptionsFile = Join-Path $RepoRoot 'Telegram\SourceFiles\mtproto\mtproto_dc_options.cpp'
+$OfficialServerFile = Join-Path $RepoRoot 'Telegram\SourceFiles\owpengram\owpengram_servers.cpp'
 $ConfigFile = Join-Path $RepoRoot '.owpengram-build.local.json'
 $SolutionPath = Join-Path $RepoRoot 'out\Telegram.sln'
 # prepare.py chdirs 4 levels up from Telegram/build/prepare -> parent owpengram folder
@@ -468,6 +469,20 @@ function Set-ServerEndpoint {
     }
 
     [System.IO.File]::WriteAllText($DcOptionsFile, $newContent, (New-Object System.Text.UTF8Encoding $false))
+
+    if (-not (Test-Path $OfficialServerFile)) {
+        throw "Official server file not found: $OfficialServerFile"
+    }
+    $officialContent = Get-Content -Path $OfficialServerFile -Raw -Encoding UTF8
+    $hostPattern = '(const auto kOfficialDefaultHost = u")([^"]*)("_q;)'
+    $portPattern = '(constexpr auto kOfficialDefaultPort = )(\d+)(;)'
+    if (-not ([regex]::IsMatch($officialContent, $hostPattern) -and [regex]::IsMatch($officialContent, $portPattern))) {
+        throw 'kOfficialDefaultHost/kOfficialDefaultPort not found in owpengram_servers.cpp'
+    }
+    $officialContent = [regex]::Replace($officialContent, $hostPattern, { param($m) $m.Groups[1].Value + $ServerAddress + $m.Groups[3].Value })
+    $officialContent = [regex]::Replace($officialContent, $portPattern, "`${1}$Port`${3}")
+    [System.IO.File]::WriteAllText($OfficialServerFile, $officialContent, (New-Object System.Text.UTF8Encoding $false))
+
     Write-Ok "Server endpoint patched: ${ServerAddress}:$Port"
 }
 
