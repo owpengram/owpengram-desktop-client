@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_app_config.h"
 #include "main/main_session.h"
 #include "data/data_user.h"
+#include "storage/storage_account.h"
 #include "ui/boxes/confirm_box.h"
 #include "boxes/abstract_box.h"
 #include "boxes/phone_banned_box.h"
@@ -184,11 +185,29 @@ void PhoneWidget::submit() {
 
 	// Check if such account is authorized already.
 	const auto phoneDigits = DigitsOnly(phone);
+	const auto currentServerId = [&]() -> QString {
+		if (const auto sel = account().local().readOwpengramServer()) {
+			return sel->id;
+		}
+		return {};
+	}();
 	for (const auto &[index, existing] : Core::App().domain().accounts()) {
 		const auto raw = existing.get();
 		if (const auto session = raw->maybeSession()) {
 			if (raw->mtp().environment() == account().mtp().environment()
 				&& DigitsOnly(session->user()->phone()) == phoneDigits) {
+				// Only redirect when the existing account is on the same server.
+				// Different server ID means the user intentionally wants to log
+				// in to a different server with the same phone number.
+				const auto existingServerId = [&]() -> QString {
+					if (const auto sel = raw->local().readOwpengramServer()) {
+						return sel->id;
+					}
+					return {};
+				}();
+				if (existingServerId != currentServerId) {
+					continue;
+				}
 				crl::on_main(raw, [=] {
 					Core::App().domain().activate(raw);
 				});

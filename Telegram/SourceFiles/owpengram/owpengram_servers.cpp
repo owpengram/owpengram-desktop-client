@@ -318,6 +318,13 @@ void RestoreServerToConfig(
 		not_null<MTP::Config*> config) {
 	const auto selection = account->local().readOwpengramServer();
 	if (!selection) {
+		// No saved server means server selection hasn't happened yet.
+		// If the config somehow has locked options (inherited from an owpengram
+		// fallback config), unlock it so the new account doesn't silently talk
+		// to owpengram before the user picks a server.
+		if (config->dcOptions().optionsLocked()) {
+			config->dcOptions().setOptionsLocked(false);
+		}
 		return;
 	}
 	const auto server = ServerFromStoredSelection(*selection);
@@ -330,6 +337,11 @@ void RestoreServerToConfig(
 void RestoreServerToAccount(not_null<Main::Account*> account) {
 	const auto selection = account->local().readOwpengramServer();
 	if (!selection) {
+		// No saved server: ensure the live MTP instance isn't locked either.
+		auto &mtp = account->mtp();
+		if (mtp.dcOptions().optionsLocked()) {
+			mtp.dcOptions().setOptionsLocked(false);
+		}
 		return;
 	}
 	const auto server = ServerFromStoredSelection(*selection);

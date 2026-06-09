@@ -271,27 +271,11 @@ not_null<Main::Account*> Domain::add(MTP::Environment environment) {
 	Expects(started());
 	Expects(_accounts.size() < kPremiumMaxAccounts);
 
-	static const auto cloneConfig = [](const MTP::Config &config) {
-		return std::make_unique<MTP::Config>(config);
-	};
-	auto mainDcId = MTP::Instance::Fields::kNotSetMainDc;
-	const auto accountConfig = [&](not_null<Account*> account) {
-		mainDcId = account->mtp().mainDcId();
-		return cloneConfig(account->mtp().config());
-	};
-	auto config = [&] {
-		if (_active.current()->mtp().environment() == environment) {
-			return accountConfig(_active.current());
-		}
-		for (const auto &[index, account] : _accounts) {
-			if (account->mtp().environment() == environment) {
-				return accountConfig(account.get());
-			}
-		}
-		return (environment == MTP::Environment::Production)
-			? cloneConfig(Core::App().fallbackProductionConfig())
-			: std::make_unique<MTP::Config>(environment);
-	}();
+	// Always start the new account with a completely fresh config.
+	// fallbackProductionConfig() may have been set from an owpengram account
+	// and would carry locked DC options / custom RSA keys.  The server
+	// selection in the intro (ApplyServerToAccount) sets up everything needed.
+	auto config = std::make_unique<MTP::Config>(environment);
 	auto index = 0;
 	while (ranges::contains(_accounts, index, &AccountWithIndex::index)) {
 		++index;
@@ -301,7 +285,6 @@ not_null<Main::Account*> Domain::add(MTP::Environment environment) {
 		.account = std::make_unique<Account>(this, _dataName, index)
 	});
 	const auto account = _accounts.back().account.get();
-	account->setMtpMainDcId(mainDcId);
 	_local->startAdded(account, std::move(config));
 	watchSession(account);
 	_accountsChanges.fire({});
@@ -432,6 +415,12 @@ void Domain::checkForLastProductionConfig(
 		not_null<Main::Account*> account) {
 	const auto mtp = &account->mtp();
 	if (mtp->environment() != MTP::Environment::Production) {
+		return;
+	}
+	// Don't let a custom-server (locked DC options) account overwrite the
+	// production fallback — it would contaminate new accounts with owpengram
+	// DC options and RSA keys, causing wrong-server logins.
+	if (mtp->dcOptions().optionsLocked()) {
 		return;
 	}
 	for (const auto &[index, other] : _accounts) {

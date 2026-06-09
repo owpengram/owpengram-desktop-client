@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "storage/details/storage_file_utilities.h"
 #include "storage/serialize_common.h"
+#include "storage/storage_account.h"
 #include "mtproto/mtproto_config.h"
 #include "main/main_domain.h"
 #include "main/main_account.h"
@@ -168,7 +169,9 @@ Domain::StartModernResult Domain::startModern(
 	_oldVersion = keyData.version;
 
 	auto tried = base::flat_set<int>();
-	auto sessions = base::flat_set<uint64>();
+	// Key: (sessionId, serverId) — same userId on different servers is NOT a duplicate.
+	using SessionKey = std::pair<uint64, QString>;
+	auto sessions = base::flat_set<SessionKey>();
 	auto active = 0;
 	for (auto i = 0; i != count; ++i) {
 		auto index = qint32();
@@ -183,7 +186,10 @@ Domain::StartModernResult Domain::startModern(
 			auto config = account->prepareToStart(_localKey);
 			const auto sessionId = account->willHaveSessionUniqueId(
 				config.get());
-			if (!sessions.contains(sessionId)
+			const auto serverSel = account->local().readOwpengramServer();
+			const auto serverId = serverSel ? serverSel->id : QString();
+			const auto key = SessionKey(sessionId, serverId);
+			if (!sessions.contains(key)
 				&& (sessionId != 0 || (sessions.empty() && i + 1 == count))) {
 				if (sessions.empty()) {
 					active = index;
@@ -193,7 +199,7 @@ Domain::StartModernResult Domain::startModern(
 					.index = index,
 					.account = std::move(account)
 				});
-				sessions.emplace(sessionId);
+				sessions.emplace(key);
 			}
 		}
 	}
