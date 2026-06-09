@@ -37,6 +37,8 @@ const auto kServersFile = u"owpengram_servers.json"_q;
 constexpr auto kCheckTimeoutMs = 3000;
 const auto kOfficialDefaultHost = u"192.168.100.10"_q;
 constexpr auto kOfficialDefaultPort = 10443;
+const auto kTeamgramDefaultHost = u"43.155.11.190"_q;
+constexpr auto kTeamgramDefaultPort = 10443;
 
 [[nodiscard]] QString ServersFilePath() {
 	return cWorkingDir() + u"tdata/"_q + kServersFile;
@@ -173,6 +175,11 @@ void ApplyServerToDcOptions(
 		result.description = telegram.description;
 		result.isOfficial = true;
 		result.isTelegram = true;
+	} else if (selection.id == QString::fromLatin1(kTeamgramServerId)) {
+		const auto teamgram = TeamgramServer();
+		result.name = teamgram.name;
+		result.description = teamgram.description;
+		result.logoPath = teamgram.logoPath;
 	} else if (selection.id == QString::fromLatin1(kOfficialServerId)) {
 		const auto official = OfficialServer();
 		result.name = official.name;
@@ -193,6 +200,10 @@ QString TelegramLogoPath() {
 	return u":/gui/art/telegram_logo_256.png"_q;
 }
 
+QString TeamgramLogoPath() {
+	return u":/gui/art/teamgram_logo_256.png"_q;
+}
+
 Server TelegramServer() {
 	auto result = Server();
 	result.id = QString::fromLatin1(kTelegramServerId);
@@ -203,6 +214,17 @@ Server TelegramServer() {
 	result.logoPath = TelegramLogoPath();
 	result.isOfficial = true;
 	result.isTelegram = true;
+	return result;
+}
+
+Server TeamgramServer() {
+	auto result = Server();
+	result.id = QString::fromLatin1(kTeamgramServerId);
+	result.name = tr::lng_owpengram_server_teamgram_name(tr::now);
+	result.description = tr::lng_owpengram_server_teamgram_description(tr::now);
+	result.host = kTeamgramDefaultHost;
+	result.port = kTeamgramDefaultPort;
+	result.logoPath = TeamgramLogoPath();
 	return result;
 }
 
@@ -227,6 +249,7 @@ QString FormatEndpoint(const Server &server) {
 std::vector<Server> ListServers() {
 	auto result = std::vector<Server>();
 	result.push_back(TelegramServer());
+	result.push_back(TeamgramServer());
 	result.push_back(OfficialServer());
 	for (const auto &custom : ReadCustomServers()) {
 		result.push_back(custom);
@@ -266,9 +289,17 @@ std::optional<Server> AddCustomServer(
 	return server;
 }
 
+bool IsRemovableServer(const Server &server) {
+	return !server.isOfficial
+		&& server.id != QString::fromLatin1(kTeamgramServerId)
+		&& server.id != QString::fromLatin1(kTelegramServerId)
+		&& server.id != QString::fromLatin1(kOfficialServerId);
+}
+
 bool RemoveCustomServer(const QString &id) {
 	if (id == QString::fromLatin1(kOfficialServerId)
-		|| id == QString::fromLatin1(kTelegramServerId)) {
+		|| id == QString::fromLatin1(kTelegramServerId)
+		|| id == QString::fromLatin1(kTeamgramServerId)) {
 		return false;
 	}
 	auto array = ReadCustomServersJson();

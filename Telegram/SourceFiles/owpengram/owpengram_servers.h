@@ -26,6 +26,7 @@ namespace Owpengram {
 
 inline constexpr auto kOfficialServerId = "official";
 inline constexpr auto kTelegramServerId = "telegram";
+inline constexpr auto kTeamgramServerId = "teamgram";
 
 struct Server {
 	QString id;
@@ -43,6 +44,7 @@ struct Server {
 };
 
 [[nodiscard]] Server TelegramServer();
+[[nodiscard]] Server TeamgramServer();
 [[nodiscard]] Server OfficialServer();
 [[nodiscard]] std::vector<Server> ListServers();
 [[nodiscard]] std::optional<Server> FindServer(const QString &id);
@@ -52,6 +54,7 @@ struct Server {
 	int port,
 	const QString &description);
 [[nodiscard]] bool RemoveCustomServer(const QString &id);
+[[nodiscard]] bool IsRemovableServer(const Server &server);
 
 void ApplyServerToAccount(
 	not_null<Main::Account*> account,
@@ -79,6 +82,7 @@ void WaitForServerConnection(
 
 [[nodiscard]] QString DefaultLogoPath();
 [[nodiscard]] QString TelegramLogoPath();
+[[nodiscard]] QString TeamgramLogoPath();
 [[nodiscard]] QString FormatEndpoint(const Server &server);
 
 } // namespace Owpengram

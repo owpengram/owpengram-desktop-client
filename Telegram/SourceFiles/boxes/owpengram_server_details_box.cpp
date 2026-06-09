@@ -347,7 +347,7 @@ ServerDetailsBox::ServerDetailsBox(
 void ServerDetailsBox::prepare() {
 	setTitle(tr::lng_owpengram_server_details_title());
 	if (_connect) {
-		if (!_server.isOfficial) {
+		if (Owpengram::IsRemovableServer(_server)) {
 			const auto weak = base::make_weak(this);
 			addLeftButton(tr::lng_owpengram_server_delete(), [=] {
 				getDelegate()->show(Ui::MakeConfirmBox({
