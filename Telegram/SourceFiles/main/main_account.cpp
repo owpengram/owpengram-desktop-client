@@ -613,6 +613,12 @@ void Account::destroyStaleAuthorizationKeys() {
 	}
 }
 
+void Account::resetAuthorizationKeysForServerSwitch() {
+	Expects(_mtp != nullptr);
+
+	resetAuthorizationKeys();
+}
+
 void Account::setHandleLoginCode(Fn<void(QString)> callback) {
 	_handleLoginCode = std::move(callback);
 }

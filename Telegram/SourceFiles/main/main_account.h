@@ -109,6 +109,7 @@ public:
 
 	void suggestMainDcId(MTP::DcId mainDcId);
 	void destroyStaleAuthorizationKeys();
+	void resetAuthorizationKeysForServerSwitch();
 
 	void setHandleLoginCode(Fn<void(QString)> callback);
 	void handleLoginCode(const QString &code) const;

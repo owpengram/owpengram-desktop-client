@@ -34,14 +34,19 @@ namespace Owpengram {
 namespace {
 
 const auto kServersFile = u"owpengram_servers.json"_q;
+const auto kServerSelectionFallbackFile = u"owpengram_server_selection.json"_q;
 constexpr auto kCheckTimeoutMs = 3000;
-const auto kOfficialDefaultHost = u"192.168.100.10"_q;
+const auto kOfficialDefaultHost = u"127.0.0.1"_q;
 constexpr auto kOfficialDefaultPort = 10443;
 const auto kTeamgramDefaultHost = u"43.155.11.190"_q;
 constexpr auto kTeamgramDefaultPort = 10443;
 
 [[nodiscard]] QString ServersFilePath() {
 	return cWorkingDir() + u"tdata/"_q + kServersFile;
+}
+
+[[nodiscard]] QString ServerSelectionFallbackPath() {
+	return cWorkingDir() + u"tdata/"_q + kServerSelectionFallbackFile;
 }
 
 [[nodiscard]] QJsonArray ReadCustomServersJson() {
@@ -65,6 +70,61 @@ void WriteCustomServersJson(const QJsonArray &array) {
 		return;
 	}
 	file.write(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+void WriteServerSelectionFallback(const Server &server) {
+	const auto path = ServerSelectionFallbackPath();
+	QDir().mkpath(QFileInfo(path).absolutePath());
+	QFile file(path);
+	if (!file.open(QIODevice::WriteOnly)) {
+		return;
+	}
+	auto object = QJsonObject();
+	object.insert(u"id"_q, server.id);
+	object.insert(u"host"_q, server.host);
+	object.insert(u"port"_q, server.port);
+	file.write(QJsonDocument(object).toJson(QJsonDocument::Compact));
+}
+
+[[nodiscard]] std::optional<Storage::OwpengramServerSelection>
+ReadServerSelectionFallback() {
+	const auto path = ServerSelectionFallbackPath();
+	QFile file(path);
+	if (!file.open(QIODevice::ReadOnly)) {
+		return std::nullopt;
+	}
+	const auto document = QJsonDocument::fromJson(file.readAll());
+	if (!document.isObject()) {
+		return std::nullopt;
+	}
+	const auto object = document.object();
+	const auto id = object.value(u"id"_q).toString();
+	const auto host = object.value(u"host"_q).toString();
+	const auto port = object.value(u"port"_q).toInt();
+	if (id.isEmpty() || host.isEmpty() || port <= 0) {
+		return std::nullopt;
+	}
+	return Storage::OwpengramServerSelection{
+		.id = id,
+		.host = host,
+		.port = port,
+	};
+}
+
+[[nodiscard]] std::optional<Storage::OwpengramServerSelection>
+ReadSavedServerSelection(not_null<Main::Account*> account) {
+	if (const auto encrypted = account->local().readOwpengramServer()) {
+		return encrypted;
+	}
+	return ReadServerSelectionFallback();
+}
+
+[[nodiscard]] bool SelectionEqualsServer(
+		const Storage::OwpengramServerSelection &selection,
+		const Server &server) {
+	return (selection.id == server.id)
+		&& (selection.host == server.host)
+		&& (selection.port == server.port);
 }
 
 [[nodiscard]] Server ServerFromJson(const QJsonObject &object) {
@@ -140,7 +200,9 @@ void ApplyServerToDcOptions(
 		not_null<MTP::DcOptions*> dcOptions,
 		const Server &server) {
 	const auto dcId = MainDcIdForServer(server);
-	const auto flags = MTPDdcOption::Flag::f_static;
+	const auto flags = server.isTelegram
+		? MTPDdcOption::Flag::f_static
+		: (MTPDdcOption::Flag::f_static | MTPDdcOption::Flag::f_tcpo_only);
 	dcOptions->setBuiltInPublicKeys(server.isTelegram);
 	dcOptions->setOptionsLocked(false);
 	dcOptions->setFromList(MTP_vector<MTPDcOption>(1, MTP_dcOption(
@@ -324,7 +386,7 @@ bool RemoveCustomServer(const QString &id) {
 void RestoreServerToConfig(
 		not_null<Main::Account*> account,
 		not_null<MTP::Config*> config) {
-	const auto selection = account->local().readOwpengramServer();
+	const auto selection = ReadSavedServerSelection(account);
 	if (!selection) {
 		// No saved server means server selection hasn't happened yet.
 		// If the config somehow has locked options (inherited from an owpengram
@@ -360,7 +422,7 @@ void RestoreServerToConfig(
 }
 
 void RestoreServerToAccount(not_null<Main::Account*> account) {
-	const auto selection = account->local().readOwpengramServer();
+	const auto selection = ReadSavedServerSelection(account);
 	if (!selection) {
 		// No saved server: ensure the live MTP instance isn't locked either.
 		auto &mtp = account->mtp();
@@ -376,18 +438,23 @@ void RestoreServerToAccount(not_null<Main::Account*> account) {
 	auto &mtp = account->mtp();
 	if (server.isTelegram) {
 		mtp.dcOptions().setOptionsLocked(false);
-	}
-	if (EndpointMatchesServer(&mtp, server)) {
+		if (EndpointMatchesServer(&mtp, server)) {
+			return;
+		}
+		const auto dcId = mtp.mainDcId();
+		ApplyServerToDcOptions(&mtp.dcOptions(), server);
+		mtp.reInitConnection(dcId);
 		return;
 	}
 	const auto dcId = MainDcIdForServer(server);
+	mtp.dcOptions().setBuiltInPublicKeys(false);
 	ApplyServerToDcOptions(&mtp.dcOptions(), server);
 	mtp.setMainDcId(dcId);
 	mtp.reInitConnection(dcId);
 }
 
 Server CurrentServerForAccount(not_null<Main::Account*> account) {
-	if (const auto selection = account->local().readOwpengramServer()) {
+	if (const auto selection = ReadSavedServerSelection(account)) {
 		const auto server = ServerFromStoredSelection(*selection);
 		if (server.valid()) {
 			return server;
@@ -405,17 +472,19 @@ void ApplyServerToAccount(
 		const Server &server) {
 	Expects(server.valid());
 
-	auto &mtp = account->mtp();
-	const auto dcId = MainDcIdForServer(server);
-	mtp.restart();
-	ApplyServerToDcOptions(&mtp.dcOptions(), server);
-	mtp.setMainDcId(dcId);
-	account->local().writeOwpengramServer(
-		server.id,
-		server.host,
-		server.port);
+	const auto previous = ReadSavedServerSelection(account);
+	if (previous && SelectionEqualsServer(*previous, server)) {
+		return;
+	}
+	WriteServerSelectionFallback(server);
+	if (account->local().peekLegacyLocalKey()) {
+		account->local().writeOwpengramServer(
+			server.id,
+			server.host,
+			server.port);
+	}
+	account->resetAuthorizationKeysForServerSwitch();
 	account->local().writeMtpConfig();
-	mtp.reInitConnection(dcId);
 }
 
 void WaitForServerConnection(
