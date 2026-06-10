@@ -528,10 +528,8 @@ ChannelData *Session::channelLoaded(ChannelId id) const {
 }
 
 not_null<UserData*> Session::processUser(const MTPUser &data) {
-	if (data.type() == mtpc_user_layer216) {
-		return processUser(MTP::NormalizeUser(data));
-	}
-	const auto result = user(data.match([](const auto &data) {
+	const auto normalized = MTP::NormalizeUser(data);
+	const auto result = user(normalized.match([](const auto &data) {
 		return data.vid().v;
 	}));
 	auto minimal = false;
@@ -540,7 +538,7 @@ not_null<UserData*> Session::processUser(const MTPUser &data) {
 
 	using UpdateFlag = PeerUpdate::Flag;
 	auto flags = UpdateFlag::None | UpdateFlag::None;
-	data.match([&](const MTPDuserEmpty &data) {
+	MTP::MatchNormalizedUser(data, [&](const MTPDuserEmpty &data) {
 		const auto canShareThisContact = result->canShareThisContactFast();
 
 		result->setName(tr::lng_deleted(tr::now), QString(), QString(), QString());

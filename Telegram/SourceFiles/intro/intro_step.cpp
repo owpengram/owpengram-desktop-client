@@ -32,6 +32,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/effects/slide_animation.h"
 #include "ui/ui_utility.h"
 #include "data/data_user.h"
+#include "data/data_session.h"
 #include "data/data_auto_download.h"
 #include "mtproto/mtp_user_normalize.h"
 #include "data/data_chat_filters.h"
