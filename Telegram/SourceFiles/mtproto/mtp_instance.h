@@ -40,10 +40,7 @@ public:
 
 	static constexpr auto kNoneMainDc = -1;
 	static constexpr auto kNotSetMainDc = 0;
-	// patch by onysd
-	// static constexpr auto kDefaultMainDc = 2;
-	static constexpr auto kDefaultMainDc = 1;
-	// end patch
+	static constexpr auto kDefaultMainDc = 2;
 	static constexpr auto kTemporaryMainDc = 1000;
 
 		std::unique_ptr<Config> config;

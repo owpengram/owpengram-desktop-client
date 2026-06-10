@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace Ui {
 class InputField;
 class VerticalLayout;
+class Checkbox;
 } // namespace Ui
 
 class AddServerBox : public Ui::BoxContent {
@@ -42,5 +43,7 @@ private:
 	QPointer<Ui::InputField> _portField;
 	QPointer<Ui::InputField> _rsaPublicKey;
 	QPointer<Ui::InputField> _description;
+	QPointer<Ui::Checkbox> _multiDc;
+	QPointer<Ui::InputField> _mainDcField;
 
 };

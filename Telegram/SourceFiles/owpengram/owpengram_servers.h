@@ -38,6 +38,13 @@ struct Server {
 	QString logoPath;
 	bool isOfficial = false;
 	bool isTelegram = false;
+	// Multi-DC servers (Telegram) trust help.getConfig / the special loader to
+	// discover real alternate data-center addresses. Single-server backends
+	// (owpengram/Teamgram/MyTelegram/custom) are one physical machine, so every
+	// dc_id is mapped onto the single host:port instead.
+	bool multiDc = false;
+	// Home data-center id. 0 = auto (multiDc -> 2, single-server -> 1).
+	int mainDcId = 0;
 
 	[[nodiscard]] bool valid() const {
 		return !id.isEmpty() && !host.isEmpty() && port > 0;
@@ -55,7 +62,9 @@ struct Server {
 	int port,
 	const QString &description,
 	const QString &rsaPublicKey = QString(),
-	const QString &logoSourcePath = QString());
+	const QString &logoSourcePath = QString(),
+	bool multiDc = false,
+	int mainDcId = 0);
 [[nodiscard]] bool IsValidRsaPublicKeyPem(const QString &pem);
 [[nodiscard]] QString ResolveServerLogoPath(const QString &logoPath);
 [[nodiscard]] bool RemoveCustomServer(const QString &id);

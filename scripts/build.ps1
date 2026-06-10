@@ -60,26 +60,12 @@ function Read-Line([string]$Prompt, [string]$Default) {
 }
 
 function Patch-Server([string]$Address, [int]$Port) {
-    if (-not (Test-Path $DcOptionsFile)) {
-        throw "File not found: $DcOptionsFile"
-    }
-
-    $content = Get-Content -Path $DcOptionsFile -Raw -Encoding UTF8
-    $pattern = '(const BuiltInDc kBuiltInDcs(?:Test)?\[\] = \{\s*\r?\n\s*\{\s*1,\s*")([^"]*)("\s*,\s*)(\d+)(\s*\},\s*\r?\n\s*\};)'
-
-    $matches = [regex]::Matches($content, $pattern)
-    if ($matches.Count -lt 2) {
-        throw 'Active kBuiltInDcs blocks not found in mtproto_dc_options.cpp'
-    }
-
+    # The binary is now server-agnostic: kBuiltInDcs keeps the real Telegram data
+    # centers and self-hosted servers are chosen at runtime (no rebuild needed to
+    # switch). This step only updates the default address of the built-in
+    # "owpengram" profile (kOfficialDefaultHost/Port) as a convenience.
     $ip = $Address
     $portNum = $Port
-    $newContent = [regex]::Replace($content, $pattern, {
-        param($m)
-        $m.Groups[1].Value + $ip + $m.Groups[3].Value + $portNum + $m.Groups[5].Value
-    })
-
-    [System.IO.File]::WriteAllText($DcOptionsFile, $newContent, (New-Object System.Text.UTF8Encoding $false))
 
     if (-not (Test-Path $OfficialServerFile)) {
         throw "File not found: $OfficialServerFile"
@@ -94,7 +80,7 @@ function Patch-Server([string]$Address, [int]$Port) {
     $officialContent = [regex]::Replace($officialContent, $portPattern, "`${1}$portNum`${3}")
     [System.IO.File]::WriteAllText($OfficialServerFile, $officialContent, (New-Object System.Text.UTF8Encoding $false))
 
-    Write-Ok "Server patched: ${ip}:$portNum"
+    Write-Ok "owpengram default profile set: ${ip}:$portNum (built-in DCs unchanged)"
 }
 
 function Find-VcVars {
@@ -182,18 +168,15 @@ try {
     Write-Host 'Tip: run build-desktop.cmd from cmd or PowerShell (not Git Bash).' -ForegroundColor DarkGray
     Write-Host ''
 
-    if ([string]::IsNullOrWhiteSpace($ServerHost)) {
-        $ServerHost = Read-Line 'Server IP' '127.0.0.1'
+    # Servers are now chosen at runtime, so no address/port input is needed.
+    # Patching the owpengram default profile is optional: it only runs when both
+    # -ServerHost and -ServerPort are passed explicitly.
+    if (-not [string]::IsNullOrWhiteSpace($ServerHost) -and $ServerPort -gt 0) {
+        Write-Step "Set owpengram default profile -> ${ServerHost}:$ServerPort (optional)"
+        Patch-Server -Address $ServerHost -Port $ServerPort
+    } else {
+        Write-Ok 'Server is selected at runtime; skipping default-profile patch.'
     }
-    if ($ServerPort -le 0) {
-        $portRaw = Read-Line 'MTProto port' '10443'
-        if (-not [int]::TryParse($portRaw, [ref]$ServerPort)) {
-            throw 'Port must be a number.'
-        }
-    }
-
-    Write-Step "Patch server -> ${ServerHost}:$ServerPort"
-    Patch-Server -Address $ServerHost -Port $ServerPort
 
     Write-Step 'Check tools'
     foreach ($tool in @('git', 'python')) {

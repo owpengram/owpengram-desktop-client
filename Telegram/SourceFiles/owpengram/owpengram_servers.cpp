@@ -44,6 +44,18 @@ constexpr auto kOfficialDefaultPort = 10443;
 const auto kTeamgramDefaultHost = u"43.155.11.190"_q;
 constexpr auto kTeamgramDefaultPort = 10443;
 
+// RSA public key of the owpengram server (the binary itself now ships the real
+// Telegram keys, so each self-hosted profile carries its own key here).
+const auto kOfficialRsaPublicKey = u"\
+-----BEGIN RSA PUBLIC KEY-----\n\
+MIIBCgKCAQEAvKLEOWTzt9Hn3/9Kdp/RdHcEhzmd8xXeLSpHIIzaXTLJDw8BhJy1\n\
+jR/iqeG8Je5yrtVabqMSkA6ltIpgylH///FojMsX1BHu4EPYOXQgB0qOi6kr08iX\n\
+ZIH9/iOPQOWDsL+Lt8gDG0xBy+sPe/2ZHdzKMjX6O9B4sOsxjFrk5qDoWDrioJor\n\
+AJ7eFAfPpOBf2w73ohXudSrJE0lbQ8pCWNpMY8cB9i8r+WBitcvouLDAvmtnTX7a\n\
+khoDzmKgpJBYliAY4qA73v7u5UIepE8QgV0jCOhxJCPubP8dg+/PlLLVKyxU5Cdi\n\
+QtZj2EMy4s9xlNKzX8XezE0MHEa6bQpnFwIDAQAB\n\
+-----END RSA PUBLIC KEY-----"_q;
+
 [[nodiscard]] QString ServersFilePath() {
 	return cWorkingDir() + u"tdata/"_q + kServersFile;
 }
@@ -97,6 +109,8 @@ ReadSavedServerSelection(not_null<Main::Account*> account) {
 		result.logoPath = DefaultLogoPath();
 	}
 	result.isOfficial = false;
+	result.multiDc = object.value(u"multiDc"_q).toBool(false);
+	result.mainDcId = object.value(u"mainDcId"_q).toInt(0);
 	return result;
 }
 
@@ -114,14 +128,27 @@ ReadSavedServerSelection(not_null<Main::Account*> account) {
 	if (!server.rsaPublicKey.isEmpty()) {
 		object.insert(u"rsaPublicKey"_q, server.rsaPublicKey);
 	}
+	if (server.multiDc) {
+		object.insert(u"multiDc"_q, true);
+	}
+	if (server.mainDcId > 0) {
+		object.insert(u"mainDcId"_q, server.mainDcId);
+	}
 	return object;
 }
 
 [[nodiscard]] MTP::DcId MainDcIdForServer(const Server &server) {
-	return server.isTelegram
-		? MTP::DcId(2)
-		: MTP::Instance::Fields::kDefaultMainDc;
+	if (server.mainDcId > 0) {
+		return MTP::DcId(server.mainDcId);
+	}
+	// Auto: multi-DC servers (Telegram) default to DC 2, single-server backends
+	// default to DC 1.
+	return MTP::DcId(server.multiDc ? 2 : 1);
 }
+
+// For single-server backends every dc_id (files, migrations) must resolve to the
+// one physical address, so we publish the same host:port for DC 1..kSingleServerDcs.
+constexpr auto kSingleServerDcs = 5;
 
 [[nodiscard]] bool EndpointMatchesServer(
 		not_null<const MTP::Instance*> mtp,
@@ -210,25 +237,55 @@ void RemoveCustomServerLogoFile(const QString &logoPath) {
 void ApplyServerToDcOptions(
 		not_null<MTP::DcOptions*> dcOptions,
 		const Server &server) {
-	const auto dcId = MainDcIdForServer(server);
-	const auto flags = server.isTelegram
-		? MTPDdcOption::Flag::f_static
-		: (MTPDdcOption::Flag::f_static | MTPDdcOption::Flag::f_tcpo_only);
+	dcOptions->setOptionsLocked(false);
+
+	if (server.multiDc) {
+		// Multi-DC server: leave options unlocked so help.getConfig / the special
+		// loader can discover the real alternate data-center addresses.
+		if (server.isTelegram) {
+			// Official Telegram: the built-in table already holds all 5 DCs.
+			dcOptions->constructFromBuiltIn();
+		} else {
+			// Custom Telegram-compatible server: start from its main DC address;
+			// help.getConfig will fill in the rest of its data centers.
+			const auto dcId = MainDcIdForServer(server);
+			dcOptions->setFromList(MTP_vector<MTPDcOption>(1, MTP_dcOption(
+				MTP_flags(MTPDdcOption::Flag::f_static),
+				MTP_int(dcId),
+				MTP_string(server.host),
+				MTP_int(server.port),
+				MTPbytes())));
+		}
+		if (!server.rsaPublicKey.isEmpty()) {
+			dcOptions->setPublicKeysFromPem(server.rsaPublicKey);
+		} else {
+			dcOptions->setBuiltInPublicKeys(true);
+		}
+		return;
+	}
+
+	// Single-server backend: publish the same host:port for DC 1..kSingleServerDcs
+	// so any file/migration that references dc_id 2..5 still resolves to the one
+	// physical server, then lock the options so nothing overwrites them.
+	const auto flags = MTPDdcOption::Flag::f_static
+		| MTPDdcOption::Flag::f_tcpo_only;
+	auto list = QVector<MTPDcOption>();
+	list.reserve(kSingleServerDcs);
+	for (auto dcId = 1; dcId <= kSingleServerDcs; ++dcId) {
+		list.push_back(MTP_dcOption(
+			MTP_flags(flags),
+			MTP_int(dcId),
+			MTP_string(server.host),
+			MTP_int(server.port),
+			MTPbytes()));
+	}
 	if (!server.rsaPublicKey.isEmpty()) {
 		dcOptions->setPublicKeysFromPem(server.rsaPublicKey);
 	} else {
-		dcOptions->setBuiltInPublicKeys(server.isTelegram);
+		dcOptions->setBuiltInPublicKeys(false);
 	}
-	dcOptions->setOptionsLocked(false);
-	dcOptions->setFromList(MTP_vector<MTPDcOption>(1, MTP_dcOption(
-		MTP_flags(flags),
-		MTP_int(dcId),
-		MTP_string(server.host),
-		MTP_int(server.port),
-		MTPbytes())));
-	if (!server.isTelegram) {
-		dcOptions->setOptionsLocked(true);
-	}
+	dcOptions->setFromList(MTP_vector<MTPDcOption>(std::move(list)));
+	dcOptions->setOptionsLocked(true);
 }
 
 } // namespace
@@ -241,31 +298,24 @@ void ApplyServerToDcOptions(
 		result.port = selection.port;
 		return result;
 	}
+	// Fallback for built-in ids that aren't in the live list for some reason:
+	// start from the full known profile (kind, keys, dc) and override address.
 	auto result = Server();
+	if (selection.id == QString::fromLatin1(kTelegramServerId)) {
+		result = TelegramServer();
+	} else if (selection.id == QString::fromLatin1(kTeamgramServerId)) {
+		result = TeamgramServer();
+	} else if (selection.id == QString::fromLatin1(kOfficialServerId)) {
+		result = OfficialServer();
+	} else {
+		// Unknown custom server: a single-server backend on dc 1 by default.
+		result.name = selection.host;
+		result.isOfficial = false;
+		result.logoPath = DefaultLogoPath();
+	}
 	result.id = selection.id;
 	result.host = selection.host;
 	result.port = selection.port;
-	result.logoPath = DefaultLogoPath();
-	if (selection.id == QString::fromLatin1(kTelegramServerId)) {
-		const auto telegram = TelegramServer();
-		result.name = telegram.name;
-		result.description = telegram.description;
-		result.isOfficial = true;
-		result.isTelegram = true;
-	} else if (selection.id == QString::fromLatin1(kTeamgramServerId)) {
-		const auto teamgram = TeamgramServer();
-		result.name = teamgram.name;
-		result.description = teamgram.description;
-		result.logoPath = teamgram.logoPath;
-	} else if (selection.id == QString::fromLatin1(kOfficialServerId)) {
-		const auto official = OfficialServer();
-		result.name = official.name;
-		result.description = official.description;
-		result.isOfficial = true;
-	} else {
-		result.name = selection.host;
-		result.isOfficial = false;
-	}
 	return result;
 }
 
@@ -291,6 +341,8 @@ Server TelegramServer() {
 	result.logoPath = TelegramLogoPath();
 	result.isOfficial = true;
 	result.isTelegram = true;
+	result.multiDc = true;
+	result.mainDcId = 2;
 	return result;
 }
 
@@ -303,6 +355,8 @@ Server TeamgramServer() {
 	result.port = kTeamgramDefaultPort;
 	result.logoPath = TeamgramLogoPath();
 	result.isOfficial = true;
+	result.multiDc = false;
+	result.mainDcId = 2;
 	return result;
 }
 
@@ -315,6 +369,9 @@ Server OfficialServer() {
 	result.isOfficial = true;
 	result.host = kOfficialDefaultHost;
 	result.port = kOfficialDefaultPort;
+	result.rsaPublicKey = kOfficialRsaPublicKey;
+	result.multiDc = false;
+	result.mainDcId = 1;
 	return result;
 }
 
@@ -350,7 +407,9 @@ std::optional<Server> AddCustomServer(
 		int port,
 		const QString &description,
 		const QString &rsaPublicKey,
-		const QString &logoSourcePath) {
+		const QString &logoSourcePath,
+		bool multiDc,
+		int mainDcId) {
 	if (name.trimmed().isEmpty() || host.trimmed().isEmpty() || port <= 0) {
 		return std::nullopt;
 	}
@@ -363,6 +422,8 @@ std::optional<Server> AddCustomServer(
 	server.rsaPublicKey = rsaPublicKey.trimmed();
 	server.logoPath = DefaultLogoPath();
 	server.isOfficial = false;
+	server.multiDc = multiDc;
+	server.mainDcId = (mainDcId > 0) ? mainDcId : 0;
 	if (!logoSourcePath.isEmpty()) {
 		if (const auto saved = SaveCustomServerLogo(server.id, logoSourcePath)) {
 			server.logoPath = *saved;

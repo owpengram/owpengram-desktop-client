@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/painter.h"
 #include "ui/toast/toast.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/checkbox.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/labels.h"
 #include "ui/wrap/padding_wrap.h"
@@ -194,6 +195,27 @@ AddServerBox::AddServerBox(
 			Ui::InputField::Mode::MultiLine,
 			tr::lng_owpengram_server_description()),
 		st::boxRowPadding);
+
+	_content->add(
+		object_ptr<Ui::FixedHeightWidget>(
+			_content,
+			st::introServerAddSectionSkip));
+
+	_multiDc = _content->add(
+		object_ptr<Ui::Checkbox>(
+			_content,
+			u"Multi-DC server (Telegram-compatible)"_q,
+			false),
+		st::boxRowPadding);
+
+	addLabel(u"Main data-center (single-server only)"_q);
+	_mainDcField = _content->add(
+		object_ptr<Ui::InputField>(
+			_content,
+			st::defaultInputField,
+			tr::lng_owpengram_server_port(),
+			u"1"_q),
+		st::boxRowPadding);
 }
 
 void AddServerBox::prepare() {
@@ -251,6 +273,10 @@ void AddServerBox::save() {
 	auto port = _portField->getLastText().toInt();
 	const auto rsaPublicKey = _rsaPublicKey->getLastText().trimmed();
 	const auto description = _description->getLastText().trimmed();
+	const auto multiDc = _multiDc && _multiDc->checked();
+	const auto mainDcId = (!multiDc && _mainDcField)
+		? _mainDcField->getLastText().trimmed().toInt()
+		: 0;
 	if (host.contains(':')) {
 		const auto parts = host.split(':');
 		if (parts.size() == 2 && port <= 0) {
@@ -284,7 +310,9 @@ void AddServerBox::save() {
 			port,
 			description,
 			rsaPublicKey,
-			_logoSourcePath)) {
+			_logoSourcePath,
+			multiDc,
+			mainDcId)) {
 		if (_done) {
 			_done(*server);
 		}
