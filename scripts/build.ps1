@@ -176,17 +176,20 @@ try {
     # Release is recommended for everyday use; Debug is much slower but has
     # verbose logging/assertions for hunting bugs.
     if (-not $PSBoundParameters.ContainsKey('Configuration')) {
-        $Configuration = $null
+        # Use a plain variable for the loop: assigning $null/'' to $Configuration
+        # would trip its [ValidateSet] attribute (it re-validates on assignment).
+        $chosen = $null
         do {
             $answer = (Read-Line 'Build type: [R]elease or [D]ebug' 'R').Trim().ToLower()
             if ($answer -eq 'r' -or $answer -eq 'release') {
-                $Configuration = 'Release'
+                $chosen = 'Release'
             } elseif ($answer -eq 'd' -or $answer -eq 'debug') {
-                $Configuration = 'Debug'
+                $chosen = 'Debug'
             } else {
                 Write-Host '  Please enter R or D.' -ForegroundColor Yellow
             }
-        } while (-not $Configuration)
+        } while (-not $chosen)
+        $Configuration = $chosen
     }
     Write-Ok "Build type: $Configuration"
 

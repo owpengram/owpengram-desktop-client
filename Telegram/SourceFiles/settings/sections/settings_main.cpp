@@ -571,6 +571,22 @@ void BuildHelpSection(SectionBuilder &builder) {
 	});
 
 	builder.addSkip();
+
+	// Separate block: a link to the OwpenGram project on GitHub.
+	builder.addDivider();
+	builder.addSkip();
+	builder.addButton({
+		.id = u"main/owpengram-github"_q,
+		.title = rpl::single(u"OwpenGram"_q),
+		.icon = { &st::menuIconGithub },
+		.onClick = [] {
+			UrlClickHandler::Open(
+				u"https://github.com/owpengram/owpengram-server"_q);
+		},
+		.keywords = { u"github"_q, u"source"_q, u"project"_q },
+	});
+
+	builder.addSkip();
 }
 
 void BuildValidationSuggestions(SectionBuilder &builder) {

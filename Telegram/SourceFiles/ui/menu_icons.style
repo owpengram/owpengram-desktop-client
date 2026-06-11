@@ -125,6 +125,7 @@ menuIconNotifications: icon {{ "menu/info_notifications", menuIconColor }};
 menuIconLock: icon {{ "menu/lock", menuIconColor }};
 menuIconPowerUsage: icon {{ "menu/power_usage", menuIconColor }};
 menuIconFaq: icon {{ "menu/faq", menuIconColor }};
+menuIconGithub: icon {{ "menu/github", menuIconColor }};
 menuIconEmojiObjects: icon {{ "emoji/emoji_objects", menuIconColor }};
 menuIconUsername: icon {{ "menu/payment_email", menuIconColor }};
 menuIconDevices: icon {{ "menu/devices", menuIconColor }};

@@ -1256,10 +1256,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_ask_sure" = "Please note that OwpenGram Support is done by volunteers. We try to respond as quickly as possible, but it may take a while.\n\nPlease take a look at the OwpenGram FAQ: it has important troubleshooting tips and answers to most questions.";
 "lng_settings_faq_button" = "Go to FAQ";
 "lng_settings_ask_ok" = "Ask a Volunteer";
-"lng_settings_faq" = "OwpenGram FAQ";
+"lng_settings_faq" = "Telegram FAQ";
 "lng_settings_faq_subtitle" = "FAQ";
 "lng_settings_faq_link" = "https://telegram.org/faq#general-questions";
-"lng_settings_features" = "OwpenGram Features";
+"lng_settings_features" = "Telegram Features";
 "lng_settings_credits" = "My Stars";
 "lng_settings_currency" = "My TON";
 "lng_settings_logout" = "Log out";
