@@ -14,8 +14,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/owpengram_add_server_box.h"
 #include "boxes/owpengram_connecting_box.h"
 #include "boxes/owpengram_server_details_box.h"
+#include "core/application.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
+#include "main/main_domain.h"
 #include "owpengram/owpengram_servers.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/effects/animations.h"
@@ -421,6 +423,17 @@ void ServerSelectWidget::joinServer(const Owpengram::Server &server) {
 	if (!server.valid()) {
 		Ui::Toast::Show(tr::lng_owpengram_server_invalid(tr::now));
 		return;
+	}
+	// The Telegram free/premium account limit only applies to Telegram accounts;
+	// custom self-hosted servers are unlimited. Enforce it here, once the chosen
+	// server's type is known.
+	if (server.isTelegram) {
+		auto &domain = Core::App().domain();
+		if (domain.telegramAccountsCount() >= domain.maxAccounts()) {
+			Ui::Toast::Show(
+				tr::lng_accounts_limit_title(tr::now));
+			return;
+		}
 	}
 	const auto weak = base::make_weak(this);
 	Owpengram::CheckServerOnline(server, crl::guard(weak, [=](bool online, int) {

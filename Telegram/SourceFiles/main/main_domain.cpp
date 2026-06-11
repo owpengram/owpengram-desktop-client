@@ -275,7 +275,7 @@ void Domain::scheduleUpdateUnreadBadge() {
 
 not_null<Main::Account*> Domain::add(MTP::Environment environment) {
 	Expects(started());
-	Expects(_accounts.size() < kPremiumMaxAccounts);
+	Expects(_accounts.size() < kMaxTotalAccounts);
 
 	// Always start the new account with a completely fresh config.
 	// fallbackProductionConfig() may have been set from an owpengram account
@@ -552,10 +552,27 @@ void Domain::scheduleWriteAccounts() {
 	});
 }
 
+bool Domain::AccountIsTelegram(not_null<Account*> account) {
+	return Owpengram::CurrentServerForAccount(account).isTelegram;
+}
+
+int Domain::telegramAccountsCount() const {
+	auto result = 0;
+	for (const auto &[index, account] : _accounts) {
+		if (account->sessionExists() && AccountIsTelegram(account.get())) {
+			++result;
+		}
+	}
+	return result;
+}
+
 int Domain::maxAccounts() const {
+	// Only Telegram accounts count toward the limit, and only Telegram premium
+	// accounts raise it (custom self-hosted accounts are unlimited otherwise).
 	const auto premiumCount = ranges::count_if(accounts(), [](
 			const Main::Domain::AccountWithIndex &d) {
 		return d.account->sessionExists()
+			&& AccountIsTelegram(d.account.get())
 			&& (d.account->session().premium()
 				|| d.account->session().isTestMode());
 	});

@@ -348,20 +348,30 @@ void Application::run() {
 	) | rpl::then(
 		_domain->accountsChanges()
 	) | rpl::map([=] {
-		return (_domain->accounts().size() > Main::Domain::kMaxAccounts)
+		// Only Telegram accounts count toward the limit nag.
+		return (_domain->telegramAccountsCount() > Main::Domain::kMaxAccounts)
 			? _domain->activeChanges()
 			: rpl::never<not_null<Main::Account*>>();
 	}) | rpl::flatten_latest(
 	) | rpl::on_next([=](not_null<Main::Account*> account) {
-		const auto ordered = _domain->orderedAccounts();
-		const auto it = ranges::find(ordered, account);
-		if (_lastActivePrimaryWindow && it != end(ordered)) {
-			const auto index = std::distance(begin(ordered), it);
-			if ((index + 1) > _domain->maxAccounts()) {
-				_lastActivePrimaryWindow->show(Box(
-					AccountsLimitBox,
-					&account->session()));
+		if (!_lastActivePrimaryWindow
+			|| !Main::Domain::AccountIsTelegram(account)) {
+			return;
+		}
+		// Rank of this account among Telegram accounts (custom servers skipped).
+		auto telegramRank = 0;
+		for (const auto &one : _domain->orderedAccounts()) {
+			if (Main::Domain::AccountIsTelegram(one)) {
+				++telegramRank;
 			}
+			if (one == account) {
+				break;
+			}
+		}
+		if (telegramRank > _domain->maxAccounts()) {
+			_lastActivePrimaryWindow->show(Box(
+				AccountsLimitBox,
+				&account->session()));
 		}
 	}, _lifetime);
 

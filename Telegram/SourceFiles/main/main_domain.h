@@ -33,6 +33,10 @@ public:
 
 	static constexpr auto kMaxAccounts = 3;
 	static constexpr auto kPremiumMaxAccounts = 6;
+	// Hard cap on the total number of accounts of any server. Custom self-hosted
+	// accounts don't count toward the Telegram free/premium limit, so the overall
+	// cap is higher than the Telegram-only kPremiumMaxAccounts.
+	static constexpr auto kMaxTotalAccounts = 10;
 
 	explicit Domain(const QString &dataName);
 	~Domain();
@@ -56,6 +60,10 @@ public:
 	[[nodiscard]] rpl::producer<> accountsChanges() const;
 	[[nodiscard]] Account *maybeLastOrSomeAuthedAccount();
 	[[nodiscard]] int accountsAuthedCount() const;
+	// Authorized accounts on the official Telegram server (custom self-hosted
+	// servers are excluded). This is the count the Telegram limit applies to.
+	[[nodiscard]] int telegramAccountsCount() const;
+	[[nodiscard]] static bool AccountIsTelegram(not_null<Account*> account);
 
 	// Expects(started());
 	[[nodiscard]] Account &active() const;
