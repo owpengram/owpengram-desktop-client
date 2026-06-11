@@ -1,7 +1,11 @@
 #Requires -Version 5.1
 param(
     [string]$ServerHost,
-    [int]$ServerPort = 0
+    [int]$ServerPort = 0,
+    # Release is the default: Debug builds run 5-15x slower (no optimization,
+    # MSVC debug iterators, assertions) and feel laggy when opening chats etc.
+    [ValidateSet('Release', 'Debug')]
+    [string]$Configuration = 'Release'
 )
 
 Set-StrictMode -Version Latest
@@ -168,6 +172,24 @@ try {
     Write-Host 'Tip: run build-desktop.cmd from cmd or PowerShell (not Git Bash).' -ForegroundColor DarkGray
     Write-Host ''
 
+    # Choose build type at startup (unless passed explicitly via -Configuration).
+    # Release is recommended for everyday use; Debug is much slower but has
+    # verbose logging/assertions for hunting bugs.
+    if (-not $PSBoundParameters.ContainsKey('Configuration')) {
+        $Configuration = $null
+        do {
+            $answer = (Read-Line 'Build type: [R]elease or [D]ebug' 'R').Trim().ToLower()
+            if ($answer -eq 'r' -or $answer -eq 'release') {
+                $Configuration = 'Release'
+            } elseif ($answer -eq 'd' -or $answer -eq 'debug') {
+                $Configuration = 'Debug'
+            } else {
+                Write-Host '  Please enter R or D.' -ForegroundColor Yellow
+            }
+        } while (-not $Configuration)
+    }
+    Write-Ok "Build type: $Configuration"
+
     # Servers are now chosen at runtime, so no address/port input is needed.
     # Patching the owpengram default profile is optional: it only runs when both
     # -ServerHost and -ServerPort are passed explicitly.
@@ -214,18 +236,18 @@ try {
     $configure = "configure.bat x64 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash)"
     Invoke-Vs -Command $configure -WorkingDirectory $TelegramDir -Label 'configure'
 
-    Write-Step 'MSBuild Debug'
-    $build = "msbuild `"$SolutionPath`" /t:Telegram /p:Configuration=Debug /m /v:minimal"
+    Write-Step "MSBuild $Configuration"
+    $build = "msbuild `"$SolutionPath`" /t:Telegram /p:Configuration=$Configuration /m /v:minimal"
     Invoke-Vs -Command $build -WorkingDirectory $RepoRoot -Label 'build'
 
     foreach ($name in @('OwpenGram.exe', 'Telegram.exe')) {
-        $exe = Join-Path $RepoRoot "out\Debug\$name"
+        $exe = Join-Path $RepoRoot "out\$Configuration\$name"
         if (Test-Path $exe) {
             Write-Ok "EXE: $exe"
             exit 0
         }
     }
-    throw 'Build finished but EXE not found in out\Debug'
+    throw "Build finished but EXE not found in out\$Configuration"
 }
 catch {
     Write-Err $_.Exception.Message
