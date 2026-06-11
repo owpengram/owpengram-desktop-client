@@ -57,6 +57,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_user_names.h"
 #include "api/api_user_privacy.h"
 #include "base/call_delayed.h"
+#include "base/flat_set.h"
 #include "base/options.h"
 #include "base/unixtime.h"
 #include "base/random.h"
@@ -223,9 +224,9 @@ private:
 
 	Ui::SlideWrap<Ui::SettingsButton> *_addAccount = nullptr;
 	QPointer<Ui::VerticalLayout> _inner;
-	base::flat_map<
-		not_null<::Main::Account*>,
-		base::unique_qptr<Ui::SettingsButton>> _watched;
+	// Accounts we've attached a session-change listener to. Buttons themselves are
+	// owned by the inner layout and recreated on every rebuild().
+	base::flat_set<not_null<::Main::Account*>> _watched;
 
 	base::unique_qptr<Ui::PopupMenu> _contextMenu;
 
@@ -908,7 +909,7 @@ void AccountsList::setup() {
 			return false;
 		};
 		for (auto i = _watched.begin(); i != _watched.end();) {
-			if (!exists(i->first)) {
+			if (!exists(*i)) {
 				i = _watched.erase(i);
 			} else {
 				++i;
@@ -927,9 +928,6 @@ void AccountsList::setup() {
 
 	Core::App().domain().maxAccountsChanges(
 	) | rpl::on_next([=] {
-		for (auto i = _watched.begin(); i != _watched.end(); i++) {
-			i->second = nullptr;
-		}
 		rebuild();
 	}, _outer->lifetime());
 }
@@ -1009,8 +1007,9 @@ not_null<Ui::SlideWrap<Ui::SettingsButton>*> AccountsList::setupAdd() {
 }
 
 void AccountsList::rebuild() {
-	// Reuse a single inner layout and rebuild its contents each time. Accounts are
-	// grouped under a per-server header; reordering is disabled because manual
+	// Reuse a single inner layout and clear its contents each rebuild. Buttons are
+	// owned solely by the inner now (not by _watched), so clear() is safe. Accounts
+	// are grouped under a per-server header; reordering is disabled because manual
 	// order would conflict with server grouping.
 	if (!_inner) {
 		_inner = _outer->insert(
@@ -1020,9 +1019,6 @@ void AccountsList::rebuild() {
 		_inner->clear();
 	}
 	const auto inner = _inner.data();
-	for (auto &[account, button] : _watched) {
-		button = nullptr; // Buttons were children of inner; clear() destroyed them.
-	}
 
 	const auto list = _controller->session().domain().orderedAccounts();
 
@@ -1082,14 +1078,12 @@ void AccountsList::rebuild() {
 						std::move(activate));
 				}
 			};
-			auto i = _watched.find(account);
-			Assert(i != _watched.end());
-			i->second.reset(inner->add(MakeAccountButton(
+			inner->add(MakeAccountButton(
 				inner,
 				_controller,
 				account,
 				std::move(callback),
-				false)));
+				false));
 		}
 	}
 	inner->resizeToWidth(_outer->width());

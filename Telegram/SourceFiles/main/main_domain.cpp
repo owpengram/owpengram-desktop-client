@@ -315,7 +315,10 @@ void Domain::addActivated(MTP::Environment environment, bool newWindow) {
 			activate(account);
 		}
 	};
-	if (accounts().size() < maxAccounts()) {
+	// The Telegram free/premium limit (maxAccounts) only applies to Telegram
+	// accounts and is enforced when the server is chosen in the intro. Here we
+	// only respect the hard total cap so accounts of any server can be added.
+	if (accounts().size() < kMaxTotalAccounts) {
 		added(add(environment));
 	} else {
 		for (auto &[index, account] : accounts()) {
