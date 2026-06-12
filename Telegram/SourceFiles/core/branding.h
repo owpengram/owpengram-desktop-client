@@ -16,7 +16,11 @@ constexpr auto ShortAppName = "OwpenGram"_cs;
 constexpr auto ApplicationName = "OwpengramDesktop"_cs;
 constexpr auto CompanyName = "OwpenGram"_cs;
 
+#ifdef _DEBUG
+constexpr auto WindowsIconPath = "Resources/OwpenGram/art/icon256_debug.ico"_cs;
+#else
 constexpr auto WindowsIconPath = "Resources/OwpenGram/art/icon256.ico"_cs;
+#endif
 constexpr auto MacOSIconName = "Icon.icns"_cs;
 constexpr auto LinuxIconBase = "Resources/OwpenGram/art/icon"_cs;
 

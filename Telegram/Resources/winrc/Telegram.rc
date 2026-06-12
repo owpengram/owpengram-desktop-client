@@ -36,7 +36,11 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
+#ifdef _DEBUG
+IDI_ICON1               ICON                    "..\\OwpenGram\\art\\icon256_debug.ico"
+#else
 IDI_ICON1               ICON                    "..\\OwpenGram\\art\\icon256.ico"
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 //

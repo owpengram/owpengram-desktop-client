@@ -541,10 +541,11 @@ void BuildPremiumSection(SectionBuilder &builder) {
 
 void BuildHelpSection(SectionBuilder &builder) {
 	const auto controller = builder.controller();
+	const auto session = builder.session();
 
 	// The Telegram help links (FAQ / Features / Ask a Question) only make sense
 	// for accounts on the official Telegram server; hide them on custom servers.
-	if (::Main::Domain::AccountIsTelegram(&controller->session().account())) {
+	if (::Main::Domain::AccountIsTelegram(&session->account())) {
 		builder.addDivider();
 		builder.addSkip();
 
