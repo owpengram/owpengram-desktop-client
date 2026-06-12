@@ -14,7 +14,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/painter.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
-#include "ui/widgets/scroll_area.h"
 #include "ui/wrap/vertical_layout.h"
 #include "styles/style_intro.h"
 #include "styles/style_layers.h"
@@ -56,22 +55,53 @@ int DetailRow::resizeGetHeight(int newWidth) {
 	return rowHeight;
 }
 
+class DescriptionText final : public Ui::RpWidget {
+public:
+	DescriptionText(QWidget *parent, const QString &text);
+	[[nodiscard]] int resizeGetHeight(int newWidth) override;
+protected:
+	void paintEvent(QPaintEvent *e) override;
+private:
+	QString _text;
+};
+
+DescriptionText::DescriptionText(QWidget *parent, const QString &text)
+: RpWidget(parent)
+, _text(text) {
+}
+
+int DescriptionText::resizeGetHeight(int newWidth) {
+	if (_text.isEmpty() || newWidth <= 0) {
+		return st::introServerDetailsDescription.style.font->height;
+	}
+	const QFontMetrics fm(st::introServerDetailsDescription.style.font->f);
+	const auto bounds = fm.boundingRect(
+		QRect(0, 0, newWidth, 99999),
+		Qt::TextWordWrap | Qt::TextWrapAnywhere,
+		_text);
+	return std::max(bounds.height(), 1);
+}
+
+void DescriptionText::paintEvent(QPaintEvent *e) {
+	if (_text.isEmpty()) return;
+	const auto &st = st::introServerDetailsDescription;
+	QPainter p(this);
+	p.setFont(st.style.font->f);
+	p.setPen(st.textFg->c);
+	p.drawText(
+		rect(),
+		Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap | Qt::TextWrapAnywhere,
+		_text);
+}
+
 class DescriptionSection final : public Ui::RpWidget {
 public:
 	DescriptionSection(QWidget *parent, const QString &text);
-
 	[[nodiscard]] int resizeGetHeight(int newWidth) override;
-
-protected:
-	void resizeEvent(QResizeEvent *e) override;
-
 private:
-	[[nodiscard]] int layoutAtWidth(int newWidth);
-
 	object_ptr<Ui::FlatLabel> _title;
 	object_ptr<Ui::RpWidget> _box;
-	const not_null<Ui::ScrollArea*> _scroll;
-	QPointer<Ui::FlatLabel> _text;
+	DescriptionText *_text = nullptr;
 };
 
 DescriptionSection::DescriptionSection(QWidget *parent, const QString &text)
@@ -80,13 +110,8 @@ DescriptionSection::DescriptionSection(QWidget *parent, const QString &text)
 	this,
 	tr::lng_owpengram_server_details_description(tr::now),
 	st::introServerDetailsSectionTitle)
-, _box(this)
-, _scroll(Ui::CreateChild<Ui::ScrollArea>(_box.get(), st::boxScroll))
-, _text(_scroll->setOwnedWidget(object_ptr<Ui::FlatLabel>(
-	_scroll.get(),
-	text,
-	st::introServerDetailsDescription))) {
-	_scroll->setAttribute(Qt::WA_OpaquePaintEvent, false);
+, _box(this) {
+	_text = Ui::CreateChild<DescriptionText>(_box.get(), text);
 	_box->paintRequest(
 	) | rpl::on_next([=] {
 		auto p = QPainter(_box);
@@ -100,10 +125,6 @@ DescriptionSection::DescriptionSection(QWidget *parent, const QString &text)
 }
 
 int DescriptionSection::resizeGetHeight(int newWidth) {
-	return layoutAtWidth(newWidth);
-}
-
-int DescriptionSection::layoutAtWidth(int newWidth) {
 	const auto titleSkip = st::introServerDetailsRowSkip;
 	const auto padding = st::introServerDetailsDescriptionPadding;
 	const auto innerWidth = std::max(
@@ -112,35 +133,22 @@ int DescriptionSection::layoutAtWidth(int newWidth) {
 
 	_title->resizeToWidth(newWidth);
 	_title->moveToLeft(0, 0);
+
 	_text->resizeToWidth(innerWidth);
+	_text->moveToLeft(padding.left(), padding.top());
 
 	const auto boxTop = _title->height() + titleSkip;
 	const auto contentHeight = _text->height();
 	const auto naturalBoxHeight = contentHeight
 		+ padding.top()
 		+ padding.bottom();
-	const auto boxHeight = std::clamp(
+	const auto boxHeight = std::max(
 		naturalBoxHeight,
-		st::introServerDetailsDescriptionMinHeight,
-		st::introServerDetailsDescriptionMaxHeight);
-	const auto scrollHeight = boxHeight
-		- padding.top()
-		- padding.bottom();
+		st::introServerDetailsDescriptionMinHeight);
 
 	_box->setGeometry(0, boxTop, newWidth, boxHeight);
-	_scroll->setGeometry(
-		padding.left(),
-		padding.top(),
-		innerWidth,
-		scrollHeight);
-	_scroll->updateBars();
 
 	return boxTop + boxHeight;
-}
-
-void DescriptionSection::resizeEvent(QResizeEvent *e) {
-	RpWidget::resizeEvent(e);
-	(void)layoutAtWidth(width());
 }
 
 class HeaderRow final : public Ui::RpWidget {
