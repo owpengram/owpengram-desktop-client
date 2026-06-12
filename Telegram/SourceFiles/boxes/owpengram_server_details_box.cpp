@@ -18,6 +18,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_intro.h"
 #include "styles/style_layers.h"
 
+#include <QFontMetrics>
 #include <QRegion>
 
 namespace {

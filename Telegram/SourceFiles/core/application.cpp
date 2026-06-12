@@ -91,6 +91,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/boxes/confirm_box.h"
 #include "ui/controls/location_picker.h"
 #include "styles/style_window.h"
+#include "owpengram/owpengram_servers.h"
 
 #include <QtCore/QStandardPaths>
 #include <QtCore/QMimeDatabase>
@@ -1122,16 +1123,56 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 	const auto protocol = u"tg://"_q;
 	if (urlTrimmed.startsWith(protocol, Qt::CaseInsensitive)
 		&& !passcodeLocked()) {
-		const auto command = urlTrimmed.mid(protocol.size());
+
+		// tg:// (and t.me) links require a Telegram account.
+		const auto isTgAccount = [](not_null<Main::Account*> acc) {
+			return Owpengram::CurrentServerForAccount(acc).isTelegram;
+		};
 		const auto my = context.value<ClickHandlerContext>();
-		const auto controller = my.sessionWindow.get()
-			? my.sessionWindow.get()
-			: _lastActivePrimaryWindow
-			? _lastActivePrimaryWindow->sessionController()
-			: nullptr;
+
+		const auto contextCtrl = my.sessionWindow.get();
+		const auto isContextTg = contextCtrl
+			&& isTgAccount(&contextCtrl->session().account());
+		const auto isActiveTg = _lastActivePrimaryWindow
+			&& isTgAccount(&_lastActivePrimaryWindow->account());
+
+		if (!isContextTg && !isActiveTg) {
+			Main::Account *telegramAccount = nullptr;
+			for (const auto account : _domain->orderedAccounts()) {
+				if (account->sessionExists() && isTgAccount(account)) {
+					telegramAccount = account;
+					break;
+				}
+			}
+
+			if (_lastActivePrimaryWindow) {
+				_lastActivePrimaryWindow->activate();
+				_lastActivePrimaryWindow->show(
+					Ui::MakeInformBox(telegramAccount
+						? tr::lng_owpengram_tg_link_switch_account(tr::now)
+						: tr::lng_owpengram_tg_link_no_account(tr::now)));
+			}
+			return true;
+		}
+
+		// Already in Telegram context — pick the controller.
+		const auto controller = isContextTg
+			? contextCtrl
+			: _lastActivePrimaryWindow->sessionController();
+
+		if (!controller) {
+			return false;
+		}
+
+		ClickHandlerContext tgCtx = my;
+		tgCtx.sessionWindow = base::make_weak(controller);
+		const auto tgContext = QVariant::fromValue(tgCtx);
+
+		const auto command = urlTrimmed.mid(protocol.size());
 		if (TryRouterForLocalUrl(controller, command)) {
 			return true;
 		}
+		return openCustomUrl("tg://", LocalUrlHandlers(), url, tgContext);
 	}
 	return openCustomUrl("tg://", LocalUrlHandlers(), url, context);
 }

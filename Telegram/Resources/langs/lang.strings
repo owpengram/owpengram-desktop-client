@@ -7635,5 +7635,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_page_prev" = "◀";
 "lng_owpengram_server_page_next" = "▶";
 "lng_owpengram_server_page" = "{current} / {total}";
+"lng_owpengram_tg_link_no_account" = "This link is for Telegram's official network. Please log in to a Telegram account in this app to open it.";
+"lng_owpengram_tg_link_switch_account" = "This link is for Telegram's official network. Please switch to your Telegram account to open it.";
 
 // Keys finished
