@@ -187,7 +187,15 @@ Domain::StartModernResult Domain::startModern(
 			const auto sessionId = account->willHaveSessionUniqueId(
 				config.get());
 			const auto serverSel = account->local().readOwpengramServer();
-			const auto serverId = serverSel ? serverSel->id : QString();
+			// Identify the server by its real endpoint, not just the profile
+			// id: two OwpenGram instances can both use id "official" while
+			// pointing at different hosts (local vs VPS). Same userId on a
+			// different endpoint is NOT a duplicate.
+			const auto serverId = serverSel
+				? (serverSel->id
+					+ u"|"_q + serverSel->host.toLower()
+					+ u":"_q + QString::number(serverSel->port))
+				: QString();
 			const auto key = SessionKey(sessionId, serverId);
 			if (!sessions.contains(key)
 				&& (sessionId != 0 || (sessions.empty() && i + 1 == count))) {

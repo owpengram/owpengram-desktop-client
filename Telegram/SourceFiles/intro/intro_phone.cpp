@@ -185,27 +185,30 @@ void PhoneWidget::submit() {
 
 	// Check if such account is authorized already.
 	const auto phoneDigits = DigitsOnly(phone);
-	const auto currentServerId = [&]() -> QString {
-		if (const auto sel = account().local().readOwpengramServer()) {
-			return sel->id;
+	// Two OwpenGram instances can share the same profile id (e.g. "official")
+	// yet point at different hosts (local vs VPS). Identify a server by its
+	// real endpoint, not just the id, so the same phone number on a different
+	// host is treated as a different account instead of redirecting to the
+	// already-authorized local one.
+	const auto serverKey = [](Main::Account &acc) -> QString {
+		if (const auto sel = acc.local().readOwpengramServer()) {
+			return sel->id
+				+ u"|"_q + sel->host.toLower()
+				+ u":"_q + QString::number(sel->port);
 		}
 		return {};
-	}();
+	};
+	const auto currentServerKey = serverKey(account());
 	for (const auto &[index, existing] : Core::App().domain().accounts()) {
 		const auto raw = existing.get();
 		if (const auto session = raw->maybeSession()) {
 			if (raw->mtp().environment() == account().mtp().environment()
 				&& DigitsOnly(session->user()->phone()) == phoneDigits) {
-				// Only redirect when the existing account is on the same server.
-				// Different server ID means the user intentionally wants to log
-				// in to a different server with the same phone number.
-				const auto existingServerId = [&]() -> QString {
-					if (const auto sel = raw->local().readOwpengramServer()) {
-						return sel->id;
-					}
-					return {};
-				}();
-				if (existingServerId != currentServerId) {
+				// Only redirect when the existing account is on the same
+				// server endpoint. A different host:port means the user
+				// intentionally wants to log in to a different server with the
+				// same phone number (e.g. local vs remote OwpenGram instance).
+				if (serverKey(*raw) != currentServerKey) {
 					continue;
 				}
 				crl::on_main(raw, [=] {
