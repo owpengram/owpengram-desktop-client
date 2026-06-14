@@ -40,8 +40,8 @@ const auto kServersFile = u"owpengram_servers.json"_q;
 const auto kServerLogosDir = u"owpengram_server_logos"_q;
 constexpr auto kCheckTimeoutMs = 3000;
 constexpr auto kConnectTimeoutMs = 30000;
-const auto kOfficialDefaultHost = u"152.89.254.50"_q;
-constexpr auto kOfficialDefaultPort = 443;
+const auto kOfficialDefaultHost = u"89.28.58.29"_q;
+constexpr auto kOfficialDefaultPort = 10443;
 const auto kTeamgramDefaultHost = u"43.155.11.190"_q;
 constexpr auto kTeamgramDefaultPort = 10443;
 
