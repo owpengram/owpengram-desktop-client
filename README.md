@@ -1,50 +1,90 @@
-# 💻 OwpenGram Desktop
+# 💻 OwpenGram for Desktop
 
-**Desktop client for OwpenGram server - Telegram-compatible messaging.**
+**One familiar app. Any server you trust.**
 
-<img width="884" height="707" alt="image" src="https://github.com/user-attachments/assets/7d615ed3-3dc8-474a-a420-17544245a170" />
+OwpenGram for Desktop is a multi-server messenger for Windows, macOS and Linux,
+built on a fast, familiar experience. Use the official network, your own private
+server, or any community node — each account independent, all in one app.
+Private by design, comfortable to use, and free from lock-in.
+
+> 📸 _Screenshot placeholder — to be added._
 
 ---
 
-## ✨ What is OwpenGram Desktop?
+## ✨ Why you'll like it
 
-OwpenGram Desktop is a desktop messaging client compatible with the [OwpenGram Server](https://github.com/owpengram/owpengram-server). Based on Telegram Desktop, it provides a familiar interface for connecting to your own self-hosted messaging server.
+- 🌐 **Multi-server** — add accounts on different servers and switch between them freely.
+- 🏠 **Bring your own server** — connect to a server you host and fully control.
+- 🧠 **Familiar & comfortable** — the experience you already know, no learning curve.
+- 🔒 **Private** — talk on infrastructure you trust, away from the cloud.
+- 🛡️ **Censorship-resistant** — your own server stays reachable when others are blocked.
+- 🆓 **Open source** — read it, audit it, build it yourself.
 
-## 🔗 Compatibility
+## 🌐 How multi-server works
 
-This client is designed to work with the [OwpenGram Server](https://github.com/owpengram/owpengram-server). Simply configure the client to connect to your OwpenGram server instance and start messaging!
+Every account is tied to a server, and you choose that server when you sign in.
+OwpenGram comes with ready-to-use options:
 
-## ⚙️ Server Configuration
+- **Telegram** — the official network (use your normal Telegram account)
+- **OwpenGram** — the project's public server
+- **Custom** — any server you or your community runs
 
-To change the server address, replace all instances of `XXX.XXX.XXX.XXX` in the code with your server's IP address or domain name.
+Add several accounts on different servers and they stay cleanly separated —
+different identities, different data, one app.
 
-## 📚 Build Instructions & Documentation
+## 🔌 Connect your own server
 
-### Interactive build (Windows)
+On the **server selection screen** (shown when you log in or add a new account),
+click **➕ Add server** and fill in:
 
-Double-click or run from any terminal:
+- **Name** — any label you like (e.g. *My Server*)
+- **Host** — your server's IP or domain (e.g. `203.0.113.10` or `chat.example.com`)
+- **Port** — `10443` (the default OwpenGram MTProto port)
+- **Type** — choose **single-server** for a self-hosted server (pick **Multi-DC (Telegram)** only for true multi-datacenter networks)
+- **Main data center** — leave as `1` for a self-hosted server
+- **RSA key** — leave **empty** unless your server uses a custom key
+
+Then save, select the server, and log in as usual.
+
+> The default OwpenGram server key is already built in, so the RSA field stays
+> blank in almost all cases. Only paste a PEM public key if the server operator
+> replaced the server's key with their own.
+
+Don't have a server yet? Spin one up in one command:
+👉 [owpengram-server](https://github.com/owpengram/owpengram-server)
+
+## 🛠️ Build (Windows)
+
+Run the interactive build script — double-click it or run from a terminal:
 
 ```bat
-build-desktop.cmd
+build-desktop.bat
 ```
 
-The script will guide you through server IP, API credentials, submodules, `prepare`, `configure`, and MSBuild. Settings are saved to `.owpengram-build.local.json` (gitignored).
+It guides you through API credentials, submodules, `prepare`, `configure` and the
+MSBuild step, and remembers your answers in `.owpengram-build.local.json`
+(gitignored).
 
-Requirements: **Visual Studio 2022** (C++ x64), **Python 3.10**, **Git**.
+**Requirements:** Visual Studio 2022 (C++ x64), Python 3.10, Git. For manual
+steps and other platforms, see `docs/building-win-x64.md` and the upstream
+[Telegram Desktop](https://github.com/telegramdesktop/tdesktop) build docs.
 
-For manual steps and other platforms, see the original [Telegram Desktop build docs](https://github.com/telegramdesktop/tdesktop) and `docs/building-win-x64.md` in this repository.
+## 📦 Part of the OwpenGram project
+
+- 🚀 [Server](https://github.com/owpengram/owpengram-server)
+- 🤖 [Android client](https://github.com/owpengram/owpengram-android-client)
+- 🌐 [GitHub organization](https://github.com/owpengram)
 
 ## 💬 Community
 
-- 📢 **Telegram Channel:** [@owpengram](https://t.me/owpengram)
-- 💬 **Telegram Chat:** [Join the discussion](https://t.me/+sVB6Ymv70jEwNTAy)
+- 📢 Channel: [@owpengram](https://t.me/owpengram)
+- 💬 Chat: [Join the discussion](https://t.me/+sVB6Ymv70jEwNTAy)
 
 ## 📄 License
 
-[GPLv3 with OpenSSL exception](LICENSE)
+Based on [Telegram Desktop](https://github.com/telegramdesktop/tdesktop) —
+**GPLv3 with the OpenSSL exception** ([LICENSE](LICENSE)).
 
 ---
 
-## ⭐ Give us a Star!
-
-If OwpenGram Desktop helps you, consider giving us a star on GitHub!
+⭐ If OwpenGram is useful to you, a star on GitHub helps a lot.
