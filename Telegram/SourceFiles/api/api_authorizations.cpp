@@ -40,7 +40,7 @@ Authorizations::Entry ParseEntry(const MTPDauthorization &data) {
 		|| isTest;
 
 	const auto appName = (apiId == ApiId)
-		? Branding::AppName.utf16() + (isTest ? u" (GitHub)"_q : QString())
+		? Branding::ShortAppName.utf16() + (isTest ? u" (GitHub)"_q : QString())
 		: qs(data.vapp_name());// + u" for "_q + qs(d.vplatform());
 	const auto appVer = [&] {
 		const auto version = qs(data.vapp_version());

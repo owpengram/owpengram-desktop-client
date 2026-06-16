@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_account.h"
 
 #include "base/platform/base_platform_info.h"
+#include "base/call_delayed.h"
 #include "core/application.h"
 #include "storage/storage_account.h"
 #include "storage/storage_domain.h" // Storage::StartResult.
@@ -33,6 +34,10 @@ namespace Main {
 namespace {
 
 constexpr auto kWideIdsTag = ~uint64(0);
+
+// Max time to wait for the server to acknowledge auth.logOut before logging out
+// locally anyway (so accounts can be removed even when the server is offline).
+constexpr auto kLogoutFallbackTimeout = crl::time(2000);
 
 [[nodiscard]] QString ComposeDataString(const QString &dataName, int index) {
 	auto result = dataName;
@@ -529,6 +534,17 @@ void Account::logOut() {
 	_loggingOut = true;
 	if (_mtp) {
 		_mtp->logout([=] { loggedOut(); });
+		// If the server is unreachable, auth.logOut never completes (it keeps
+		// retrying, firing neither the done nor the fail callback), which would
+		// leave the account stuck "logging out" forever — you could never remove
+		// it while your server is down. Fall back to a local log out after a
+		// short timeout so accounts can always be removed, even offline (this
+		// matches the Android client's behaviour).
+		base::call_delayed(kLogoutFallbackTimeout, this, [=] {
+			if (_loggingOut) {
+				loggedOut();
+			}
+		});
 	} else {
 		// We log out because we've forgotten passcode.
 		loggedOut();
