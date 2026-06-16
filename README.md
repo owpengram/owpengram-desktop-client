@@ -2,10 +2,14 @@
 
 **One familiar app. Any server you trust.**
 
-OwpenGram for Desktop is a multi-server messenger for Windows, macOS and Linux,
-built on a fast, familiar experience. Use the official network, your own private
-server, or any community node — each account independent, all in one app.
-Private by design, comfortable to use, and free from lock-in.
+OwpenGram for Desktop is a multi-server messenger built on a fast, familiar
+experience. Use the official network, your own private server, or any community
+node — each account independent, all in one app. Private by design, comfortable
+to use, and free from lock-in.
+
+> 🪟 **Available now for Windows.** macOS and Linux builds are planned.
+
+> 🔗 Built on **MTProto API layer 222**.
 
 > 📸 _Screenshot placeholder — to be added._
 
@@ -41,7 +45,7 @@ click **➕ Add server** and fill in:
 - **Host** — your server's IP or domain (e.g. `203.0.113.10` or `chat.example.com`)
 - **Port** — `10443` (the default OwpenGram MTProto port)
 - **Type** — choose **single-server** for a self-hosted server (pick **Multi-DC (Telegram)** only for true multi-datacenter networks)
-- **Main data center** — leave as `1` for a self-hosted server
+- **Main data center** — leave as `2` (the default) for a self-hosted server
 - **RSA key** — leave **empty** unless your server uses a custom key
 
 Then save, select the server, and log in as usual.
