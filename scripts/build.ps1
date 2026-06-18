@@ -236,11 +236,14 @@ try {
     Write-Step 'CMake configure'
     $api = Get-ApiCredentials
     Write-Ok "API credentials: $($api.Source) (id $($api.Id))"
-    $configure = "configure.bat x64 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash)"
+    # Embedded debug info (/Z7) instead of a shared .pdb: avoids the mspdbsrv
+    # "C1090 PDB API call failed" / "C2471 cannot update program database" crashes
+    # on this toolchain. -D overrides cmake_helpers' non-FORCE cache default.
+    $configure = "configure.bat x64 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash) -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded"
     Invoke-Vs -Command $configure -WorkingDirectory $TelegramDir -Label 'configure'
 
     Write-Step "MSBuild $Configuration"
-    $build = "msbuild `"$SolutionPath`" /t:Telegram /p:Configuration=$Configuration /m /v:minimal"
+    $build = "msbuild `"$SolutionPath`" /t:Telegram /p:Configuration=$Configuration /m /nr:false /v:minimal"
     Invoke-Vs -Command $build -WorkingDirectory $RepoRoot -Label 'build'
 
     foreach ($name in @('OwpenGram.exe', 'Telegram.exe')) {
