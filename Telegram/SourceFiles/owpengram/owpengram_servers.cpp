@@ -398,7 +398,6 @@ QString FormatEndpoint(const Server &server) {
 std::vector<Server> ListServers() {
 	auto result = std::vector<Server>();
 	result.push_back(TelegramServer());
-	result.push_back(TeamgramServer());
 	result.push_back(OfficialServer());
 	for (const auto &custom : ReadCustomServers()) {
 		result.push_back(custom);
