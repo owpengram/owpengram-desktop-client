@@ -15,6 +15,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 class HiddenSenderInfo;
 class History;
+class DocumentData;
+class PhotoData;
 
 struct HistoryMessageReply;
 struct HistoryMessageViews;
@@ -193,6 +195,7 @@ public:
 	void updateStoryMentionText();
 
 	[[nodiscard]] UserData *viaBot() const;
+	[[nodiscard]] bool isGuestChatBotMessage() const;
 	[[nodiscard]] UserData *getMessageBot() const;
 	[[nodiscard]] bool hideLinks() const;
 	[[nodiscard]] bool isHistoryEntry() const;
@@ -213,7 +216,9 @@ public:
 	void addLogEntryOriginal(
 		WebPageId localId,
 		const QString &label,
-		const TextWithEntities &content);
+		const TextWithEntities &content,
+		PhotoData *photo = nullptr,
+		DocumentData *document = nullptr);
 	void setFactcheck(MessageFactcheck info);
 	[[nodiscard]] bool hasUnrequestedFactcheck() const;
 	[[nodiscard]] TextWithEntities factcheckText() const;
@@ -237,7 +242,8 @@ public:
 	}
 	void refreshMainView();
 	void clearMainView();
-	void removeMainView();
+	void removeMainView(
+		Data::ViewRemovalReason reason = Data::ViewRemovalReason::Removed);
 
 	void invalidateChatListEntry();
 
@@ -260,12 +266,15 @@ public:
 	[[nodiscard]] bool mentionsMe() const;
 	[[nodiscard]] bool isUnreadMention() const;
 	[[nodiscard]] bool hasUnreadReaction() const;
+	[[nodiscard]] bool hasUnreadPollVote() const;
+	void setHasUnreadPollVote();
 	[[nodiscard]] bool hasUnwatchedEffect() const;
 	bool markEffectWatched();
 	[[nodiscard]] bool isUnreadMedia() const;
 	[[nodiscard]] bool isIncomingUnreadMedia() const;
 	[[nodiscard]] bool hasUnreadMediaFlag() const;
 	void markReactionsRead();
+	void markPollVotesRead();
 	void markMediaAndMentionRead();
 	bool markContentsRead(bool fromThisClient = false);
 	void setIsPinned(bool isPinned);
@@ -339,6 +348,12 @@ public:
 	}
 	[[nodiscard]] bool canBeSummarized() const {
 		return _flags & MessageFlag::CanBeSummarized;
+	}
+	[[nodiscard]] bool textAppearing() const {
+		return _flags & MessageFlag::TextAppearing;
+	}
+	[[nodiscard]] bool textAppearingStarted() const {
+		return _flags & MessageFlag::TextAppearingStarted;
 	}
 	[[nodiscard]] bool hasRealFromId() const;
 	[[nodiscard]] bool isPostHidingAuthor() const;
@@ -434,6 +449,7 @@ public:
 		bool isForumPost);
 	void setPostAuthor(const QString &author);
 	void setRealId(MsgId newId);
+	void markTextAppearingStarted();
 	void incrementReplyToTopCounter();
 	void applyEffectWatchedOnUnreadKnown();
 
@@ -474,6 +490,9 @@ public:
 	void toggleReaction(
 		const Data::ReactionId &reaction,
 		HistoryReactionSource source);
+	bool removeReactionsFromParticipant(
+		not_null<PeerData*> participant,
+		const Data::ReactionId &reaction);
 	void addPaidReaction(int count, std::optional<PeerId> shownPeer = {});
 	void cancelScheduledPaidReaction();
 	[[nodiscard]] Data::PaidReactionSend startPaidReactionSending();
@@ -497,6 +516,8 @@ public:
 	[[nodiscard]] std::vector<Data::ReactionId> chosenReactions() const;
 	[[nodiscard]] Data::ReactionId lookupUnreadReaction(
 		not_null<UserData*> from) const;
+	[[nodiscard]] QByteArray lookupUnreadPollVote(
+		not_null<PeerData*> from) const;
 	[[nodiscard]] crl::time lastReactionsRefreshTime() const;
 
 	[[nodiscard]] bool reactionsAreTags() const;
@@ -513,7 +534,7 @@ public:
 		return _media.get();
 	}
 	[[nodiscard]] bool computeDropForwardedInfo() const;
-	void setText(const TextWithEntities &textWithEntities);
+	void setText(TextWithEntities textWithEntities);
 
 	[[nodiscard]] MsgId replyToId() const;
 	[[nodiscard]] FullMsgId replyToFullId() const;
@@ -522,6 +543,8 @@ public:
 	[[nodiscard]] FullStoryId replyToStory() const;
 	[[nodiscard]] FullReplyTo replyTo() const;
 	[[nodiscard]] bool inThread(MsgId rootId) const;
+
+	void resolveAdminLogReplyTo(not_null<HistoryItem*> replyTo);
 
 	[[nodiscard]] not_null<PeerData*> author() const;
 
@@ -585,6 +608,12 @@ public:
 	void updateDate(TimeId newDate);
 	[[nodiscard]] bool canUpdateDate() const;
 	void customEmojiRepaint();
+	void setMediaForInstantView(
+		QString url,
+		DocumentData *document = nullptr,
+		PhotoData *photo = nullptr);
+	void addDocumentForInstantView(not_null<DocumentData*> document);
+	void addPhotoForInstantView(not_null<PhotoData*> photo);
 
 	[[nodiscard]] SuggestionActions computeSuggestionActions() const;
 	[[nodiscard]] SuggestionActions computeSuggestionActions(
@@ -604,6 +633,8 @@ public:
 		return _boostsApplied;
 	}
 
+	[[nodiscard]] QString fromRank() const;
+
 	MsgId id;
 
 private:
@@ -621,6 +652,7 @@ private:
 	[[nodiscard]] bool generateLocalEntitiesByReply() const;
 	[[nodiscard]] TextWithEntities withLocalEntities(
 		const TextWithEntities &textWithEntities) const;
+	void detectTextLinks(const TextWithEntities &textWithEntities);
 	void setTextValue(TextWithEntities text, bool force = false);
 	[[nodiscard]] bool isTooOldForEdit(TimeId now) const;
 	[[nodiscard]] bool isLegacyMessage() const {
@@ -681,7 +713,7 @@ private:
 	void setReactions(const MTPMessageReactions *reactions);
 	[[nodiscard]] bool changeReactions(const MTPMessageReactions *reactions);
 	void setServiceMessageByAction(const MTPmessageAction &action);
-	void applyAction(const MTPMessageAction &action);
+	void processAction(const MTPMessageAction &action);
 	void refreshMedia(const MTPMessageMedia *media);
 	void refreshSentMedia(const MTPMessageMedia *media);
 	void createServiceFromMtp(const MTPDmessage &message);
@@ -706,6 +738,8 @@ private:
 		TimeId scheduleDate);
 	[[nodiscard]] PreparedServiceText prepareTodoCompletionsText();
 	[[nodiscard]] PreparedServiceText prepareTodoAppendTasksText();
+	[[nodiscard]] PreparedServiceText preparePollAppendAnswerText();
+	[[nodiscard]] PreparedServiceText preparePollDeleteAnswerText();
 
 	[[nodiscard]] PreparedServiceText composeTodoIncompleted(
 		not_null<HistoryServiceTodoCompletions*> done);

@@ -30,6 +30,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/components/top_peers.h"
 #include "data/notify/data_notify_settings.h"
 #include "data/stickers/data_stickers.h"
+#include "data/data_ai_compose_tones.h"
 #include "data/data_saved_messages.h"
 #include "data/data_saved_sublist.h"
 #include "data/data_session.h"
@@ -91,6 +92,90 @@ enum class DataIsLoadedResult {
 	MentionNotLoaded = 2,
 	Ok = 3,
 };
+
+[[nodiscard]] bool PeerDataIsLoaded(
+		not_null<Data::Session*> owner,
+		PeerId peerId) {
+	return !peerId || owner->peerLoaded(peerId);
+}
+
+[[nodiscard]] bool MentionUsersDataIsLoaded(
+		not_null<Data::Session*> owner,
+		const MTPVector<MTPMessageEntity> &entities) {
+	for (const auto &entity : entities.v) {
+		auto loaded = true;
+		entity.match([&](const MTPDmessageEntityMentionName &data) {
+			loaded = owner->userLoaded(data.vuser_id());
+		}, [&](const MTPDinputMessageEntityMentionName &data) {
+			data.vuser_id().match([&](const MTPDinputUser &data) {
+				loaded = owner->userLoaded(data.vuser_id());
+			}, [](const auto &) {
+			});
+		}, [](const auto &) {
+		});
+		if (!loaded) {
+			return false;
+		}
+	}
+	return true;
+}
+
+[[nodiscard]] bool ForwardedInfoDataIsLoaded(
+		not_null<Data::Session*> owner,
+		const MTPMessageFwdHeader &header) {
+	return header.match([&](const MTPDmessageFwdHeader &data) {
+		return (!data.vfrom_id()
+				|| PeerDataIsLoaded(owner, peerFromMTP(*data.vfrom_id())))
+			&& (!data.vsaved_from_peer()
+				|| PeerDataIsLoaded(owner, peerFromMTP(*data.vsaved_from_peer())))
+			&& (!data.vsaved_from_id()
+				|| PeerDataIsLoaded(owner, peerFromMTP(*data.vsaved_from_id())));
+	});
+}
+
+[[nodiscard]] bool ReplyDataIsLoaded(
+		not_null<Data::Session*> owner,
+		const MTPMessageReplyHeader &header) {
+	return header.match([&](const MTPDmessageReplyHeader &data) {
+		return (!data.vreply_to_peer_id()
+				|| PeerDataIsLoaded(owner, peerFromMTP(*data.vreply_to_peer_id())))
+			&& (!data.vreply_from()
+				|| ForwardedInfoDataIsLoaded(owner, *data.vreply_from()))
+			&& (!data.vquote_entities()
+				|| MentionUsersDataIsLoaded(owner, *data.vquote_entities()));
+	}, [&](const MTPDmessageReplyStoryHeader &data) {
+		return PeerDataIsLoaded(owner, peerFromMTP(data.vpeer()));
+	});
+}
+
+[[nodiscard]] bool DataIsLoaded(
+		not_null<Data::Session*> owner,
+		const MTPDupdateShortMessage &data) {
+	return owner->userLoaded(data.vuser_id())
+		&& (!data.vfwd_from()
+			|| ForwardedInfoDataIsLoaded(owner, *data.vfwd_from()))
+		&& (!data.vvia_bot_id()
+			|| owner->userLoaded(*data.vvia_bot_id()))
+		&& (!data.vreply_to()
+			|| ReplyDataIsLoaded(owner, *data.vreply_to()))
+		&& (!data.ventities()
+			|| MentionUsersDataIsLoaded(owner, *data.ventities()));
+}
+
+[[nodiscard]] bool DataIsLoaded(
+		not_null<Data::Session*> owner,
+		const MTPDupdateShortChatMessage &data) {
+	return owner->chatLoaded(data.vchat_id())
+		&& owner->userLoaded(data.vfrom_id())
+		&& (!data.vfwd_from()
+			|| ForwardedInfoDataIsLoaded(owner, *data.vfwd_from()))
+		&& (!data.vvia_bot_id()
+			|| owner->userLoaded(*data.vvia_bot_id()))
+		&& (!data.vreply_to()
+			|| ReplyDataIsLoaded(owner, *data.vreply_to()))
+		&& (!data.ventities()
+			|| MentionUsersDataIsLoaded(owner, *data.ventities()));
+}
 
 void ProcessScheduledMessageWithElapsedTime(
 		not_null<Main::Session*> session,
@@ -1120,11 +1205,13 @@ void Updates::applyUpdatesNoPtsCheck(const MTPUpdates &updates) {
 					? peerToMTP(_session->userPeerId())
 					: MTP_peerUser(d.vuser_id())),
 				MTPint(), // from_boosts_applied
+				MTPstring(), // from_rank
 				MTP_peerUser(d.vuser_id()),
 				MTPPeer(), // saved_peer_id
 				d.vfwd_from() ? *d.vfwd_from() : MTPMessageFwdHeader(),
 				MTP_long(d.vvia_bot_id().value_or_empty()),
 				MTPlong(), // via_business_bot_id
+				MTPPeer(), // guestchat_via_from
 				d.vreply_to() ? *d.vreply_to() : MTPMessageReplyHeader(),
 				d.vdate(),
 				d.vmessage(),
@@ -1162,11 +1249,13 @@ void Updates::applyUpdatesNoPtsCheck(const MTPUpdates &updates) {
 				d.vid(),
 				MTP_peerUser(d.vfrom_id()),
 				MTPint(), // from_boosts_applied
+				MTPstring(), // from_rank
 				MTP_peerChat(d.vchat_id()),
 				MTPPeer(), // saved_peer_id
 				d.vfwd_from() ? *d.vfwd_from() : MTPMessageFwdHeader(),
 				MTP_long(d.vvia_bot_id().value_or_empty()),
 				MTPlong(), // via_business_bot_id
+				MTPPeer(), // guestchat_via_from
 				d.vreply_to() ? *d.vreply_to() : MTPMessageReplyHeader(),
 				d.vdate(),
 				d.vmessage(),
@@ -1423,9 +1512,9 @@ void Updates::applyUpdates(
 
 	case mtpc_updateShortMessage: {
 		auto &d = updates.c_updateShortMessage();
-		if (!session().data().userLoaded(d.vuser_id())) {
+		if (!DataIsLoaded(&_session->data(), d)) {
 			MTP_LOG(0, ("getDifference "
-				"{ good - getting user for updateShortMessage }%1"
+				"{ good - after not all data loaded in updateShortMessage }%1"
 			).arg(_session->mtp().isTestMode() ? " TESTMODE" : ""));
 			return getDifference();
 		}
@@ -1438,10 +1527,9 @@ void Updates::applyUpdates(
 
 	case mtpc_updateShortChatMessage: {
 		auto &d = updates.c_updateShortChatMessage();
-		const auto chat = session().data().chatLoaded(d.vchat_id());
-		if (!chat) {
+		if (!DataIsLoaded(&_session->data(), d)) {
 			MTP_LOG(0, ("getDifference "
-				"{ good - getting chat for updateShortChatMessage }%1"
+				"{ good - after not all data loaded in updateShortChatMessage }%1"
 			).arg(_session->mtp().isTestMode() ? " TESTMODE" : ""));
 			return getDifference();
 		}
@@ -1847,7 +1935,53 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 	} break;
 
 	case mtpc_updateMessagePoll: {
-		session().data().applyUpdate(update.c_updateMessagePoll());
+		const auto &d = update.c_updateMessagePoll();
+		const auto wasRecentVoters = session().data().pollRecentVoters(
+			d.vpoll_id().v);
+		session().data().applyUpdate(d);
+		const auto notifyItem = session().data().findItemForPoll(
+			d.vpoll_id().v);
+		if (notifyItem) {
+			CheckPollVoteNotificationSchedule(
+				notifyItem,
+				wasRecentVoters);
+		}
+		if (const auto tlPeer = d.vpeer()) {
+			const auto &results = d.vresults();
+			const auto hasUnread = results.match([](
+					const MTPDpollResults &data) {
+				return data.is_has_unread_votes();
+			});
+			const auto isMin = results.match([](
+					const MTPDpollResults &data) {
+				return data.is_min();
+			});
+			const auto peer = peerFromMTP(*tlPeer);
+			const auto msgId = d.vmsg_id()->v;
+			if (const auto history = session().data().historyLoaded(peer)) {
+				if (const auto item = session().data().message(
+						peer,
+						msgId)) {
+					if (hasUnread) {
+						if (!item->hasUnreadPollVote()) {
+							item->setHasUnreadPollVote();
+							item->addToUnreadThings(
+								HistoryUnreadThings::AddType::New);
+						}
+					} else if (!isMin && item->hasUnreadPollVote()) {
+						item->markPollVotesRead();
+					}
+				} else {
+					if (history->unreadPollVotes().has()) {
+						if (hasUnread) {
+							history->unreadPollVotes().checkAdd(msgId);
+						}
+					}
+					history->owner().histories().requestDialogEntry(
+						history);
+				}
+			}
+		}
 	} break;
 
 	case mtpc_updateUserTyping: {
@@ -1891,6 +2025,10 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 
 	case mtpc_updateChatParticipantAdmin: {
 		session().data().applyUpdate(update.c_updateChatParticipantAdmin());
+	} break;
+
+	case mtpc_updateChatParticipantRank: {
+		session().data().applyUpdate(update.c_updateChatParticipantRank());
 	} break;
 
 	case mtpc_updateChatDefaultBannedRights: {
@@ -2648,6 +2786,10 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 		session().api().ringtones().applyUpdate();
 	} break;
 
+	case mtpc_updateAiComposeTones: {
+		session().data().aiComposeTones().applyUpdate();
+	} break;
+
 	case mtpc_updateTranscribedAudio: {
 		const auto &data = update.c_updateTranscribedAudio();
 		_session->api().transcribes().apply(data);
@@ -2691,6 +2833,7 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 		const auto &data = update.c_updateEmojiGameInfo();
 		_session->diceStickersPacks().apply(data);
 	} break;
+
 	}
 }
 

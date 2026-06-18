@@ -41,6 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/media/history_view_userpic_suggestion.h"
 #include "dialogs/ui/dialogs_message_view.h"
 #include "ui/boxes/emoji_stake_box.h"
+#include "ui/controls/ton_common.h"
 #include "ui/image/image.h"
 #include "ui/effects/spoiler_mess.h"
 #include "ui/text/format_song_document_name.h"
@@ -56,6 +57,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/localstorage.h"
 #include "chat_helpers/stickers_dice_pack.h" // Stickers::DicePacks::IsSlot.
 #include "chat_helpers/stickers_gift_box_pack.h"
+#include "data/components/credits.h"
 #include "data/data_session.h"
 #include "data/data_auto_download.h"
 #include "data/data_photo.h"
@@ -101,11 +103,11 @@ struct AlbumCounts {
 };
 
 [[nodiscard]] TextWithEntities WithCaptionNotificationText(
-		const QString &attachType,
+		TextWithEntities attachType,
 		const TextWithEntities &caption,
 		bool hasMiniImages = false) {
 	if (caption.text.isEmpty()) {
-		return Ui::Text::Colorized(attachType);
+		return Ui::Text::Colorized(std::move(attachType));
 	}
 	auto wrapped = st::wrap_rtl(caption);
 	return hasMiniImages
@@ -116,11 +118,21 @@ struct AlbumCounts {
 			tr::lng_dialogs_text_media_wrapped(
 				tr::now,
 				lt_media,
-				Ui::Text::Colorized(attachType),
+				Ui::Text::Colorized(std::move(attachType)),
 				tr::marked),
 			lt_caption,
 			wrapped,
 			tr::marked);
+}
+
+[[nodiscard]] TextWithEntities WithCaptionNotificationText(
+		const QString &attachType,
+		const TextWithEntities &caption,
+		bool hasMiniImages = false) {
+	return WithCaptionNotificationText(
+		Ui::Text::WithEntities(attachType),
+		caption,
+		hasMiniImages);
 }
 
 [[nodiscard]] QImage PreparePreviewImage(
@@ -1209,27 +1221,35 @@ ItemPreview MediaFile::toPreview(ToPreviewOptions options) const {
 			}
 		}
 	}
-	const auto type = [&] {
+	const auto type = [&]() -> TextWithEntities {
 		using namespace Ui::Text;
 		if (_document->isVideoMessage()) {
-			return (item->media() && item->media()->ttlSeconds())
+			return WithEntities((item->media() && item->media()->ttlSeconds())
 				? tr::lng_in_dlg_video_message_ttl(tr::now)
-				: tr::lng_in_dlg_video_message(tr::now);
+				: tr::lng_in_dlg_video_message(tr::now));
 		} else if (_document->isAnimation()) {
-			return u"GIF"_q;
+			return WithEntities(u"GIF"_q);
 		} else if (_document->isVideoFile()) {
-			return tr::lng_in_dlg_video(tr::now);
+			return WithEntities(tr::lng_in_dlg_video(tr::now));
 		} else if (_document->isVoiceMessage()) {
-			return (item->media() && item->media()->ttlSeconds())
-				? tr::lng_in_dlg_voice_message_ttl(tr::now)
-				: tr::lng_in_dlg_audio(tr::now);
+			if (item->media() && item->media()->ttlSeconds()) {
+				return WithEntities(
+					tr::lng_in_dlg_voice_message_ttl(tr::now));
+			} else if (item->isUnreadMedia()) {
+				return tr::lng_in_dlg_audio_unread(
+					tr::now,
+					lt_emoji,
+					IconEmoji(&st::dialogsUnreadMediaDotEmoji),
+					tr::rich);
+			}
+			return WithEntities(tr::lng_in_dlg_audio(tr::now));
 		} else if (const auto name = FormatSongNameFor(_document).string();
 				!name.isEmpty()) {
-			return name;
+			return WithEntities(name);
 		} else if (_document->isAudioFile()) {
-			return tr::lng_in_dlg_audio_file(tr::now);
+			return WithEntities(tr::lng_in_dlg_audio_file(tr::now));
 		}
-		return tr::lng_in_dlg_file(tr::now);
+		return WithEntities(tr::lng_in_dlg_file(tr::now));
 	}();
 	const auto caption = (options.hideCaption || options.ignoreMessageText)
 		? TextWithEntities()
@@ -1342,7 +1362,7 @@ bool MediaFile::forwardedBecomesUnread() const {
 }
 
 bool MediaFile::dropForwardedInfo() const {
-	return _document->isSong();
+	return false;
 }
 
 bool MediaFile::hasSpoiler() const {
@@ -2309,11 +2329,30 @@ MediaPoll::~MediaPoll() {
 }
 
 std::unique_ptr<Media> MediaPoll::clone(not_null<HistoryItem*> parent) {
-	return std::make_unique<MediaPoll>(parent, _poll);
+	auto result = std::make_unique<MediaPoll>(parent, _poll);
+	result->_consumedText = _consumedText;
+	return result;
 }
 
 PollData *MediaPoll::poll() const {
 	return _poll;
+}
+
+Storage::SharedMediaTypesMask MediaPoll::sharedMediaTypes() const {
+	return Storage::SharedMediaTypesMask{}
+		.added(Storage::SharedMediaType::Poll);
+}
+
+ItemPreview MediaPoll::toPreview(ToPreviewOptions options) const {
+	const auto caption = (options.hideCaption || options.ignoreMessageText)
+		? TextWithEntities()
+		: Dialogs::Ui::DialogsPreviewText(options.translated
+			? parent()->translatedText()
+			: parent()->originalText());
+	const auto type = u"\xD83D\xDCCA "_q + _poll->question.text;
+	return {
+		.text = WithCaptionNotificationText(type, caption),
+	};
 }
 
 TextWithEntities MediaPoll::notificationText() const {
@@ -2330,6 +2369,9 @@ QString MediaPoll::pinnedTextSubstring() const {
 
 TextForMimeData MediaPoll::clipboardText() const {
 	auto result = TextWithEntities();
+	if (!_consumedText.text.isEmpty()) {
+		result.append(_consumedText).append(u"\n"_q);
+	}
 	result
 		.append(u"[ "_q)
 		.append(tr::lng_in_dlg_poll(tr::now))
@@ -2342,19 +2384,33 @@ TextForMimeData MediaPoll::clipboardText() const {
 	return TextForMimeData::Rich(std::move(result));
 }
 
+bool MediaPoll::consumeMessageText(const TextWithEntities &text) {
+	_consumedText = text;
+	return true;
+}
+
+TextWithEntities MediaPoll::consumedMessageText() const {
+	return _consumedText;
+}
+
 bool MediaPoll::updateInlineResultMedia(const MTPMessageMedia &media) {
 	return false;
 }
 
 bool MediaPoll::updateSentMedia(const MTPMessageMedia &media) {
-	return false;
+	return media.match([&](const MTPDmessageMediaPoll &data) {
+		parent()->history()->owner().processPoll(data);
+		return true;
+	}, [](const auto &) {
+		return false;
+	});
 }
 
 std::unique_ptr<HistoryView::Media> MediaPoll::createView(
 		not_null<HistoryView::Element*> message,
 		not_null<HistoryItem*> realParent,
 		HistoryView::Element *replacing) {
-	return std::make_unique<HistoryView::Poll>(message, _poll);
+	return std::make_unique<HistoryView::Poll>(message, _poll, _consumedText);
 }
 
 MediaTodoList::MediaTodoList(
@@ -2404,7 +2460,7 @@ TextForMimeData MediaTodoList::clipboardText() const {
 }
 
 bool MediaTodoList::allowsEdit() const {
-	return parent()->out();
+	return parent()->out() || parent()->history()->peer->isSelf();
 }
 
 bool MediaTodoList::updateInlineResultMedia(const MTPMessageMedia &media) {
@@ -2434,6 +2490,7 @@ MediaDice::MediaDice(
 , _outcome(outcome)
 , _emoji(emoji)
 , _value(value) {
+	parent->history()->session().credits().tonLoad();
 }
 
 std::unique_ptr<Media> MediaDice::clone(not_null<HistoryItem*> parent) {
@@ -2495,6 +2552,9 @@ bool MediaDice::updateSentMedia(const MTPMessageMedia &media) {
 		};
 	} else {
 		_outcome = {};
+	}
+	if (parent()->out() && _outcome.stakeNanoTon > 0) {
+		parent()->history()->session().credits().tonLoad(true);
 	}
 	parent()->history()->owner().notifyItemDataChange(parent());
 	return true;
@@ -2592,6 +2652,23 @@ ClickHandlerPtr MediaDice::MakeHandler(
 				const auto window = weak.get();
 				const auto seedHash = options.seedHash;
 				const auto sendWithStake = [=](int64 stakeNanoTon) {
+					if (stakeNanoTon > 0 && window) {
+						const auto session = &window->session();
+						const auto credits = &session->credits();
+						const auto required = CreditsAmount(
+							stakeNanoTon / Ui::kNanosInOne,
+							stakeNanoTon % Ui::kNanosInOne,
+							CreditsType::Ton);
+						if (credits->tonLoaded()
+							&& credits->tonBalance() < required) {
+							HideExisting();
+							window->uiShow()->show(Box(
+								Ui::InsufficientTonBox,
+								session,
+								required));
+							return;
+						}
+					}
 					sendWith(seedHash, stakeNanoTon);
 				};
 				if (!options || !window) {

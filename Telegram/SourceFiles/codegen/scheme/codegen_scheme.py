@@ -49,7 +49,6 @@ generate({
   },
 
   'typeIdExceptions': [
-    'user_layer216#20b1422',
     'channel#c88974ac',
     'ipPortSecret#37982646',
     'accessPointRule#4679b65f',

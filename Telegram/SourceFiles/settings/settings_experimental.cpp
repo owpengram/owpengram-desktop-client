@@ -10,6 +10,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/components/passkeys.h"
 #include "main/main_session.h"
 #include "ui/boxes/confirm_box.h"
+#include "ui/search_field_controller.h"
+#include "ui/text/text_entity.h"
+#include "ui/widgets/menu/menu_add_action_callback.h"
+#include "ui/widgets/fields/input_field.h"
+#include "ui/wrap/padding_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "ui/wrap/slide_wrap.h"
 #include "ui/widgets/buttons.h"
@@ -17,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/vertical_list.h"
 #include "ui/gl/gl_detection.h"
 #include "ui/chat/chat_style_radius.h"
+#include "ui/controls/compose_ai_button_factory.h"
 #include "base/options.h"
 #include "boxes/moderate_messages_box.h"
 #include "core/application.h"
@@ -24,7 +30,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/sandbox.h"
 #include "chat_helpers/tabbed_panel.h"
 #include "dialogs/dialogs_widget.h"
+#include "dialogs/ui/dialogs_layout.h"
 #include "history/history_item_components.h"
+#include "history/view/history_view_message.h"
 #include "info/profile/info_profile_actions.h"
 #include "lang/lang_keys.h"
 #include "mainwindow.h"
@@ -37,31 +45,91 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_session_controller.h"
 #include "window/window_controller.h"
 #include "window/notifications_manager.h"
-#include "storage/localimageloader.h"
-#include "data/data_document_resolver.h"
 #include "info/info_flexible_scroll.h"
+#include "chat_helpers/stickers_list_widget.h"
+#include "styles/style_info.h"
 #include "styles/style_settings.h"
 #include "styles/style_layers.h"
+#include "styles/style_menu_icons.h"
+
+#include <QtCore/QJsonDocument>
+#include <QtGui/QGuiApplication>
 
 namespace Settings {
 namespace {
+
+const auto kOptionsClipboardPrefix = u"tdesktop-flags:"_q;
+
+struct DecodeOptionsResult {
+	bool ok = false;
+	QString json;
+};
+
+[[nodiscard]] QString EncodeOptionsToText(const QString &json) {
+	const auto flags = QByteArray::Base64UrlEncoding
+		| QByteArray::OmitTrailingEquals;
+	return kOptionsClipboardPrefix
+		+ qs(qCompress(json.toLatin1(), 9).toBase64(flags));
+}
+
+[[nodiscard]] DecodeOptionsResult DecodeOptionsFromText(const QString &text) {
+	auto result = DecodeOptionsResult();
+	if (!text.startsWith(kOptionsClipboardPrefix)) {
+		return result;
+	}
+	auto encoded = QStringView(text).mid(
+		kOptionsClipboardPrefix.size()).toLatin1();
+	const auto compressed = QByteArray::fromBase64Encoding(
+		std::move(encoded),
+		QByteArray::Base64UrlEncoding
+			| QByteArray::AbortOnBase64DecodingErrors);
+	if (!compressed || (*compressed).isEmpty()) {
+		return result;
+	}
+	const auto decoded = qUncompress(*compressed);
+	if (decoded.isEmpty()) {
+		return result;
+	}
+
+	auto error = QJsonParseError();
+	const auto parsed = QJsonDocument::fromJson(decoded, &error);
+	if ((error.error != QJsonParseError::NoError) || !parsed.isObject()) {
+		return result;
+	}
+	result.ok = true;
+	result.json = QString::fromUtf8(decoded);
+	return result;
+}
 
 void AddOption(
 		not_null<Window::Controller*> window,
 		not_null<Ui::VerticalLayout*> container,
 		base::options::option<bool> &option,
-		rpl::producer<> resetClicks) {
-	auto &lifetime = container->lifetime();
+		rpl::producer<> resetClicks,
+		rpl::producer<> reloadOptionsRequests,
+		rpl::producer<QString> query) {
 	const auto name = option.name().isEmpty() ? option.id() : option.name();
+	const auto &description = option.description();
+
+	const auto wrap = container->add(
+		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+			container,
+			object_ptr<Ui::VerticalLayout>(container)));
+	const auto inner = wrap->entity();
+
+	auto &lifetime = inner->lifetime();
 	const auto toggles = lifetime.make_state<rpl::event_stream<bool>>();
 	std::move(
 		resetClicks
 	) | rpl::map_to(
 		option.defaultValue()
 	) | rpl::start_to_stream(*toggles, lifetime);
+	std::move(reloadOptionsRequests) | rpl::on_next([=, &option] {
+		toggles->fire_copy(option.value());
+	}, lifetime);
 
-	const auto button = container->add(object_ptr<Button>(
-		container,
+	const auto button = inner->add(object_ptr<Button>(
+		inner,
 		rpl::single(name),
 		(option.relevant()
 			? st::settingsButtonNoIcon
@@ -93,34 +161,51 @@ void AddOption(
 		if (restarter) {
 			restarter->callOnce(st::settingsButtonNoIcon.toggle.duration);
 		}
-	}, container->lifetime());
+	}, inner->lifetime());
 
-	const auto &description = option.description();
 	if (!description.isEmpty()) {
-		Ui::AddSkip(container, st::settingsCheckboxesSkip);
-		Ui::AddDividerText(container, rpl::single(description));
-		Ui::AddSkip(container, st::settingsCheckboxesSkip);
+		Ui::AddSkip(inner, st::settingsCheckboxesSkip);
+		Ui::AddDividerText(inner, rpl::single(description));
+		Ui::AddSkip(inner, st::settingsCheckboxesSkip);
 	}
+
+	std::move(
+		query
+	) | rpl::on_next([=](const QString &text) {
+		const auto trimmed = text.trimmed();
+		const auto matches = trimmed.isEmpty()
+			|| name.contains(trimmed, Qt::CaseInsensitive)
+			|| description.contains(trimmed, Qt::CaseInsensitive);
+		wrap->toggle(matches, anim::type::instant);
+	}, wrap->lifetime());
 }
 
 void SetupExperimental(
 		not_null<Window::Controller*> window,
-		not_null<Ui::VerticalLayout*> container) {
-	Ui::AddSkip(container, st::settingsCheckboxesSkip);
-
-	container->add(
-		object_ptr<Ui::FlatLabel>(
+		not_null<Ui::VerticalLayout*> container,
+		rpl::producer<> reloadOptionsRequests,
+		rpl::producer<QString> query) {
+	const auto headerWrap = container->add(
+		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
 			container,
+			object_ptr<Ui::VerticalLayout>(container)));
+	const auto header = headerWrap->entity();
+
+	Ui::AddSkip(header, st::settingsCheckboxesSkip);
+
+	header->add(
+		object_ptr<Ui::FlatLabel>(
+			header,
 			tr::lng_settings_experimental_about(),
 			st::boxLabel),
 		st::defaultBoxDividerLabelPadding);
 
 	auto reset = (Button*)nullptr;
 	if (base::options::changed()) {
-		const auto wrap = container->add(
+		const auto wrap = header->add(
 			object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
-				container,
-				object_ptr<Ui::VerticalLayout>(container)));
+				header,
+				object_ptr<Ui::VerticalLayout>(header)));
 		const auto inner = wrap->entity();
 		Ui::AddDivider(inner);
 		Ui::AddSkip(inner, st::settingsCheckboxesSkip);
@@ -135,8 +220,14 @@ void SetupExperimental(
 		Ui::AddSkip(inner, st::settingsCheckboxesSkip);
 	}
 
-	Ui::AddDivider(container);
-	Ui::AddSkip(container, st::settingsCheckboxesSkip);
+	Ui::AddDivider(header);
+	Ui::AddSkip(header, st::settingsCheckboxesSkip);
+
+	rpl::duplicate(
+		query
+	) | rpl::on_next([=](const QString &text) {
+		headerWrap->toggle(text.trimmed().isEmpty(), anim::type::instant);
+	}, headerWrap->lifetime());
 
 	const auto addToggle = [&](const char name[]) {
 		AddOption(
@@ -145,19 +236,22 @@ void SetupExperimental(
 			base::options::lookup<bool>(name),
 			(reset
 				? (reset->clicks() | rpl::to_empty)
-				: rpl::producer<>()));
+				: rpl::producer<>()),
+			rpl::duplicate(reloadOptionsRequests),
+			rpl::duplicate(query));
 	};
 
 	addToggle(ChatHelpers::kOptionTabbedPanelShowOnClick);
 	addToggle(Dialogs::kOptionForumHideChatsList);
+	addToggle(Dialogs::Ui::kOptionDialogsMuteIcon);
 	addToggle(Core::kOptionFractionalScalingEnabled);
 	addToggle(Core::kOptionHighDpiDownscale);
+	addToggle(Ui::GL::kOptionUseQtRhi);
 	addToggle(Window::kOptionViewProfileInChatsListContextMenu);
 	addToggle(Info::Profile::kOptionShowPeerIdBelowAbout);
 	addToggle(Info::Profile::kOptionShowChannelJoinedBelowAbout);
 	addToggle(Ui::kOptionUseSmallMsgBubbleRadius);
 	addToggle(Media::Player::kOptionDisableAutoplayNext);
-	addToggle(kOptionSendLargePhotos);
 	addToggle(Webview::kOptionWebviewDebugEnabled);
 	addToggle(Webview::kOptionWebviewLegacyEdge);
 	addToggle(kOptionAutoScrollInactiveChat);
@@ -167,7 +261,7 @@ void SetupExperimental(
 	addToggle(Core::kOptionFreeType);
 	addToggle(Core::kOptionSkipUrlSchemeRegister);
 	addToggle(Core::kOptionDeadlockDetector);
-	addToggle(Data::kOptionExternalVideoPlayer);
+	addToggle(Window::kOptionExternalMediaViewer);
 	addToggle(Window::kOptionNewWindowsSizeAsFirst);
 	addToggle(MTP::details::kOptionPreferIPv6);
 	if (base::options::lookup<bool>(kOptionFastButtonsMode).value()) {
@@ -177,6 +271,9 @@ void SetupExperimental(
 	addToggle(Info::kAlternativeScrollProcessing);
 	addToggle(kModerateCommonGroups);
 	addToggle(kForceComposeSearchOneColumn);
+	addToggle(ChatHelpers::kOptionUnlimitedRecentStickers);
+	addToggle(Ui::kOptionHideAiButton);
+	addToggle(HistoryView::kOptionUnlimitedMessageWidth);
 }
 
 } // namespace
@@ -188,14 +285,93 @@ Experimental::Experimental(
 	setupContent();
 }
 
+Experimental::~Experimental() = default;
+
 rpl::producer<QString> Experimental::title() {
 	return tr::lng_settings_experimental();
+}
+
+void Experimental::fillTopBarMenu(const Ui::Menu::MenuCallback &addAction) {
+	const auto window = &controller()->window();
+	addAction(
+		u"Export"_q,
+		[=] {
+			TextUtilities::SetClipboardText(
+				{ EncodeOptionsToText(base::options::serialize()) });
+			window->showToast(u"Experimental settings code copied to clipboard."_q);
+		},
+		&st::menuIconCopy);
+	if (!DecodeOptionsFromText(QGuiApplication::clipboard()->text()).ok) {
+		return;
+	}
+	addAction(
+		u"Import"_q,
+		[=] {
+			const auto decoded = DecodeOptionsFromText(
+				QGuiApplication::clipboard()->text());
+			if (!decoded.ok) {
+				window->showToast(u"Clipboard does not contain "
+					"a valid experimental settings code."_q);
+				return;
+			}
+			if (!base::options::deserialize(decoded.json)) {
+				window->showToast(u"Experimental settings code is valid"
+					", but data format is not supported."_q);
+				return;
+			}
+			_reloadOptionsRequests.fire({});
+			window->showToast(u"Experimental settings imported "
+				"from code in clipboard."_q);
+		},
+		&st::menuIconImportTheme);
+}
+
+void Experimental::setInnerFocus() {
+	if (_searchField) {
+		_searchField->setFocus();
+	} else {
+		setFocus();
+	}
+}
+
+base::weak_qptr<Ui::RpWidget> Experimental::createPinnedToTop(
+		not_null<QWidget*> parent) {
+	_searchController = std::make_unique<Ui::SearchFieldController>(
+		_query.current());
+	auto rowView = _searchController->createRowView(
+		parent,
+		st::infoLayerMediaSearch);
+	_searchField = rowView.field;
+
+	const auto searchContainer = Ui::CreateChild<Ui::FixedHeightWidget>(
+		parent.get(),
+		st::infoLayerMediaSearch.height);
+	const auto wrap = rowView.wrap.release();
+	wrap->setParent(searchContainer);
+	wrap->show();
+
+	searchContainer->widthValue(
+	) | rpl::on_next([=](int width) {
+		wrap->resizeToWidth(width);
+		wrap->moveToLeft(0, 0);
+	}, searchContainer->lifetime());
+
+	_searchController->queryValue(
+	) | rpl::on_next([=](QString text) {
+		_query = std::move(text);
+	}, searchContainer->lifetime());
+
+	return base::make_weak(not_null<Ui::RpWidget*>{ searchContainer });
 }
 
 void Experimental::setupContent() {
 	const auto content = Ui::CreateChild<Ui::VerticalLayout>(this);
 
-	SetupExperimental(&controller()->window(), content);
+	SetupExperimental(
+		&controller()->window(),
+		content,
+		_reloadOptionsRequests.events(),
+		_query.value());
 
 	Ui::ResizeFitChild(this, content);
 }

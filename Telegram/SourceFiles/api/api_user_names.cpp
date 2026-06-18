@@ -7,7 +7,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "api/api_user_names.h"
 
-#include "mtproto/mtp_user_normalize.h"
 #include "apiwrap.h"
 #include "data/data_channel.h"
 #include "data/data_peer.h"
@@ -72,7 +71,7 @@ rpl::producer<Data::Usernames> Usernames::loadUsernames(
 			_session->api().request(MTPusers_GetUsers(
 				MTP_vector<MTPInputUser>(1, data)
 			)).done([=](const MTPVector<MTPUser> &result) {
-				MTP::MatchNormalizedUser(result.v.front(), [&](
+				result.v.front().match([&](
 						const MTPDuser &data) {
 					push(data.vusernames(), data.vusername());
 					consumer.put_done();

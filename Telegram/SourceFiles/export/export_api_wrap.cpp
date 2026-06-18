@@ -11,7 +11,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "export/data/export_data_types.h"
 #include "export/output/export_output_result.h"
 #include "export/output/export_output_file.h"
-#include "mtproto/mtp_user_normalize.h"
 #include "mtproto/mtproto_response.h"
 #include "base/bytes.h"
 #include "base/options.h"
@@ -747,7 +746,7 @@ void ApiWrap::startMainSession(FnMut<void()> done) {
 	)).done([=, done = std::move(done)](
 			const MTPVector<MTPUser> &result) mutable {
 		for (const auto &user : result.v) {
-			MTP::MatchNormalizedUser(user, [&](const MTPDuser &data) {
+			user.match([&](const MTPDuser &data) {
 				if (data.is_self()) {
 					_selfId.emplace(data.vid());
 				}

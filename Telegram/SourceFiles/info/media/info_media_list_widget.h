@@ -87,6 +87,8 @@ public:
 	void saveState(not_null<Memento*> memento);
 	void restoreState(not_null<Memento*> memento);
 
+	void jumpToMessage(MsgId msgId);
+
 	// Overview::Layout::Delegate
 	void registerHeavyItem(not_null<const BaseLayout*> item) override;
 	void unregisterHeavyItem(not_null<const BaseLayout*> item) override;
@@ -183,6 +185,7 @@ private:
 		rpl::lifetime &lifetime);
 
 	void setupSelectRestriction();
+	[[nodiscard]] bool showDrawButton() const;
 
 	[[nodiscard]] MsgId topicRootId() const;
 	[[nodiscard]] PeerId monoforumPeerId() const;

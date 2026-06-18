@@ -2,7 +2,7 @@
 
 FROM rockylinux:8 AS builder
 ENV LANG=C.UTF-8
-ENV TOOLSET=gcc-toolset-14
+ENV TOOLSET=gcc-toolset-15
 ENV PATH=/opt/rh/$TOOLSET/root/usr/bin:$PATH
 ENV LIBRARY_PATH=/opt/rh/$TOOLSET/root/usr/lib64:/opt/rh/$TOOLSET/root/usr/lib:/usr/local/lib64:/usr/local/lib:/lib64:/lib:/usr/lib64:/usr/lib
 ENV LD_LIBRARY_PATH=$LIBRARY_PATH
@@ -10,7 +10,7 @@ ENV PKG_CONFIG_PATH=/opt/rh/$TOOLSET/root/usr/lib64/pkgconfig:/opt/rh/$TOOLSET/r
 
 RUN dnf -y install epel-release \
 	&& dnf config-manager --set-enabled powertools \
-	&& dnf -y install cmake autoconf automake libtool pkgconfig make patch git \
+	&& dnf -y install autoconf automake libtool pkgconfig make patch git \
 		python3.11-pip python3.11-devel gperf flex bison clang clang-tools-extra \
 		lld nasm file which wget perl-open perl-XML-Parser perl-IPC-Cmd \
 		xorg-x11-util-macros $TOOLSET-gcc $TOOLSET-gcc-c++ $TOOLSET-binutils \
@@ -19,11 +19,11 @@ RUN dnf -y install epel-release \
 		pulseaudio-libs-devel mesa-libGL-devel mesa-libEGL-devel mesa-libgbm-devel \
 		libdrm-devel vulkan-devel libva-devel libvdpau-devel libselinux-devel \
 		libmount-devel systemd-devel glib2-devel gobject-introspection-devel \
-		at-spi2-core-devel gtk3-devel boost1.78-devel \
+		at-spi2-core-devel gtk3-devel \
 	&& dnf clean all
 
 RUN alternatives --set python3 /usr/bin/python3.11
-RUN python3 -m pip install meson ninja
+RUN python3 -m pip install cmake==3.31.10 meson ninja
 RUN cat <<EOF > /usr/local/bin/pkg-config && chmod +x /usr/local/bin/pkg-config
 #!/bin/sh
 for i in "\$@"; do
@@ -31,8 +31,10 @@ for i in "\$@"; do
 done
 exec /usr/bin/pkg-config --static "\$@"
 EOF
-RUN sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/")/ -O0 {% if LTO %}-fno-lto -fno-use-linker-plugin{% endif %} -fuse-ld=lld")/' /usr/share/cmake/Modules/Compiler/GNU.cmake
-RUN sed -i 's/NO_DEFAULT_PATH//g; s/PKG_CONFIG_ALLOW_SYSTEM_LIBS/PKG_CONFIG_IS_DUMB/g' /usr/share/cmake/Modules/FindPkgConfig.cmake
+RUN CMAKE_ROOT="$(cmake --system-information | sed -n 's/^CMAKE_ROOT "\([^"]*\)"$/\1/p')" \
+	&& test -n "$CMAKE_ROOT" \
+	&& sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/")/ -O0 {% if LTO %}-fno-lto -fno-use-linker-plugin{% endif %} -fuse-ld=lld")/' "$CMAKE_ROOT/Modules/Compiler/GNU.cmake" \
+	&& sed -i 's/NO_DEFAULT_PATH//g; s/PKG_CONFIG_ALLOW_SYSTEM_LIBS/PKG_CONFIG_IS_DUMB/g' "$CMAKE_ROOT/Modules/FindPkgConfig.cmake"
 RUN sed -i '/Requires.private: valgrind/d' /usr/lib64/pkgconfig/libdrm.pc
 RUN sed -i '/Requires.private: gl/s/gl/opengl glx/' /usr/lib64/pkgconfig/epoxy.pc
 RUN sed -i 's/-lharfbuzz//' /usr/lib64/pkgconfig/harfbuzz.pc
@@ -44,7 +46,7 @@ WORKDIR /usr/src
 ENV AR=gcc-ar
 ENV RANLIB=gcc-ranlib
 ENV NM=gcc-nm
-ENV CFLAGS='{% if DEBUG %}-g{% endif %} -O3 {% if LTO %}-flto=auto -ffat-lto-objects{% endif %} -pipe -fPIC -fno-strict-aliasing -fexceptions -fasynchronous-unwind-tables -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -fhardened -Wno-hardened'
+ENV CFLAGS='{% if DEBUG %}-g -fno-var-tracking-assignments{% endif %} {% if MINSIZE %}-Os{% else %}-O3{% endif %} {% if LTO %}-flto=auto -ffat-lto-objects{% endif %} -pipe -fPIC -fno-strict-aliasing -fexceptions -fasynchronous-unwind-tables -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -fhardened -Wno-hardened'
 ENV CXXFLAGS=$CFLAGS
 ENV LDFLAGS='-static-libstdc++ -static-libgcc -static-libasan -pthread -Wl,--push-state,--no-as-needed,-ldl,--pop-state -Wl,--as-needed -Wl,-z,muldefs'
 
@@ -93,7 +95,7 @@ FROM builder AS patches
 RUN git init patches \
 	&& cd patches \
 	&& git remote add origin https://github.com/desktop-app/patches.git \
-	&& git fetch --depth=1 origin b8c3a8ffc1514861837b9213383133c63023e0de \
+	&& git fetch --depth=1 origin 99e4345c14fb57164139654d62ae483ceba49e2c \
 	&& git reset --hard FETCH_HEAD \
 	&& rm -rf .git
 
@@ -164,6 +166,19 @@ RUN git clone -b 1.0.7 --depth=1 https://github.com/google/highway.git \
 	&& cd .. \
 	&& rm -rf highway
 
+FROM builder AS mozjpeg
+RUN git clone -b v4.1.5 --depth=1 https://github.com/mozilla/mozjpeg.git \
+	&& cd mozjpeg \
+	&& cmake -B build . \
+		-DCMAKE_INSTALL_PREFIX=/usr/local \
+		-DENABLE_SHARED=OFF \
+		-DWITH_JPEG8=ON \
+		-DPNG_SUPPORTED=OFF \
+	&& cmake --build build --parallel \
+	&& DESTDIR=/usr/src/mozjpeg-cache cmake --install build \
+	&& cd .. \
+	&& rm -rf mozjpeg
+
 FROM builder AS opus
 RUN git clone -b v1.5.2 --depth=1 https://github.com/xiph/opus.git \
 	&& cd opus \
@@ -174,7 +189,7 @@ RUN git clone -b v1.5.2 --depth=1 https://github.com/xiph/opus.git \
 	&& rm -rf opus
 
 FROM builder AS dav1d
-RUN git clone -b 1.5.1 --depth=1 https://github.com/videolan/dav1d.git \
+RUN git clone -b 1.5.3 --depth=1 https://github.com/videolan/dav1d.git \
 	&& cd dav1d \
 	&& meson build \
 		--buildtype=plain \
@@ -231,7 +246,7 @@ RUN git init libvpx \
 	&& rm -rf libvpx
 
 FROM builder AS webp
-RUN git clone -b v1.5.0 --depth=1 https://github.com/webmproject/libwebp.git \
+RUN git clone -b v1.6.0 --depth=1 https://github.com/webmproject/libwebp.git \
 	&& cd libwebp \
 	&& cmake -B build . \
 		-DWEBP_BUILD_ANIM_UTILS=OFF \
@@ -265,7 +280,7 @@ RUN git clone -b v1.3.0 --depth=1 https://github.com/AOMediaCodec/libavif.git \
 FROM builder AS heif
 COPY --link --from=de265 /usr/src/de265-cache /
 
-RUN git clone -b v1.19.8 --depth=1 https://github.com/strukturag/libheif.git \
+RUN git clone -b v1.21.2 --depth=1 https://github.com/strukturag/libheif.git \
 	&& cd libheif \
 	&& cmake -B build . \
 		-DBUILD_SHARED_LIBS=OFF \
@@ -275,6 +290,7 @@ RUN git clone -b v1.19.8 --depth=1 https://github.com/strukturag/libheif.git \
 		-DWITH_X265=OFF \
 		-DWITH_AOM_DECODER=OFF \
 		-DWITH_AOM_ENCODER=OFF \
+		-DWITH_X264=OFF \
 		-DWITH_OpenH264_DECODER=OFF \
 		-DWITH_RAV1E=OFF \
 		-DWITH_RAV1E_PLUGIN=OFF \
@@ -293,16 +309,13 @@ COPY --link --from=lcms2 /usr/src/lcms2-cache /
 COPY --link --from=brotli /usr/src/brotli-cache /
 COPY --link --from=highway /usr/src/highway-cache /
 
-RUN git clone -b v0.11.1 --depth=1 https://github.com/libjxl/libjxl.git \
+RUN git clone -b v0.11.2 --depth=1 https://github.com/libjxl/libjxl.git \
 	&& cd libjxl \
-	&& git submodule update --init --recursive --depth=1 third_party/libjpeg-turbo \
-	&& curl -sSL https://github.com/libjxl/libjxl/commit/ee3955b1553bcc10304d45b85dfef9afa9349d72.patch | sed 's/offset + t/offset + i/' | git apply \
 	&& cmake -B build . \
 		-DBUILD_SHARED_LIBS=OFF \
 		-DBUILD_TESTING=OFF \
 		-DJPEGXL_ENABLE_DEVTOOLS=OFF \
 		-DJPEGXL_ENABLE_TOOLS=OFF \
-		-DJPEGXL_INSTALL_JPEGLI_LIBJPEG=ON \
 		-DJPEGXL_ENABLE_DOXYGEN=OFF \
 		-DJPEGXL_ENABLE_MANPAGES=OFF \
 		-DJPEGXL_ENABLE_BENCHMARK=OFF \
@@ -315,11 +328,6 @@ RUN git clone -b v0.11.1 --depth=1 https://github.com/libjxl/libjxl.git \
 	&& export DESTDIR=/usr/src/jxl-cache \
 	&& cmake --install build \
 	&& sed -i 's/-lstdc++//' $DESTDIR/usr/local/lib64/pkgconfig/libjxl*.pc \
-	&& rm $DESTDIR/usr/local/lib64/libjpeg.so* \
-	&& cp build/lib/libjpegli-static.a $DESTDIR/usr/local/lib64/libjpeg.a \
-	&& mkdir build/hwy \
-	&& ar --output=build/hwy x /usr/local/lib64/libhwy.a \
-	&& ar rcs $DESTDIR/usr/local/lib64/libjpeg.a build/lib/CMakeFiles/jpegli-libjpeg-obj.dir/jpegli/libjpeg_wrapper.cc.o build/hwy/* \
 	&& cd .. \
 	&& rm -rf libjxl
 
@@ -527,6 +535,9 @@ RUN git clone -b n6.1.1 --depth=1 https://github.com/FFmpeg/FFmpeg.git \
 		--disable-network \
 		--disable-autodetect \
 		--disable-everything \
+{%- if MINSIZE %}
+		--enable-small \
+{%- endif %}
 		--enable-libdav1d \
 		--enable-libopenh264 \
 		--enable-libopus \
@@ -722,8 +733,8 @@ RUN git clone -b xkbcommon-1.6.0 --depth=1 https://github.com/xkbcommon/libxkbco
 FROM patches AS qt
 COPY --link --from=zlib /usr/src/zlib-cache /
 COPY --link --from=lcms2 /usr/src/lcms2-cache /
+COPY --link --from=mozjpeg /usr/src/mozjpeg-cache /
 COPY --link --from=webp /usr/src/webp-cache /
-COPY --link --from=jxl /usr/src/jxl-cache /
 COPY --link --from=xcb /usr/src/xcb-cache /
 COPY --link --from=xcb-wm /usr/src/xcb-wm-cache /
 COPY --link --from=xcb-util /usr/src/xcb-util-cache /
@@ -734,15 +745,12 @@ COPY --link --from=xcb-cursor /usr/src/xcb-cursor-cache /
 COPY --link --from=openssl /usr/src/openssl-cache /
 COPY --link --from=xkbcommon /usr/src/xkbcommon-cache /
 
-ENV QT=6.10.2
+ENV QT=6.11.1
 RUN git clone -b v$QT --depth=1 https://github.com/qt/qt5.git \
 	&& cd qt5 \
 	&& git submodule update --init --recursive --depth=1 qtbase qtdeclarative qtwayland qtimageformats qtsvg qtshadertools \
-	&& cd qtbase \
-	&& find ../../patches/qtbase_$QT -type f -print0 | sort -z | xargs -r0 git apply \
-	&& cd ../qtwayland \
-	&& find ../../patches/qtwayland_$QT -type f -print0 | sort -z | xargs -r0 git apply \
-	&& cd .. \
+	&& find $PWD/../patches/qtbase_$QT -type f -print0 | sort -z | xargs -r0 git -C qtbase apply \
+	&& find $PWD/../patches/qtwayland_$QT -type f -print0 | sort -z | xargs -r0 git -C qtwayland apply \
 	&& cmake -B build . \
 		-DCMAKE_INSTALL_PREFIX=/usr/local \
 		-DBUILD_SHARED_LIBS=OFF \
@@ -763,6 +771,14 @@ RUN git clone -b v$QT --depth=1 https://github.com/qt/qt5.git \
 	&& cd .. \
 	&& rm -rf qt5
 
+FROM builder AS boost
+RUN curl -sSL https://archives.boost.io/release/1.90.0/source/boost_1_90_0.tar.gz | tar -xz \
+	&& cd boost_* \
+	&& ./bootstrap.sh --prefix=/usr/src/boost-cache/usr/local --with-libraries=regex \
+	&& ./b2 release link=static install \
+	&& cd .. \
+	&& rm -rf boost_*
+
 FROM builder AS breakpad
 RUN git clone -b v2024.02.16 --depth=1 https://chromium.googlesource.com/breakpad/breakpad.git \
 	&& cd breakpad \
@@ -775,11 +791,11 @@ RUN git clone -b v2024.02.16 --depth=1 https://chromium.googlesource.com/breakpa
 
 FROM builder AS webrtc
 COPY --link --from=zlib /usr/src/zlib-cache /
+COPY --link --from=mozjpeg /usr/src/mozjpeg-cache /
 COPY --link --from=opus /usr/src/opus-cache /
 COPY --link --from=openh264 /usr/src/openh264-cache /
 COPY --link --from=dav1d /usr/src/dav1d-cache /
 COPY --link --from=vpx /usr/src/vpx-cache /
-COPY --link --from=jxl /usr/src/jxl-cache /
 COPY --link --from=ffmpeg /usr/src/ffmpeg-cache /
 COPY --link --from=openssl /usr/src/openssl-cache /
 COPY --link --from=xext /usr/src/xext-cache /
@@ -839,6 +855,7 @@ COPY --link --from=protobuf /usr/src/protobuf-cache /
 COPY --link --from=lcms2 /usr/src/lcms2-cache /
 COPY --link --from=brotli /usr/src/brotli-cache /
 COPY --link --from=highway /usr/src/highway-cache /
+COPY --link --from=mozjpeg /usr/src/mozjpeg-cache /
 COPY --link --from=opus /usr/src/opus-cache /
 COPY --link --from=dav1d /usr/src/dav1d-cache /
 COPY --link --from=openh264 /usr/src/openh264-cache /
@@ -869,6 +886,7 @@ COPY --link --from=openal /usr/src/openal-cache /
 COPY --link --from=openssl /usr/src/openssl-cache /
 COPY --link --from=xkbcommon /usr/src/xkbcommon-cache /
 COPY --link --from=qt /usr/src/qt-cache /
+COPY --link --from=boost /usr/src/boost-cache /
 COPY --link --from=breakpad /usr/src/breakpad-cache /
 COPY --link --from=webrtc /usr/src/webrtc-cache /
 COPY --link --from=ada /usr/src/ada-cache /
@@ -878,9 +896,6 @@ COPY --link --from=patches /usr/src/patches patches
 RUN patch -p1 -d /usr/lib64/gobject-introspection -i $PWD/patches/gobject-introspection.patch && rm -rf patches
 
 WORKDIR /usr/src/tdesktop
-ENV BOOST_INCLUDEDIR=/usr/include/boost1.78
-ENV BOOST_LIBRARYDIR=/usr/lib64/boost1.78
-
 USER user
 VOLUME [ "/usr/src/tdesktop" ]
 CMD [ "/usr/src/tdesktop/Telegram/build/docker/centos_env/build.sh" ]

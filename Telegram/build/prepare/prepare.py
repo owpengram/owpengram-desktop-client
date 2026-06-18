@@ -145,6 +145,8 @@ envForThirdPartyKey = hashlib.sha1(envForThirdPartyKeyString.encode('utf-8')).he
 modifiedEnv = os.environ.copy()
 for key in environment:
     modifiedEnv[key] = environment[key]
+if win and 'NoDefaultCurrentDirectoryInExePath' in modifiedEnv:
+    del modifiedEnv['NoDefaultCurrentDirectoryInExePath']
 
 modifiedEnv['PATH'] = environment['PATH_PREFIX'] + modifiedEnv['PATH']
 
@@ -311,8 +313,9 @@ def run(commands):
         if os.path.exists("command.bat"):
             os.remove("command.bat")
         with open("command.bat", 'w') as file:
-            file.write('@echo OFF\r\n' + winFailOnEach(commands))
-        result = subprocess.run("command.bat", shell=True, env=modifiedEnv).returncode == 0
+            file.write('@echo OFF\r\nset "NoDefaultCurrentDirectoryInExePath="\r\n' + winFailOnEach(commands))
+        batPath = os.path.abspath("command.bat")
+        result = subprocess.run(batPath, shell=True, env=modifiedEnv).returncode == 0
         if result and os.path.exists("command.bat"):
             os.remove("command.bat")
         return result
@@ -452,7 +455,11 @@ if customRunCommand:
 stage('patches', """
     git clone https://github.com/desktop-app/patches.git
     cd patches
-    git checkout b8c3a8ffc1514861837b9213383133c63023e0de
+    git checkout 99e4345c14fb57164139654d62ae483ceba49e2c
+mac:
+    git clone https://github.com/desktop-app/qt6_highsierra_patches.git qt6_highsierra
+    cd qt6_highsierra
+    git checkout f5b536d4f2c99a4e4dc5171aa7fdb706ec5edc1a
 """)
 
 stage('msys64', """
@@ -514,9 +521,13 @@ stage('lzma', """
 win:
     git clone https://github.com/desktop-app/lzma.git
     cd lzma\\C\\Util\\LzmaLib
-    msbuild -m LzmaLib.sln /property:Configuration=Debug /property:Platform="$X8664"
+    SET "ToolsetProp="
+winarm:
+    SET "ToolsetProp=/property:PlatformToolset=v145"
+win:
+    msbuild -m LzmaLib.sln /property:Configuration=Debug /property:Platform="$X8664" %ToolsetProp%
 release:
-    msbuild -m LzmaLib.sln /property:Configuration=Release /property:Platform="$X8664"
+    msbuild -m LzmaLib.sln /property:Configuration=Release /property:Platform="$X8664" %ToolsetProp%
 """)
 
 stage('xz', """
@@ -715,7 +726,7 @@ win:
 
 # Somehow in x86 Debug build dav1d crashes on AV1 10bpc videos.
 stage('dav1d', """
-    git clone -b 1.5.1 https://code.videolan.org/videolan/dav1d.git
+    git clone -b 1.5.3 https://code.videolan.org/videolan/dav1d.git
     cd dav1d
 win32:
     SET "TARGET=x86"
@@ -899,7 +910,7 @@ mac:
 """)
 
 stage('libwebp', """
-    git clone -b v1.5.0 https://github.com/webmproject/libwebp.git
+    git clone -b v1.6.0 https://github.com/webmproject/libwebp.git
     cd libwebp
 win:
     nmake /f Makefile.vc ARCH=$X8664 CFG=debug-static OBJDIR=out RTLIBCFG=static all
@@ -938,7 +949,7 @@ mac:
 """)
 
 stage('libheif', """
-    git clone -b v1.19.8 https://github.com/strukturag/libheif.git
+    git clone -b v1.21.2 https://github.com/strukturag/libheif.git
     cd libheif
 win:
     %THIRDPARTY_DIR%\\msys64\\usr\\bin\\sed.exe -i 's/LIBHEIF_EXPORTS/LIBDE265_STATIC_BUILD/g' libheif/CMakeLists.txt
@@ -953,6 +964,7 @@ win:
         -DBUILD_TESTING=OFF ^
         -DENABLE_PLUGIN_LOADING=OFF ^
         -DWITH_LIBDE265=ON ^
+        -DWITH_X264=OFF ^
         -DWITH_OpenH264_DECODER=OFF ^
         -DWITH_SvtEnc=OFF ^
         -DWITH_SvtEnc_PLUGIN=OFF ^
@@ -979,6 +991,7 @@ mac:
         -D WITH_AOM_ENCODER=OFF \\
         -D WITH_AOM_DECODER=OFF \\
         -D WITH_X265=OFF \\
+        -D WITH_X264=OFF \\
         -D WITH_OpenH264_DECODER=OFF \\
         -D WITH_SvtEnc=OFF \\
         -D WITH_RAV1E=OFF \\
@@ -996,7 +1009,7 @@ mac:
 """)
 
 stage('libjxl', """
-    git clone -b v0.11.1 --recursive --shallow-submodules https://github.com/libjxl/libjxl.git
+    git clone -b v0.11.2 --recursive --shallow-submodules https://github.com/libjxl/libjxl.git
     cd libjxl
 """ + setVar("cmake_defines", """
     -DBUILD_SHARED_LIBS=OFF
@@ -1110,10 +1123,8 @@ depends:python/Scripts/activate.bat
     %THIRDPARTY_DIR%\\python\\Scripts\\activate.bat
     meson setup --default-library=static --buildtype=debug -Db_vscrt=mtd out/Debug
     meson compile -C out/Debug
-release:
     meson setup --default-library=static --buildtype=release -Db_vscrt=mt out/Release
     meson compile -C out/Release
-win:
     deactivate
 mac:
     buildOneArch() {
@@ -1384,10 +1395,12 @@ depends:patches/breakpad.diff
 win:
     SET "PYTHONUTF8=1"
     SET "FolderPostfix="
+    SET "ToolsetProp="
 win64:
     SET "FolderPostfix=_x64"
 winarm:
     SET "FolderPostfix=_ARM64"
+    SET "ToolsetProp=/property:PlatformToolset=v145"
 win:
 depends:python/Scripts/activate.bat
     %THIRDPARTY_DIR%\\python\\Scripts\\activate.bat
@@ -1399,7 +1412,7 @@ release:
     ninja -C out/Release%FolderPostfix% common crash_generation_client exception_handler
     cd tools\\windows\\dump_syms
     gyp dump_syms.gyp --format=msvs
-    msbuild -m dump_syms.vcxproj /property:Configuration=Release /property:Platform="x64"
+    msbuild -m dump_syms.vcxproj /property:Configuration=Release /property:Platform="x64" %ToolsetProp%
 win:
     deactivate
 mac:
@@ -1495,8 +1508,8 @@ release:
     cd qt_$QT
     git submodule update --init --recursive --progress qtbase qtimageformats qtsvg
 depends:patches/qtbase_""" + qt + """/*.patch
-    cd qtbase
 win:
+    cd qtbase
     setlocal enabledelayedexpansion
     for /r %%i in (..\\..\\patches\\qtbase_%QT%\\*) do (
         git apply %%i -v
@@ -1505,7 +1518,6 @@ win:
             exit /b 1
         )
     )
-
     cd ..
 
     SET CONFIGURATIONS=-debug
@@ -1554,44 +1566,19 @@ win:
 
     jom -j%NUMBER_OF_PROCESSORS%
     jom -j%NUMBER_OF_PROCESSORS% install
-mac:
-    find ../../patches/qtbase_$QT -type f -print0 | sort -z | xargs -0 git apply
-    cd ..
-
-    CONFIGURATIONS=-debug
-release:
-    CONFIGURATIONS=-debug-and-release
-mac:
-    ./configure -prefix "$USED_PREFIX/Qt-$QT" \
-        $CONFIGURATIONS \
-        -force-debug-info \
-        -opensource \
-        -confirm-license \
-        -static \
-        -opengl desktop \
-        -no-openssl \
-        -securetransport \
-        -I "$USED_PREFIX/include" \
-        LIBJPEG_LIBS="$USED_PREFIX/lib/libjpeg.a" \
-        ZLIB_LIBS="$USED_PREFIX/lib/libz.a" \
-        -nomake examples \
-        -nomake tests \
-        -platform macx-clang
-
-    make $MAKE_THREADS_CNT
-    make install
 """)
 else: # qt > '6'
     branch = 'v$QT' + ('-lts-lgpl' if qt.startswith('6.2.') else '')
     stage('qt_' + qt, """
     git clone -b """ + branch + """ https://github.com/qt/qt5.git qt_$QT
     cd qt_$QT
-    git submodule update --init --recursive --progress qtbase qtimageformats qtsvg
+    git submodule update --init --recursive --progress qtbase qtimageformats qtshadertools qtsvg
 depends:patches/qtbase_""" + qt + """/*.patch
-    cd qtbase
 mac:
-    find ../../patches/qtbase_$QT -type f -print0 | sort -z | xargs -0 git apply -v
-    cd ..
+    if [ -d "../patches/qt6_highsierra" ]; then
+        find "$PWD/../patches/qt6_highsierra" -maxdepth 1 -name "*.patch" -print0 | sort -z | xargs -0 git -C qtbase apply -v
+    fi
+    find $PWD/../patches/qtbase_$QT -type f -print0 | sort -z | xargs -0 git -C qtbase apply -v
     sed -i.bak 's/tqtc-//' {qtimageformats,qtsvg}/dependencies.yaml
 
     CONFIGURATIONS=-debug
@@ -1604,6 +1591,7 @@ mac:
         -opensource \
         -confirm-license \
         -static \
+        -no-framework \
         -opengl desktop \
         -no-openssl \
         -securetransport \
@@ -1611,13 +1599,17 @@ mac:
         -I "$USED_PREFIX/include" \
         -no-feature-futimens \
         -no-feature-brotli \
+        -no-feature-cxx17_filesystem \
         -platform macx-clang -- \
         -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" \
-        -DCMAKE_PREFIX_PATH="$USED_PREFIX"
+        -DCMAKE_PREFIX_PATH="$USED_PREFIX" \
+        -DQT_NO_HANDLE_APPLE_SINGLE_ARCH_CROSS_COMPILING=ON \
+        -DQT_SYNC_HEADERS_AT_CONFIGURE_TIME=ON
 
     cmake --build .
     cmake --install .
 win:
+    cd qtbase
     for /r %%i in (..\\..\\patches\\qtbase_%QT%\\*) do git apply %%i -v
     cd ..
 
@@ -1680,7 +1672,7 @@ win:
 stage('tg_owt', """
     git clone https://github.com/desktop-app/tg_owt.git
     cd tg_owt
-    git checkout 5c5c71258777d0196dbb3a09cc37d2f56ead28ab
+    git checkout 89df288dd6ba5b2ec95b3c5eaf1e7e0c3a870fc4
     git submodule update --init --recursive
 win:
     SET MOZJPEG_PATH=$LIBS_DIR/mozjpeg

@@ -71,6 +71,7 @@ public:
 
 	[[nodiscard]] int quoteLengthMax() const;
 	[[nodiscard]] int stargiftConvertPeriodMax() const;
+	[[nodiscard]] int noForwardsRequestExpirePeriod() const;
 
 	[[nodiscard]] const std::vector<QString> &startRefPrefixes();
 	[[nodiscard]] bool starrefSetupAllowed() const;
@@ -104,6 +105,9 @@ public:
 	[[nodiscard]] int giftResaleNanoTonThousandths() const;
 
 	[[nodiscard]] int pollOptionsLimit() const;
+	[[nodiscard]] int pollAnswerDeletePeriod() const;
+	[[nodiscard]] int pollCountriesMax() const;
+	[[nodiscard]] QString phoneCountryIso2() const;
 	[[nodiscard]] int todoListItemsLimit() const;
 	[[nodiscard]] int todoListTitleLimit() const;
 	[[nodiscard]] int todoListItemTextLimit() const;

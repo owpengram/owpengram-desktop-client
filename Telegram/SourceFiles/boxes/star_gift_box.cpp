@@ -41,6 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/ui_integration.h"
 #include "data/components/gift_auctions.h"
 #include "data/components/promo_suggestions.h"
+#include "data/components/top_peers.h"
 #include "data/data_birthday.h"
 #include "data/data_changes.h"
 #include "data/data_channel.h"
@@ -138,11 +139,9 @@ namespace {
 constexpr auto kPriceTabAll = 0;
 constexpr auto kPriceTabMy = -1;
 constexpr auto kPriceTabCollectibles = -2;
-constexpr auto kGiftMessageLimit = 255;
 constexpr auto kSentToastDuration = 3 * crl::time(1000);
 constexpr auto kSwitchUpgradeCoverInterval = 3 * crl::time(1000);
 constexpr auto kUpgradeDoneToastDuration = 4 * crl::time(1000);
-constexpr auto kGiftsPreloadTimeout = 3 * crl::time(1000);
 constexpr auto kResellPriceCacheLifetime = 60 * crl::time(1000);
 
 using namespace HistoryView;
@@ -1332,7 +1331,9 @@ void SendStarsFormRequest(
 				done(Payments::CheckoutResult::Failed, nullptr);
 			});
 		}).fail([=](const MTP::Error &error) {
-			show->showToast(error.type());
+			if (!ShowGiftErrorToast(show, error)) {
+				show->showToast(error.type());
+			}
 			done(Payments::CheckoutResult::Failed, nullptr);
 		}).send();
 	} else if (result == BalanceResult::Cancelled) {
@@ -1379,7 +1380,9 @@ void UpgradeGift(
 			formDone(Payments::CheckoutResult::Paid, &result);
 		}).fail([=](const MTP::Error &error) {
 			if (const auto strong = weak.get()) {
-				strong->showToast(error.type());
+				if (!ShowGiftErrorToast(strong->uiShow(), error)) {
+					strong->showToast(error.type());
+				}
 			}
 			formDone(Payments::CheckoutResult::Failed, nullptr);
 		}).send();
@@ -1927,6 +1930,8 @@ public:
 		int fromIndex,
 		int toIndex) override final;
 
+	[[nodiscard]] rpl::producer<QString> searchPlaceholder() const override;
+
 	void rowRightActionClicked(not_null<PeerListRow*> row) override final;
 	base::unique_qptr<Ui::PopupMenu> rowContextMenu(
 		QWidget *parent,
@@ -1941,8 +1946,10 @@ private:
 
 	const PickCallback _pick;
 	const std::vector<UserId> _contactBirthdays;
+	const std::vector<not_null<UserData*>> _frequentUsers;
 	CustomList _selfOption;
 	CustomList _birthdayOptions;
+	CustomList _frequentOptions;
 
 	base::unique_qptr<Ui::PopupMenu> _menu;
 
@@ -1954,7 +1961,8 @@ private:
 		not_null<Main::Session*> session,
 		Fn<void(not_null<PeerListController*>)> fill,
 		PickCallback pick,
-		rpl::producer<QString> below) {
+		rpl::producer<QString> below,
+		int topSkip = st::defaultVerticalListSkip) {
 	class CustomController final : public PeerListController {
 	public:
 		CustomController(
@@ -2010,7 +2018,7 @@ private:
 	auto result = object_ptr<Ui::VerticalLayout>((QWidget*)nullptr);
 	const auto container = result.data();
 
-	Ui::AddSkip(container);
+	Ui::AddSkip(container, topSkip);
 
 	const auto delegate = container->lifetime().make_state<
 		PeerListContentDelegateSimple
@@ -2083,6 +2091,7 @@ Controller::Controller(not_null<Main::Session*> session, PickCallback pick)
 , _contactBirthdays(
 	session->promoSuggestions().knownContactBirthdays().value_or(
 		std::vector<UserId>{}))
+, _frequentUsers(CollectGiftFrequentUsers(session, _contactBirthdays))
 , _selfOption(
 	MakeCustomList(
 		session,
@@ -2093,9 +2102,11 @@ Controller::Controller(not_null<Main::Session*> session, PickCallback pick)
 			controller->delegate()->peerListRefreshRows();
 		},
 		_pick,
-		_contactBirthdays.empty()
-			? tr::lng_contacts_header()
-			: tr::lng_gift_subtitle_birthdays()))
+		!_contactBirthdays.empty()
+			? tr::lng_gift_subtitle_birthdays()
+			: !_frequentUsers.empty()
+			? tr::lng_settings_top_peers_title()
+			: tr::lng_contacts_header()))
 , _birthdayOptions(
 	MakeCustomList(
 		session,
@@ -2141,7 +2152,7 @@ Controller::Controller(not_null<Main::Session*> session, PickCallback pick)
 				return aBirthday.day() < bBirthday.day();
 			});
 
-			for (const auto user : usersWithBirthdays) {
+			for (const auto &user : usersWithBirthdays) {
 				auto row = std::make_unique<PeerRow>(user);
 				if (auto s = status(user->birthday()); !s.isEmpty()) {
 					row->setCustomStatus(std::move(s));
@@ -2154,7 +2165,24 @@ Controller::Controller(not_null<Main::Session*> session, PickCallback pick)
 		_pick,
 		_contactBirthdays.empty()
 			? rpl::producer<QString>(nullptr)
-			: tr::lng_contacts_header())) {
+			: !_frequentUsers.empty()
+			? tr::lng_settings_top_peers_title()
+			: tr::lng_contacts_header()))
+, _frequentOptions(
+	MakeCustomList(
+		session,
+		[=](not_null<PeerListController*> controller) {
+			for (const auto &user : _frequentUsers) {
+				controller->delegate()->peerListAppendRow(
+					std::make_unique<PeerRow>(user));
+			}
+			controller->delegate()->peerListRefreshRows();
+		},
+		_pick,
+		_frequentUsers.empty()
+			? rpl::producer<QString>(nullptr)
+			: tr::lng_contacts_header(),
+		st::defaultVerticalListSkip / 4)) {
 	setStyleOverrides(&st::peerListSmallSkips);
 }
 
@@ -2180,11 +2208,14 @@ base::unique_qptr<Ui::PopupMenu> Controller::rowContextMenu(
 }
 
 void Controller::noSearchSubmit() {
-	if (const auto onstack = _selfOption.activate) {
-		onstack();
-	}
-	if (const auto onstack = _birthdayOptions.activate) {
-		onstack();
+	for (const auto section : {
+			&_selfOption,
+			&_birthdayOptions,
+			&_frequentOptions
+		}) {
+		if (const auto onstack = section->activate) {
+			onstack();
+		}
 	}
 }
 
@@ -2196,38 +2227,46 @@ bool Controller::overrideKeyboardNavigation(
 		return true;
 	}
 	_skipUpDirectionSelect = false;
+	const auto sections = std::array<CustomList*, 3>{
+		&_selfOption,
+		&_birthdayOptions,
+		&_frequentOptions,
+	};
+	const auto count = int(sections.size());
+	const auto selected = [&] {
+		for (auto i = 0; i != count; ++i) {
+			if (sections[i]->hasSelection && sections[i]->hasSelection()) {
+				return i;
+			}
+		}
+		return -1;
+	}();
 	if (direction > 0) {
-		if (!_selfOption.hasSelection() && !_birthdayOptions.hasSelection()) {
-			return _selfOption.overrideKey(direction, from, to);
+		if (selected < 0) {
+			return sections.front()->overrideKey(direction, from, to);
 		}
-		if (_selfOption.hasSelection() && !_birthdayOptions.hasSelection()) {
-			if (_selfOption.overrideKey(direction, from, to)) {
-				return true;
-			} else {
-				return _birthdayOptions.overrideKey(direction, from, to);
-			}
+		if (sections[selected]->overrideKey(direction, from, to)) {
+			return true;
 		}
-		if (!_selfOption.hasSelection() && _birthdayOptions.hasSelection()) {
-			if (_birthdayOptions.overrideKey(direction, from, to)) {
+		for (auto i = selected + 1; i != count; ++i) {
+			if (sections[i]->overrideKey(direction, from, to)
+				&& sections[i]->hasSelection()) {
 				return true;
 			}
 		}
+		return false;
 	} else if (direction < 0) {
-		if (!_selfOption.hasSelection() && !_birthdayOptions.hasSelection()) {
-			return _birthdayOptions.overrideKey(direction, from, to);
+		if (selected < 0) {
+			return sections.back()->overrideKey(direction, from, to);
 		}
-		if (!_selfOption.hasSelection() && _birthdayOptions.hasSelection()) {
-			if (_birthdayOptions.overrideKey(direction, from, to)) {
-				return true;
-			} else if (!_birthdayOptions.hasSelection()) {
-				const auto res = _selfOption.overrideKey(direction, from, to);
-				_skipUpDirectionSelect = _selfOption.hasSelection();
-				return res;
-			}
+		if (sections[selected]->overrideKey(direction, from, to)) {
+			_skipUpDirectionSelect = sections[selected]->hasSelection();
+			return true;
 		}
-		if (_selfOption.hasSelection() && !_birthdayOptions.hasSelection()) {
-			if (_selfOption.overrideKey(direction, from, to)) {
-				_skipUpDirectionSelect = _selfOption.hasSelection();
+		for (auto i = selected - 1; i >= 0; --i) {
+			sections[i]->overrideKey(direction, from, to);
+			if (sections[i]->hasSelection()) {
+				_skipUpDirectionSelect = true;
 				return true;
 			}
 		}
@@ -2243,6 +2282,9 @@ std::unique_ptr<PeerListRow> Controller::createRow(
 			return nullptr;
 		}
 	}
+	if (ranges::contains(_frequentUsers, user)) {
+		return nullptr;
+	}
 	if (user->isSelf()
 		|| user->isBot()
 		|| user->isServiceUser()
@@ -2256,7 +2298,12 @@ void Controller::prepareViewHook() {
 	auto list = object_ptr<Ui::VerticalLayout>((QWidget*)nullptr);
 	list->add(std::move(_selfOption.content));
 	list->add(std::move(_birthdayOptions.content));
+	list->add(std::move(_frequentOptions.content));
 	delegate()->peerListSetAboveWidget(std::move(list));
+}
+
+rpl::producer<QString> Controller::searchPlaceholder() const {
+	return tr::lng_gift_recipient_search();
 }
 
 void Controller::rowClicked(not_null<PeerListRow*> row) {
@@ -2264,6 +2311,27 @@ void Controller::rowClicked(not_null<PeerListRow*> row) {
 }
 
 } // namespace
+
+std::vector<not_null<UserData*>> CollectGiftFrequentUsers(
+		not_null<Main::Session*> session,
+		const std::vector<UserId> &exclude) {
+	auto result = std::vector<not_null<UserData*>>();
+	for (const auto &peer : session->topPeers().list()) {
+		const auto user = peer->asUser();
+		if (!user
+			|| user->isSelf()
+			|| user->isBot()
+			|| user->isServiceUser()
+			|| user->isInaccessible()) {
+			continue;
+		}
+		if (ranges::contains(exclude, peerToUser(user->id))) {
+			continue;
+		}
+		result.push_back(user);
+	}
+	return result;
+}
 
 void ChooseStarGiftRecipient(
 		not_null<Window::SessionController*> window) {
@@ -2860,7 +2928,7 @@ void UpdateGiftSellPrice(
 			const auto newAvailableAt = base::unixtime::now() + seconds;
 			unique->canResellAt = newAvailableAt;
 			ShowResaleGiftLater(show, unique);
-		} else {
+		} else if (!ShowGiftErrorToast(show, error)) {
 			show->showToast(type);
 		}
 	}).send();
@@ -3061,9 +3129,10 @@ void SendOfferBuyGift(
 		show->session().api().applyUpdates(result);
 		done(true);
 	}).fail([=](const MTP::Error &error) {
-		if (error.type() == u""_q) {
-		} else {
-			show->showToast(error.type());
+		const auto type = error.type();
+		if (type == u""_q) {
+		} else if (!ShowGiftErrorToast(show, error)) {
+			show->showToast(type);
 		}
 		done(false);
 	}).send();
@@ -4297,7 +4366,9 @@ void RequestOurForm(
 			show->showToast(tr::lng_edit_privacy_gifts_restricted(tr::now));
 			fail(Payments::CheckoutResult::Cancelled);
 		} else {
-			show->showToast(type);
+			if (!ShowGiftErrorToast(show, error)) {
+				show->showToast(type);
+			}
 			fail(Payments::CheckoutResult::Failed);
 		}
 	}).send();
@@ -4336,6 +4407,16 @@ void ShowGiftTransferredToast(
 				tr::marked),
 		.duration = kUpgradeDoneToastDuration,
 	});
+}
+
+bool ShowGiftErrorToast(
+		std::shared_ptr<Ui::Show> show,
+		const MTP::Error &error) {
+	if (error.type() == u"STARGIFT_ALREADY_BURNED"_q) {
+		show->showToast(tr::lng_gift_burned_message(tr::now));
+		return true;
+	}
+	return false;
 }
 
 CreditsAmount StarsFromTon(

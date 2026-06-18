@@ -298,6 +298,8 @@ public:
 		PeerId sublistPeerId) const;
 
 	[[nodiscard]] bool useSubsectionTabs() const;
+	[[nodiscard]] bool displaySubsectionTabs() const;
+	[[nodiscard]] bool displayAsForum() const;
 	[[nodiscard]] bool viewForumAsMessages() const;
 	void processTopics(const MTPVector<MTPForumTopic> &topics);
 
@@ -317,6 +319,7 @@ public:
 	[[nodiscard]] rpl::producer<bool> slowmodeAppliedValue() const;
 	[[nodiscard]] int slowmodeSecondsLeft() const;
 	[[nodiscard]] bool canManageGroupCall() const;
+	[[nodiscard]] bool canManageRanks() const;
 	[[nodiscard]] bool amMonoforumAdmin() const;
 
 	[[nodiscard]] int starsPerMessage() const;
@@ -460,8 +463,8 @@ public:
 
 	[[nodiscard]] bool canPinMessages() const;
 	[[nodiscard]] bool canEditMessagesIndefinitely() const;
-	[[nodiscard]] bool canCreatePolls() const;
-	[[nodiscard]] bool canCreateTodoLists() const;
+	[[nodiscard]] bool canCreatePolls(bool forbidInForums = true) const;
+	[[nodiscard]] bool canCreateTodoLists(bool forbidInForums = true) const;
 	[[nodiscard]] bool canCreateTopics() const;
 	[[nodiscard]] bool canManageTopics() const;
 	[[nodiscard]] bool canPostStories() const;
@@ -632,7 +635,7 @@ private:
 	crl::time _lastFullUpdate = 0;
 
 	QString _name;
-	uint32 _nameVersion : 29 = 1;
+	uint32 _nameVersion : 16 = 1;
 	uint32 _sensitiveContent : 1 = 0;
 	uint32 _wallPaperOverriden : 1 = 0;
 	uint32 _checkedTrustedPayForMessage : 1 = 0;
@@ -677,6 +680,7 @@ void SetTopPinnedMessageId(
 [[nodiscard]] uint64 BackgroundEmojiIdFromColor(const MTPPeerColor *color);
 [[nodiscard]] std::optional<uint8> ColorIndexFromColor(const MTPPeerColor *);
 
-[[nodiscard]] bool IsBotCanManageTopics(not_null<PeerData*>);
+[[nodiscard]] bool IsBotUserCreatesTopics(not_null<PeerData*>);
+[[nodiscard]] bool IsBotCreatesTopics(not_null<const PeerData*>);
 
 } // namespace Data

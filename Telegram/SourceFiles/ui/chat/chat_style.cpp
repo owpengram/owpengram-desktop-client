@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/ui_utility.h"
 #include "styles/style_chat.h"
 #include "styles/style_dialogs.h"
+#include "styles/style_polls.h"
 #include "styles/style_widgets.h"
 
 namespace Ui {
@@ -136,6 +137,24 @@ ColorIndexValues SimpleColorIndexValues(QColor color, int patternIndex) {
 	return result;
 }
 
+std::vector<Text::SpecialColor> SyntaxHighlightColors(
+		not_null<const style::palette*> palette) {
+	auto result = std::vector<Text::SpecialColor>();
+	result.reserve(8);
+	const auto push = [&](const style::color &color) {
+		result.push_back({ &color->p, &color->p });
+	};
+	push(palette->statisticsChartLineLightblue());
+	push(palette->statisticsChartLineRed());
+	push(palette->statisticsChartLineRed());
+	push(palette->statisticsChartLineOrange());
+	push(palette->statisticsChartLineRed());
+	push(palette->statisticsChartLineBlue());
+	push(palette->statisticsChartLinePurple());
+	push(palette->statisticsChartLineGreen());
+	return result;
+}
+
 int BackgroundEmojiData::CacheIndex(
 		bool selected,
 		bool outbg,
@@ -204,6 +223,7 @@ ChatStyle::ChatStyle(rpl::producer<ColorIndicesCompressed> colorIndices) {
 		_historyViewsSendingInvertedIcon,
 		st::historyViewsSendingInvertedIcon);
 	make(_historyPinInvertedIcon, st::historyPinInvertedIcon);
+	make(_historySilentInvertedIcon, st::historySilentInvertedIcon);
 	make(_historySendingIcon, st::historySendingIcon);
 	make(_historySendingInvertedIcon, st::historySendingInvertedIcon);
 	make(_historySentInvertedIcon, st::historySentInvertedIcon);
@@ -358,6 +378,12 @@ ChatStyle::ChatStyle(rpl::producer<ColorIndicesCompressed> colorIndices) {
 		st::historyPinInSelectedIcon,
 		st::historyPinOutIcon,
 		st::historyPinOutSelectedIcon);
+	make(
+		&MessageStyle::historySilentIcon,
+		st::historySilentInIcon,
+		st::historySilentInSelectedIcon,
+		st::historySilentOutIcon,
+		st::historySilentOutSelectedIcon);
 	make(
 		&MessageStyle::historySentIcon,
 		st::historySentIcon,
@@ -628,36 +654,7 @@ void ChatStyle::applyAdjustedServiceBg(QColor serviceBg) {
 
 std::span<Text::SpecialColor> ChatStyle::highlightColors() const {
 	if (_highlightColors.empty()) {
-		const auto push = [&](const style::color &color) {
-			_highlightColors.push_back({ &color->p, &color->p });
-		};
-
-		// comment, block-comment, prolog, doctype, cdata
-		push(statisticsChartLineLightblue());
-
-		// punctuation
-		push(statisticsChartLineRed());
-
-		// property, tag, boolean, number,
-		// constant, symbol, deleted
-		push(statisticsChartLineRed());
-
-		// selector, attr-name, string, char, builtin
-		push(statisticsChartLineOrange());
-
-		// operator, entity, url
-		push(statisticsChartLineRed());
-
-		// atrule, attr-value, keyword, function
-		push(statisticsChartLineBlue());
-
-		// class-name
-		push(statisticsChartLinePurple());
-
-		// inserted
-		push(statisticsChartLineGreen());
-		//push(statisticsChartLineLightgreen());
-		//push(statisticsChartLineGolden());
+		_highlightColors = SyntaxHighlightColors(this);
 	}
 	return _highlightColors;
 }
@@ -1116,6 +1113,7 @@ void ChatStyle::make(
 	my.linkAlwaysActive = original.linkAlwaysActive;
 	make(my.linkFg, original.linkFg);
 	make(my.monoFg, original.monoFg);
+	make(my.markBg, original.markBg);
 	make(my.spoilerFg, original.spoilerFg);
 	make(my.selectBg, original.selectBg);
 	make(my.selectFg, original.selectFg);

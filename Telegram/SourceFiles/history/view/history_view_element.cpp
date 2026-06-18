@@ -17,8 +17,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/media/history_view_sticker.h"
 #include "history/view/media/history_view_large_emoji.h"
 #include "history/view/media/history_view_custom_emoji.h"
+#include "history/view/media/history_view_no_forwards_request.h"
 #include "history/view/media/history_view_suggest_decision.h"
 #include "history/view/reactions/history_view_reactions_button.h"
+#include "history/view/history_view_reply_button.h"
 #include "history/view/reactions/history_view_reactions.h"
 #include "history/view/history_view_cursor_state.h"
 #include "history/view/history_view_reply.h"
@@ -36,7 +38,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 #include "chat_helpers/stickers_emoji_pack.h"
 #include "payments/payments_reaction_process.h" // TryAddingPaidReaction.
+#include "window/section_widget.h"
 #include "window/window_session_controller.h"
+#include "ui/chat/chat_style.h"
 #include "ui/effects/glare.h"
 #include "ui/effects/path_shift_gradient.h"
 #include "ui/effects/reaction_fly_animation.h"
@@ -64,6 +68,7 @@ namespace {
 
 // A new message from the same sender is attached to previous within 15 minutes.
 constexpr int kAttachMessageToPreviousSecondsDelta = 900;
+constexpr auto kMaxShownLine = 1024 * 1024;
 
 Element *HoveredElement/* = nullptr*/;
 Element *PressedElement/* = nullptr*/;
@@ -122,12 +127,9 @@ private:
 		friend inline constexpr auto operator<=>(
 			CacheKey,
 			CacheKey) = default;
-		friend inline constexpr bool operator==(
-			CacheKey,
-			CacheKey) = default;
 	};
 	mutable base::flat_map<CacheKey, CachedBg> _cachedBg;
-	mutable base::flat_map<BubbleRoundingKey, QPainterPath> _cachedOutline;
+	mutable base::flat_map<CacheKey, QPainterPath> _cachedOutline;
 	mutable std::unique_ptr<Ui::GlareEffect> _glare;
 	Fn<void()> _repaint;
 
@@ -189,7 +191,8 @@ void KeyboardStyle::paintButtonBg(
 	Expects(st != nullptr);
 
 	using Corner = Ui::BubbleCornerRounding;
-	auto &cachedBg = _cachedBg[CacheKey{ rounding.key(), color }];
+	const auto key = CacheKey{ rounding.key(), color };
+	auto &cachedBg = _cachedBg[key];
 
 	const auto sti = &st->imageStyle(false);
 	const auto ratio = style::DevicePixelRatio();
@@ -208,10 +211,10 @@ void KeyboardStyle::paintButtonBg(
 			using Color = HistoryMessageMarkupButton::Color;
 			const auto normal = (color == Color::Normal);
 			const auto colored = style::owned_color((color == Color::Primary)
-				? QColor(0x37, 0x8e, 0xae)
+				? st::botKbInlinePrimaryBg->c
 				: (color == Color::Danger)
-				? QColor(0xc9, 0x54, 0x3e)
-				: QColor(0x48, 0x9d, 0x38));
+				? st::botKbInlineDangerBg->c
+				: st::botKbInlineSuccessBg->c);
 			const auto smallColored = normal
 				? Ui::CornersPixmaps()
 				: Ui::PrepareCornerPixmaps(
@@ -238,7 +241,7 @@ void KeyboardStyle::paintButtonBg(
 					: Ui::CachedCornerRadius::BubbleSmall);
 			}
 			const auto r = Rect(rect.size());
-			_cachedOutline[rounding.key()] = Ui::ComplexRoundedRectPath(
+			_cachedOutline[key] = Ui::ComplexRoundedRectPath(
 				r - Margins(st::lineWidth),
 				radiuses[0],
 				radiuses[1],
@@ -312,8 +315,8 @@ void KeyboardStyle::paintButtonLoading(
 		return;
 	}
 
-	const auto cacheKey = rounding.key();
-	auto &cachedBg = _cachedBg[CacheKey{ cacheKey, color }];
+	const auto key = CacheKey{ rounding.key(), color };
+	auto &cachedBg = _cachedBg[key];
 	if (!cachedBg.image.isNull()) {
 		if (_glare && _glare->glare.birthTime) {
 			const auto progress = _glare->progress(crl::now());
@@ -331,7 +334,7 @@ void KeyboardStyle::paintButtonLoading(
 
 				auto path = QPainterPath();
 				path.addRect(Rect(rect.size()));
-				path -= _cachedOutline[cacheKey];
+				path -= _cachedOutline[key];
 
 				constexpr auto kBgOutlineAlpha = 0.5;
 				constexpr auto kFgOutlineAlpha = 0.8;
@@ -441,20 +444,24 @@ int KeyboardStyle::minButtonWidth(
 			break;
 		}
 		if (modification.added) {
-			++result.to;
+			result.to += modification.added;
 		}
 		const auto shiftTo = std::min(
 			int(modification.skipped),
 			result.to - modification.position);
 		result.to -= shiftTo;
-		if (modification.position <= result.from) {
+		if (modification.position < result.from) {
 			if (modification.added) {
-				++result.from;
+				result.from += modification.added;
 			}
 			const auto shiftFrom = std::min(
 				int(modification.skipped),
 				result.from - modification.position);
 			result.from -= shiftFrom;
+		} else if (modification.position == result.from) {
+			if (!modification.skipped) {
+				result.from += modification.added;
+			}
 		}
 	}
 	return result;
@@ -496,6 +503,16 @@ void DefaultElementDelegate::elementStartStickerLoop(
 void DefaultElementDelegate::elementShowPollResults(
 	not_null<PollData*> poll,
 	FullMsgId context) {
+}
+
+void DefaultElementDelegate::elementShowAddPollOption(
+	not_null<Element*> view,
+	not_null<PollData*> poll,
+	FullMsgId context,
+	QRect optionRect) {
+}
+
+void DefaultElementDelegate::elementSubmitAddPollOption(FullMsgId context) {
 }
 
 void DefaultElementDelegate::elementOpenPhoto(
@@ -1158,7 +1175,8 @@ Element::Element(
 		if (user
 			&& user->isBot()
 			&& !user->isRepliesChat()
-			&& !user->isVerifyCodes()) {
+			&& !user->isVerifyCodes()
+			&& !user->botManagerId()) {
 			AddComponents(FakeBotAboutTop::Bit());
 		}
 	}
@@ -1410,14 +1428,47 @@ void Element::overrideMedia(std::unique_ptr<Media> media) {
 	Expects(!history()->owner().groups().find(data()));
 
 	_text = Ui::Text::String(st::msgMinWidth);
-	_textWidth = -1;
-	_textHeight = 0;
+	invalidateTextSizeCache();
 
 	_media = std::move(media);
 	if (!pendingResize()) {
 		history()->owner().requestViewResize(this);
 	}
 	_flags |= Flag::MediaOverriden;
+}
+
+void Element::overrideRightBadge(const QString &text, BadgeRole role) {
+	if (text.isEmpty()) {
+		if (Has<RightBadge>()) {
+			Get<RightBadge>()->overridden = false;
+			RemoveComponents(RightBadge::Bit());
+		}
+		return;
+	}
+	if (!Has<RightBadge>()) {
+		AddComponents(RightBadge::Bit());
+	}
+	const auto badge = Get<RightBadge>();
+	badge->overridden = true;
+	badge->role = role;
+	badge->tag.setMarkedText(
+		st::defaultTextStyle,
+		{ text },
+		Ui::NameTextOptions());
+	badge->boosts.clear();
+	if (role == BadgeRole::User) {
+		badge->width = badge->tag.maxWidth();
+	} else {
+		const auto &padding = st::msgTagBadgePadding;
+		const auto tagTextWidth = badge->tag.maxWidth();
+		const auto contentWidth = padding.left()
+			+ tagTextWidth
+			+ padding.right();
+		const auto pillHeight = padding.top()
+			+ st::msgFont->height
+			+ padding.bottom();
+		badge->width = std::max(contentWidth, pillHeight);
+	}
 }
 
 not_null<PurchasedTag*> Element::enforcePurchasedTag() {
@@ -1507,6 +1558,16 @@ void Element::refreshMedia(Element *replacing) {
 				this,
 				std::make_unique<LargeEmoji>(this, emoji));
 		}
+	} else if (const auto nfr = item->Get<HistoryServiceNoForwardsRequest>()
+		; nfr && (!nfr->expired || nfr->actionTaken)) {
+		_media = std::make_unique<MediaGeneric>(
+			this,
+			GenerateNoForwardsRequestMedia(this, nfr),
+			MediaGenericDescriptor{
+				.maxWidth = st::chatSuggestInfoWidth,
+				.service = true,
+				.hideServiceText = true,
+			});
 	} else if (const auto decision = item->Get<HistoryServiceSuggestDecision>()) {
 		_media = std::make_unique<MediaGeneric>(
 			this,
@@ -1534,6 +1595,23 @@ Ui::Text::OnlyCustomEmoji Element::onlyCustomEmoji() const {
 	return _text.toOnlyCustomEmoji();
 }
 
+void Element::skipInactiveTextAppearing() {
+	if (pendingResize()) {
+		// This message isn't displayed right now,
+		// so we can skip text animation.
+		if (const auto appearing = Get<TextAppearing>()) {
+			appearing->widthAnimation.stop();
+			appearing->heightAnimation.stop();
+			appearing->shownLine = kMaxShownLine;
+			appearing->shownWidth
+				= appearing->shownHeight
+				= appearing->revealedLineWidth
+				= 0;
+			appearing->geometryValid = false;
+		}
+	}
+}
+
 const Ui::Text::String &Element::text() const {
 	return _text;
 }
@@ -1552,11 +1630,17 @@ OnlyEmojiAndSpaces Element::isOnlyEmojiAndSpaces() const {
 	}
 }
 
-int Element::textHeightFor(int textWidth) {
-	validateText();
+int Element::textHeightFor(int textWidth) const {
+	constexpr auto kMaxWidth = (1 << 16) - 1;
+	if (textWidth <= 0 || textWidth > kMaxWidth) {
+		return 0;
+	}
+	const_cast<Element*>(this)->validateText();
 	if (_textWidth != textWidth) {
 		_textWidth = textWidth;
-		_textHeight = _text.countHeight(textWidth);
+		const auto result = _text.countSize(textWidth);
+		_textRealWidth = std::clamp(result.width(), 0, kMaxWidth);
+		_textHeight = result.height();
 	}
 	return _textHeight;
 }
@@ -1624,19 +1708,25 @@ auto Element::contextDependentServiceText() -> TextWithLinks {
 
 	if (info->closed) {
 		return {
-			tr::lng_action_topic_closed(
+			tr::lng_action_topic_closed_by(
 				tr::now,
+				lt_from,
+				fromLink(1),
 				lt_topic,
 				wrapParentTopic(),
 				tr::marked),
+			{ from->createOpenLink() },
 		};
 	} else if (info->reopened) {
 		return {
-			tr::lng_action_topic_reopened(
+			tr::lng_action_topic_reopened_by(
 				tr::now,
+				lt_from,
+				fromLink(1),
 				lt_topic,
 				wrapParentTopic(),
 				tr::marked),
+			{ from->createOpenLink() },
 		};
 	} else if (info->hidden) {
 		return {
@@ -1819,20 +1909,20 @@ void Element::setTextWithLinks(
 		}
 	}
 	InitElementTextPart(this, _text);
-	_textWidth = -1;
-	_textHeight = 0;
+	if (const auto next = _text.nextFormattedDateUpdate()) {
+		history()->session().data().registerFormattedDateUpdate(next, this);
+	}
+	invalidateTextSizeCache();
 }
 
 void Element::validateTextSkipBlock(bool has, int width, int height) {
 	validateText();
 	if (!has) {
 		if (_text.removeSkipBlock()) {
-			_textWidth = -1;
-			_textHeight = 0;
+			invalidateTextSizeCache();
 		}
 	} else if (_text.updateSkipBlock(width, height)) {
-		_textWidth = -1;
-		_textHeight = 0;
+		invalidateTextSizeCache();
 	}
 }
 
@@ -1884,6 +1974,7 @@ bool Element::computeIsAttachToPrevious(not_null<Element*> previous) {
 		return !item->isService()
 			&& !item->isEmpty()
 			&& !item->isPostHidingAuthor()
+			&& !item->isGuestChatBotMessage()
 			&& (!item->history()->peer->isMegagroup()
 				|| !view->hasOutLayout()
 				|| !item->from()->isChannel());
@@ -1915,9 +2006,18 @@ bool Element::computeIsAttachToPrevious(not_null<Element*> previous) {
 					prevForwarded,
 					item,
 					forwarded);
-			} else {
-				return prev->from() == item->from();
+			} else if (prev->from() != item->from()) {
+			    return false;
+			} else if (!item->author()->isMegagroup()) {
+				return true;
 			}
+			const auto rank = [&](not_null<HistoryItem*> item) {
+			    const auto msgsigned = item->Get<HistoryMessageSigned>();
+				return (msgsigned && msgsigned->isAnonymousRank)
+					? msgsigned->author
+					: QString();
+			};
+			return rank(item) == rank(prev);
 		}
 	}
 	return false;
@@ -2376,6 +2476,9 @@ void Element::refreshReactions() {
 				}
 				const auto item = strong->data();
 				const auto controller = ExtractController(context);
+				const auto wasChosen = ranges::contains(
+					item->chosenReactions(),
+					id);
 				if (item->reactionsAreTags()) {
 					if (item->history()->session().premium()) {
 						const auto tag = Data::SearchTagToQuery(id);
@@ -2394,6 +2497,10 @@ void Element::refreshReactions() {
 						1,
 						std::nullopt,
 						controller->uiShow());
+					return;
+				} else if (!wasChosen
+					&& controller
+					&& Window::ShowReactPremiumError(controller, item, id)) {
 					return;
 				} else {
 					const auto source = HistoryReactionSource::Existing;
@@ -2465,17 +2572,22 @@ void Element::itemTextUpdated() {
 	_flags &= ~Flag::SummaryShown;
 	clearSpecialOnlyEmoji();
 	_text = Ui::Text::String(st::msgMinWidth);
-	_textWidth = -1;
-	_textHeight = 0;
+	invalidateTextSizeCache();
 	if (_media && !data()->media()) {
 		refreshMedia(nullptr);
 	}
 }
 
 void Element::blockquoteExpandChanged() {
-	_textWidth = -1;
-	_textHeight = 0;
+	invalidateTextSizeCache();
 	history()->owner().requestViewResize(this);
+}
+
+void Element::invalidateTextSizeCache() {
+	_textWidth = 0;
+	_textHeight = 0;
+	_textRealWidth = 0;
+	invalidateTextDependentCache();
 }
 
 void Element::unloadHeavyPart() {
@@ -2515,10 +2627,10 @@ void Element::attachToBlock(not_null<HistoryBlock*> block, int index) {
 	previousInBlocksChanged();
 }
 
-void Element::removeFromBlock() {
+void Element::removeFromBlock(Data::ViewRemovalReason reason) {
 	Expects(_block != nullptr);
 
-	_block->remove(this);
+	_block->remove(this, reason);
 }
 
 void Element::refreshInBlock() {
@@ -2617,16 +2729,23 @@ SelectedQuote Element::FindSelectedQuote(
 	for (const auto &modification : text.modifications()) {
 		if (modification.position >= selection.to) {
 			break;
-		} else if (modification.position <= selection.from) {
+		} else if (modification.position < selection.from) {
 			modified.from += modification.skipped;
-			if (modification.added
-				&& modification.position < selection.from) {
-				--modified.from;
+			if (modification.added) {
+				modified.from = uint16(std::max(
+					0,
+					int(modified.from) - int(modification.added)));
+			}
+		} else if (modification.position == selection.from) {
+			if (!modification.added) {
+				modified.from += modification.skipped;
 			}
 		}
 		modified.to += modification.skipped;
 		if (modification.added && modified.to > modified.from) {
-			--modified.to;
+			modified.to = uint16(std::max(
+				int(modified.from),
+				int(modified.to) - int(modification.added)));
 		}
 	}
 	auto result = item->originalText();
@@ -2649,6 +2768,7 @@ SelectedQuote Element::FindSelectedQuote(
 		EntityType::StrikeOut,
 		EntityType::Spoiler,
 		EntityType::CustomEmoji,
+		EntityType::FormattedDate,
 	};
 	for (auto i = result.entities.begin(); i != result.entities.end();) {
 		const auto offset = i->offset();
@@ -2755,6 +2875,12 @@ Reactions::ButtonParameters Element::reactionButtonParameters(
 	return {};
 }
 
+ReplyButton::ButtonParameters Element::replyButtonParameters(
+		QPoint position,
+		const TextState &replyState) const {
+	return {};
+}
+
 int Element::reactionsOptimalWidth() const {
 	return 0;
 }
@@ -2813,6 +2939,10 @@ auto Element::takeEffectAnimation()
 
 QRect Element::effectIconGeometry() const {
 	return QRect();
+}
+
+QPoint Element::mediaTopLeft() const {
+	return innerGeometry().topLeft();
 }
 
 Element::~Element() {
@@ -2988,6 +3118,127 @@ int FindViewTaskY(not_null<Element*> view, int taskId, int yfrom) {
 		}
 	}
 	return origin.y() + (yfrom + ytill) / 2;
+}
+
+int FindViewPollOptionY(
+		not_null<Element*> view,
+		const QByteArray &option,
+		int yfrom) {
+	auto request = HistoryView::StateRequest();
+	request.flags = Ui::Text::StateRequest::Flag::LookupLink;
+	const auto single = st::messageTextStyle.font->height;
+	const auto inner = view->innerGeometry();
+	const auto origin = inner.topLeft();
+	if (origin.y() < 0
+		|| origin.y() + inner.height() > view->height()
+		|| inner.height() <= 0) {
+		return yfrom;
+	}
+	const auto media = view->data()->media();
+	const auto poll = media ? media->poll() : nullptr;
+	if (!poll) {
+		return yfrom;
+	}
+	const auto &answers = poll->answers;
+	const auto indexOf = [&](const QByteArray &opt) -> int {
+		return int(ranges::find(
+			answers, opt, &PollAnswer::option) - begin(answers));
+	};
+	const auto index = indexOf(option);
+	const auto count = int(answers.size());
+	if (index == count) {
+		return yfrom;
+	}
+	yfrom = std::max(yfrom - origin.y(), 0);
+	auto ytill = inner.height() - 1;
+	const auto middle = (yfrom + ytill) / 2;
+	const auto fory = [&](int y) {
+		const auto state = view->textState(origin + QPoint(0, y), request);
+		const auto &link = state.link;
+		const auto opt = link
+			? link->property(kPollOptionProperty).toByteArray()
+			: QByteArray();
+		const auto idx = !opt.isEmpty() ? indexOf(opt) : count;
+		return (idx < count) ? idx : (y < middle) ? -1 : count;
+	};
+	auto indexfrom = fory(yfrom);
+	auto indextill = fory(ytill);
+	if ((yfrom >= ytill) || (indexfrom >= index)) {
+		return origin.y() + yfrom;
+	} else if (indextill <= index) {
+		return origin.y() + ytill;
+	}
+	while (ytill - yfrom >= 2 * single) {
+		const auto mid = (yfrom + ytill) / 2;
+		const auto found = fory(mid);
+		if (found == index
+			|| indexfrom > found
+			|| indextill < found) {
+			return origin.y() + mid;
+		} else if (found < index) {
+			yfrom = mid;
+			indexfrom = found;
+		} else {
+			ytill = mid;
+			indextill = found;
+		}
+	}
+	return origin.y() + (yfrom + ytill) / 2;
+}
+
+HighlightYRange FindHighlightYRange(
+		not_null<Element*> view,
+		const Ui::ChatPaintHighlight &highlight) {
+	const auto sel = highlight.range;
+	const auto single = st::messageTextStyle.font->height;
+	if (IsSubGroupSelection(sel)) {
+		const auto index = FirstGroupItemIndex(sel);
+		if (index < 0) {
+			return {};
+		}
+		const auto media = view->media();
+		if (!media) {
+			return {};
+		}
+		const auto rect = media->groupItemRect(index);
+		if (rect.isEmpty()) {
+			return {};
+		}
+		const auto inner = view->innerGeometry();
+		return {
+			inner.y() + rect.y() - 2 * single,
+			inner.y() + rect.y() + rect.height() + 2 * single,
+		};
+	}
+	if (highlight.todoItemId) {
+		const auto y = FindViewTaskY(view, highlight.todoItemId);
+		return { y - 4 * single, y + 4 * single };
+	}
+	if (!highlight.pollOption.isEmpty()) {
+		const auto y = FindViewPollOptionY(view, highlight.pollOption);
+		return { y - 4 * single, y + 4 * single };
+	}
+	if (!sel.empty()) {
+		const auto begin = FindViewY(view, sel.from) - single;
+		const auto end = FindViewY(view, sel.to, begin + single)
+			+ 2 * single;
+		return { begin, end };
+	}
+	return {};
+}
+
+int AdjustScrollForRange(
+		int viewTop,
+		int available,
+		HighlightYRange range) {
+	auto result = viewTop;
+	if (range.end > available) {
+		result = std::max(result, viewTop + range.end - available);
+	}
+	if (viewTop + range.begin < result) {
+		result = viewTop + range.begin;
+	}
+	return result;
 }
 
 Window::SessionController *ExtractController(const ClickContext &context) {

@@ -17,6 +17,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/random.h"
 #include "base/timer_rpl.h"
 #include "base/unixtime.h"
+#include "boxes/peers/choose_peer_box.h"
+#include "boxes/peers/create_managed_bot_box.h"
 #include "boxes/peer_list_controllers.h"
 #include "boxes/premium_preview_box.h"
 #include "boxes/share_box.h"
@@ -43,6 +45,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history.h"
 #include "history/history_item.h"
 #include "history/history_item_helpers.h"
+#include "history/history_item_reply_markup.h"
 #include "info/bot/starref/info_bot_starref_common.h" // MakePeerBubbleButton
 #include "info/profile/info_profile_values.h"
 #include "inline_bots/inline_bot_result.h"
@@ -67,6 +70,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/controls/userpic_button.h"
 #include "ui/effects/ripple_animation.h"
 #include "ui/painter.h"
+#include "ui/text/text_custom_emoji.h"
 #include "ui/text/text_utilities.h"
 #include "ui/toast/toast.h"
 #include "ui/vertical_list.h"
@@ -95,6 +99,26 @@ namespace {
 constexpr auto kProlongTimeout = 60 * crl::time(1000);
 constexpr auto kRefreshBotsTimeout = 60 * 60 * crl::time(1000);
 constexpr auto kPopularAppBotsLimit = 100;
+
+[[nodiscard]] QImage PaintButtonEmojiFrame(
+		Ui::Text::CustomEmoji &emoji,
+		const QColor &textColor,
+		int size) {
+	const auto ratio = style::DevicePixelRatio();
+	auto image = QImage(
+		QSize(size, size) * ratio,
+		QImage::Format_ARGB32_Premultiplied);
+	image.setDevicePixelRatio(ratio);
+	image.fill(Qt::transparent);
+	auto painter = Painter(&image);
+	emoji.paint(painter, Ui::Text::CustomEmoji::Context{
+		.textColor = textColor,
+		.size = QSize(size, size),
+		.now = crl::now(),
+		.position = QPoint(0, 0),
+	});
+	return image;
+}
 
 [[nodiscard]] DocumentData *ResolveIcon(
 		not_null<Main::Session*> session,
@@ -497,8 +521,8 @@ void ConfirmEmojiStatusAccessBox(
 
 	const auto statusIcon = ChatHelpers::GenerateLocalTgsSticker(
 		&bot->session(),
-		u"hello_status"_q);
-	statusIcon->overrideEmojiUsesTextColor(true);
+		u"hello_status"_q,
+		true);
 
 	auto ownedSet = MakeEmojiSetStatusPreview(
 		box,
@@ -861,6 +885,8 @@ WebViewInstance::WebViewInstance(WebViewDescriptor &&descriptor)
 , _context(ResolveContext(_bot, std::move(descriptor.context)))
 , _button(std::move(descriptor.button))
 , _source(std::move(descriptor.source)) {
+	Expects(_parentShow != nullptr);
+
 	resolve();
 }
 
@@ -934,7 +960,7 @@ void WebViewInstance::resolve() {
 	}, [&](WebViewSourceLinkBotProfile) {
 		confirmOpen([=] {
 			requestMain();
-		});
+		}, !_context.maySkipConfirmation);
 	}, [&](WebViewSourceLinkAttachMenu data) {
 		requestWithMenuAdd();
 	}, [&](WebViewSourceMainMenu) {
@@ -1036,9 +1062,10 @@ void WebViewInstance::resolveApp(
 	}).send();
 }
 
-void WebViewInstance::confirmOpen(Fn<void()> done) {
-	if (_bot->isVerified()
-		|| _session->local().isPeerTrustedOpenWebView(_bot->id)) {
+void WebViewInstance::confirmOpen(Fn<void()> done, bool forceConfirmation) {
+	if (!forceConfirmation
+		&& (_bot->isVerified()
+			|| _session->local().isPeerTrustedOpenWebView(_bot->id))) {
 		done();
 		return;
 	}
@@ -1340,18 +1367,15 @@ void WebViewInstance::show(ShowArgs &&args) {
 	auto title = args.title.isEmpty()
 		? Info::Profile::NameValue(_bot)
 		: rpl::single(args.title);
-	auto titleBadge = _bot->isVerified()
-		? object_ptr<Ui::RpWidget>(_parentShow->toastParent())
-		: nullptr;
-	if (titleBadge) {
-		const auto raw = titleBadge.data();
-		raw->paintRequest() | rpl::on_next([=] {
-			auto p = Painter(raw);
-			const auto w = raw->width();
+	auto titleBadge = Ui::TitleBadgeDescriptor();
+	if (_bot->isVerified()) {
+		titleBadge.size = st::infoVerifiedStar.size()
+			+ QSize(0, st::lineWidth);
+		titleBadge.paint = [](QPainter &p, QSize size) {
+			const auto w = size.width();
 			st::infoVerifiedStar.paint(p, st::lineWidth, 0, w);
 			st::infoPeerBadge.verifiedCheck.paint(p, st::lineWidth, 0, w);
-		}, raw->lifetime());
-		raw->resize(st::infoVerifiedStar.size() + QSize(0, st::lineWidth));
+		};
 	}
 
 	const auto &bots = _session->attachWebView().attachBots();
@@ -1483,6 +1507,10 @@ Webview::ThemeParams WebViewInstance::botThemeParams() {
 	return result;
 }
 
+Ui::Text::MarkedContext WebViewInstance::botTextContext() {
+	return Core::TextContext({ .session = _session });
+}
+
 auto WebViewInstance::botDownloads(bool forceCheck)
 -> const std::vector<Ui::BotWebView::DownloadsEntry> & {
 	return _session->attachWebView().downloads().list(_bot, forceCheck);
@@ -1496,7 +1524,7 @@ void WebViewInstance::botDownloadsAction(
 
 bool WebViewInstance::botHandleLocalUri(QString uri, bool keepOpen) {
 	const auto local = Core::TryConvertUrlToLocal(uri);
-	if (Core::InternalPassportLink(local)) {
+	if (Core::InternalPassportOrOAuthLink(local)) {
 		return true;
 	} else if (!local.startsWith(u"tg://"_q, Qt::CaseInsensitive)
 		&& !local.startsWith(u"tonsite://"_q, Qt::CaseInsensitive)
@@ -1971,6 +1999,90 @@ void WebViewInstance::botSendPreparedMessage(
 	}).send();
 }
 
+void WebViewInstance::botRequestChat(
+		Ui::BotWebView::RequestChatRequest request) {
+	const auto bot = _bot;
+	const auto callback = request.callback;
+	const auto requestId = request.requestId;
+	if (!_panel) {
+		callback(u"UNKNOWN_ERROR"_q);
+		return;
+	}
+	const auto show = uiShow();
+	bot->session().api().request(MTPbots_GetRequestedWebViewButton(
+		bot->inputUser(),
+		MTP_string(requestId)
+	)).done([show, bot, callback, requestId](
+			const MTPKeyboardButton &result) {
+		result.match([&](const MTPDkeyboardButtonRequestPeer &data) {
+			if (!*show) {
+				callback(u"UNKNOWN_ERROR"_q);
+				return;
+			}
+			const auto buttonId = data.vbutton_id();
+			const auto sendPeers = [=](
+					std::vector<not_null<PeerData*>> peers) {
+				using Flag = MTPmessages_SendBotRequestedPeer::Flag;
+				bot->session().api().request(
+					MTPmessages_SendBotRequestedPeer(
+						MTP_flags(Flag::f_webapp_req_id),
+						bot->input(),
+						MTPint(),
+						MTP_string(requestId),
+						buttonId,
+						MTP_vector_from_range(
+							peers | ranges::views::transform([](
+									not_null<PeerData*> peer) {
+								return MTPInputPeer(peer->input());
+							})))
+				).done([=](const MTPUpdates &result) {
+					bot->session().api().applyUpdates(result);
+					callback(QString());
+				}).fail([callback](const MTP::Error &error) {
+					callback(error.type());
+				}).send();
+			};
+			data.vpeer_type().match([&](
+					const MTPDrequestPeerTypeCreateBot &createData) {
+				ShowCreateManagedBotBox({
+					.show = show,
+					.manager = bot,
+					.suggestedName = qs(
+						createData.vsuggested_name().value_or_empty()),
+					.suggestedUsername = qs(
+						createData.vsuggested_username()
+							.value_or_empty()),
+					.done = [=](not_null<UserData*> createdBot) {
+						sendPeers({ createdBot });
+						show->showBox(Ui::MakeInformBox({
+							.text = tr::lng_managed_bot_created_text(
+								tr::now,
+								lt_parent_name,
+								bot->name()),
+							.title = tr::lng_managed_bot_created_title(
+								tr::now,
+								lt_name,
+								createdBot->name()),
+						}));
+					},
+					.cancelled = [=] {
+						callback(u"USER_DECLINED"_q);
+					},
+				});
+			}, [&](const auto &) {
+				const auto query = RequestPeerQueryFromTL(data);
+				ShowChoosePeerBox(show, bot, query, sendPeers, [=] {
+					callback(u"USER_DECLINED"_q);
+				});
+			});
+		}, [&](const auto &) {
+			callback(u"UNSUPPORTED_BUTTON_TYPE"_q);
+		});
+	}).fail([callback](const MTP::Error &error) {
+		callback(error.type());
+	}).send();
+}
+
 void WebViewInstance::botSetEmojiStatus(
 		Ui::BotWebView::SetEmojiStatusRequest request) {
 	const auto bot = _bot;
@@ -2033,6 +2145,70 @@ void WebViewInstance::botDownloadFile(
 	}).fail([=] {
 		done(QString());
 	}).send();
+}
+
+void WebViewInstance::botResolveButtonEmoji(
+		Ui::BotWebView::ResolveButtonEmojiRequest request) {
+	const auto panel = _panel.get();
+	if (!panel || !request.customEmojiId || request.size <= 0) {
+		request.callback(QImage());
+		return;
+	}
+	struct State {
+		Fn<void(QImage)> callback;
+		std::unique_ptr<Ui::Text::CustomEmoji> emoji;
+		QColor textColor;
+		int size = 0;
+		bool sent = false;
+	};
+	const auto state = std::make_shared<State>();
+	state->callback = std::move(request.callback);
+	state->textColor = request.textColor.isValid()
+		? request.textColor
+		: QColor(255, 255, 255);
+	state->size = request.size;
+	const auto weak = base::make_weak(panel);
+	const auto attempt = std::make_shared<Fn<void()>>();
+	const auto weakAttempt = std::weak_ptr<Fn<void()>>(attempt);
+	const auto weakState = std::weak_ptr<State>(state);
+	*attempt = [weak, weakState] {
+		const auto state = weakState.lock();
+		const auto panel = weak.get();
+		if (!state
+			|| state->sent
+			|| !panel
+			|| !state->emoji
+			|| !state->emoji->ready()) {
+			return;
+		}
+		state->sent = true;
+		state->callback(PaintButtonEmojiFrame(
+			*state->emoji,
+			state->textColor,
+			state->size));
+	};
+	const auto fail = [state] {
+		if (state->sent) {
+			return;
+		}
+		state->sent = true;
+		state->callback(QImage());
+	};
+	_session->data().customEmojiManager().resolve(
+		request.customEmojiId
+	) | rpl::on_next_error([=](not_null<DocumentData*> document) {
+		state->emoji = std::make_unique<Ui::Text::FirstFrameEmoji>(
+			_session->data().customEmojiManager().create(
+				document,
+				[weakAttempt] {
+					if (const auto attempt = weakAttempt.lock()) {
+						(*attempt)();
+					}
+				},
+				Data::CustomEmojiManager::SizeTag::Normal,
+				state->size));
+		(*attempt)();
+	}, fail, panel->lifetime());
 }
 
 void WebViewInstance::botVerifyAge(int age) {
@@ -2643,13 +2819,13 @@ std::unique_ptr<Ui::DropdownMenu> MakeAttachBotsMenu(
 		| ChatRestriction::SendStickers
 		| ChatRestriction::SendMusic
 		| ChatRestriction::SendFiles;
-	if (Data::CanSendAnyOf(peer, fileTypes)) {
+	if (Data::CanSendAnyOf(peer, fileTypes, false)) {
 		++minimal;
 		raw->addAction(tr::lng_attach_document(tr::now), [=] {
 			attach(false);
 		}, &st::menuIconFile);
 	}
-	if (peer->canCreatePolls()) {
+	if (peer->canCreatePolls(false)) {
 		++minimal;
 		raw->addAction(tr::lng_polls_menu_item(tr::now), [=] {
 			const auto action = actionFactory();
@@ -2660,19 +2836,19 @@ std::unique_ptr<Ui::DropdownMenu> MakeAttachBotsMenu(
 				|| action.history->peer->starsPerMessageChecked())
 				? SendMenu::Type::SilentOnly
 				: SendMenu::Type::Scheduled;
-			const auto flag = PollData::Flags();
+			const auto chosen = kDefaultPollCreateFlags;
 			Window::PeerMenuCreatePoll(
 				controller,
 				peer,
 				action.replyTo,
 				action.options.suggest,
-				flag,
-				flag,
+				chosen,
+				PollData::Flags(),
 				source,
 				{ sendMenuType });
 		}, &st::menuIconCreatePoll);
 	}
-	if (peer->canCreateTodoLists()) {
+	if (peer->canCreateTodoLists(false)) {
 		++minimal;
 		raw->addAction(tr::lng_todo_menu_item(tr::now), [=] {
 			const auto action = actionFactory();
@@ -2695,13 +2871,13 @@ std::unique_ptr<Ui::DropdownMenu> MakeAttachBotsMenu(
 	const auto session = &controller->session();
 	const auto locationType = ChatRestriction::SendOther;
 	const auto config = ResolveMapsConfig(session);
-	if (Data::CanSendAnyOf(peer, locationType)
+	if (Data::CanSendAnyOf(peer, locationType, false)
 		&& Ui::LocationPicker::Available(config)) {
 		raw->addAction(tr::lng_maps_point(tr::now), [=] {
 			ChooseAndSendLocation(controller, config, actionFactory());
 		}, &st::menuIconAddress);
 	}
-	const auto addBots = Data::CanSend(peer, ChatRestriction::SendInline)
+	const auto addBots = Data::CanSend(peer, ChatRestriction::SendInline, false)
 		&& !peer->starsPerMessageChecked();
 	for (const auto &bot : bots->attachBots()) {
 		if (!addBots

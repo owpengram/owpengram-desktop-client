@@ -1,6 +1,27 @@
-﻿# Agent Guide for Telegram Desktop
+# Agent Guide for Telegram Desktop
 
 This guide defines repository-wide instructions for coding agents working with the Telegram Desktop codebase.
+
+## Working from Codex on Windows + WSL
+
+This checkout may be opened in Codex Desktop through the Windows UNC path `\\wsl.localhost\{distro}\home\{user}\Telegram\tdesktop`, while the real Linux path is `/home/{user}/Telegram/tdesktop`. Treat it as a WSL/Linux checkout first, not as a native Windows checkout.
+
+- Prefer running repository-aware commands through WSL:
+
+```powershell
+wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- <command>
+```
+
+- PowerShell can read and write files through the UNC path, but native Windows tools may see different ownership, path, executable, or line-ending behavior than Linux tools.
+- Git from PowerShell over `\\wsl.localhost\...` can fail with `detected dubious ownership`. Use WSL Git instead. Do not change global Git `safe.directory` settings unless the user explicitly asks for that.
+- Keep path styles matched to the shell. Use `/home/{user}/Telegram/tdesktop/...` with WSL commands, and quoted `\\wsl.localhost\{distro}\home\{user}\Telegram\tdesktop\...` paths with native Windows commands. Avoid passing UNC paths to Linux tools or Linux paths to native Windows tools unless the tool explicitly supports them.
+- If a command behaves strangely from the PowerShell UNC working directory, retry the same command through `wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- ...` before concluding the repository or command is broken.
+- Recursive searches and repo inspection are usually faster and more faithful through WSL, for example `wsl.exe -d {distro} --cd /home/{user}/Telegram/tdesktop -- rg ...`.
+- Do not assume the WSL host has the build toolchain installed directly. In this setup, WSL may not have `cmake`, while Windows may have `cmake`, and the configured `out/` tree may still target the Linux Docker toolchain. Do not run native Windows `cmake --build out` against a Linux/Docker build tree.
+- For WSL/Linux builds, use the Docker build entry point from the repository root: `Telegram/build/docker/centos_env/build_debug.sh`. The Docker daemon must be reachable from WSL; checking `docker info` is fine, but do not start a build unless the user asked for one.
+- Existing build outputs may be Linux binaries, for example `out/Debug/Telegram` as an ELF executable, not `Telegram.exe`. Verify the build tree before assuming which platform produced it.
+- Be careful with text file line endings. In a WSL/Linux checkout, files should remain LF-only unless the file already uses another convention. CRLF finishing applies only to native, non-WSL Windows runs/checkouts. Do not let PowerShell or Windows tools silently rewrite WSL files to CRLF. If a file becomes mixed, normalize it back to the convention appropriate for the current checkout, without adding a UTF-8 BOM.
+- When using the local `task-think` skill from this WSL checkout, keep `.ai/...` artifacts and edited project text files LF-only. Treat the skill's Windows text-normalization phase as not applicable to WSL, except to record that line endings were checked and kept LF/no-BOM. Run CRLF normalization for `task-think` only in a native, non-WSL Windows checkout.
 
 ## Build System Structure
 
@@ -27,6 +48,12 @@ cmake --build out --config Debug --target Telegram
 ```
 
 That's it. The `out/` directory is already configured. The executable will be at `out/Debug/Telegram.exe`.
+
+**From WSL, run through the Linux Docker build environment:**
+
+```bash
+Telegram/build/docker/centos_env/build_debug.sh
+```
 
 **Important:** When running cmake from a shell that doesn't support `cd`, use quoted absolute paths:
 ```bash
@@ -96,6 +123,21 @@ Retrying builds wastes time and context. The ONLY fix is for the user to close t
 1. **Always use Debug builds** - Release builds are extremely heavy
 2. **Don't build Release configuration** - it's too heavy for testing
 
+## Text File Format
+
+- On Windows, keep project text files with CRLF line endings.
+- Do not save source, header, build/config, style, or localization files as UTF-8 with BOM. Use UTF-8 without BOM.
+- When rewriting project text files for normalization, preserve file content otherwise and do not introduce a BOM.
+
+## Local Storage Serialization
+
+Both app-level (`Core::Settings`) and session-level (`Main::SessionSettings`) use sequential binary serialization via `QDataStream`. Key rules:
+
+- New fields must ALWAYS be appended at the **end** of the stream, never inserted in the middle
+- Reading new fields must be guarded with `!stream.atEnd()` and provide a meaningful default/fallback
+- Inserting in the middle breaks reading of data saved by older versions (the new read code consumes bytes that belong to subsequent fields)
+- For simple flags and values, prefer using the generic KV prefs facility (`writePref<Type>` / `readPref<Type>`) instead of adding to the binary stream -- this avoids serialization ordering issues entirely
+
 ---
 
 # Development Guidelines
@@ -139,6 +181,38 @@ auto nameProducer = GetNameProducer();
 // Instead of this:
 QString currentTitle = tr::lng_settings_title(tr::now);
 rpl::producer<QString> nameProducer = GetNameProducer();
+```
+
+**Use trailing return types for long return types:**
+
+Never split a long return type onto the line before a function declaration or definition:
+
+```cpp
+// BAD:
+std::shared_ptr<PlaceholderBlockRuntime>
+getOrCreatePlaceholderRuntime(PreparedPlaceholderBlockId id);
+```
+
+Use `auto` with a trailing return type instead:
+
+```cpp
+// GOOD:
+auto getOrCreatePlaceholderRuntime(PreparedPlaceholderBlockId id)
+-> std::shared_ptr<PlaceholderBlockRuntime>;
+```
+
+This applies to both declarations and definitions. It keeps the method name at the front, makes scanning easier, and avoids orphaned return-type lines.
+
+**Use `_q` for QString literals:**
+
+Prefer the project literal `u"..."_q` instead of the verbose `QStringLiteral("...")` macro when creating `QString` values:
+
+```cpp
+// Prefer this:
+auto text = u"Settings"_q;
+
+// Instead of this:
+auto text = QStringLiteral("Settings");
 ```
 
 ## API Usage
@@ -186,9 +260,18 @@ api().request(MTPnamespace_MethodName(
 **Key points:**
 - Always refer to `api.tl` for method signatures and return types
 - Use generated `MTP...` types for parameters (`MTP_int`, `MTP_string`, etc.)
-- For multiple constructors, use `.match()` or check `.type()` then `.c_constructor()`
+- For multiple constructors, use `.match()` or check `.type()` against `mtpc_` constants then call `.c_constructorName()`:
+  ```cpp
+  // Using match:
+  result.match([&](const MTPDuser &data) { ... }, [&](const MTPDuserEmpty &data) { ... });
+  // Or explicit type check:
+  if (result.type() == mtpc_user) {
+      const auto &data = result.c_user(); // asserts on type mismatch
+  }
+  ```
 - For single constructors, use `.data()` shortcut
 - Include `.handleFloodErrors()` before `.send()` in rare cases where you want special case flood error handling
+- Silently ignore HTTP 406 errors in UI: the server uses 406 to mean "show nothing to the user". Guard toasts with `MTP::IgnoreError(error)` or use `MTP::ShowErrorFallback(show, error)` (both in `mtproto/mtproto_response.h`) which shows `error.type()` as a toast unless the error should be ignored.
 
 ## UI Styling
 
@@ -218,7 +301,8 @@ primaryButton: MyButtonStyle(defaultButton) {
 ```
 
 **Built-in types:**
-- `int` - Integer numbers
+- `int` - Integer numbers (e.g., `maxLines: 3;`)
+- `bool` - Boolean values (e.g., `useShadow: true;`)
 - `pixels` - Pixel values with `px` suffix (e.g., `10px`)
 - `color` - Named colors from `ui/colors.palette`
 - `icon` - Inline icon definition: `icon{{ "path/stem", color }}`
@@ -228,6 +312,22 @@ primaryButton: MyButtonStyle(defaultButton) {
 - `align` - Alignment: `align(center)`, `align(left)`
 - `font` - Font: `font(14px semibold)`
 - `double` - Floating point
+
+**Multi-part icons** (layers drawn bottom-up):
+```style
+myComplexIcon: icon{
+  { "gui/icons/background", iconBgColor },
+  { "gui/icons/foreground", iconFgColor }
+};
+```
+
+**Borders** are typically separate fields, not a single property:
+```style
+chatInput {
+  border: 1px;                       // width
+  borderFg: defaultInputFieldBorder; // color
+}
+```
 
 **Never hardcode sizes in code:**
 
@@ -246,6 +346,8 @@ widget->setFixedHeight(st::myWidgetHeight);
 auto margin = st::myWidgetMargin;
 auto iconSize = st::myWidgetIconSize;
 ```
+
+**Duration constants**: Animation durations should NOT go in `.style` files, this is a legacy approach. Prefer `constexpr auto kName = crl::time(N)` in an anonymous namespace in the relevant `.cpp` file.
 
 ### Usage in Code
 
@@ -311,6 +413,30 @@ auto filesTextProducer = tr::lng_files_selected(
 - Placeholders use `lt_tag_name, value` pattern
 - For `{count}`: immediate uses `int`, reactive uses `rpl::producer<float64>` with `| tr::to_count()`
 - Move producers with `std::move` when passing to placeholders
+- Rich text projectors — these `tr::` helpers serve double duty: as the **last argument** (projector) they set the return type to `TextWithEntities`, and as **placeholder values** they wrap individual substitutions in formatting. Always prefer them over `Ui::Text::Bold()`, `Ui::Text::RichLangValue`, etc. — see REVIEW.md for the full mapping.
+  - `tr::marked` — basic projection, converts `QString` to `TextWithEntities`
+  - `tr::rich` — interprets `**bold**`/`__italic__` markup in the string
+  - `tr::bold`, `tr::italic`, `tr::underline` — wrap text in that formatting
+  - `tr::link` — wrap as a clickable link
+  - `tr::url(u"https://..."_q)` — returns a projection that converts text to a link pointing to the given URL; can be passed to `rpl::map` or directly to a `tr::lng_...` call
+  ```cpp
+  // As last argument (projector):
+  auto title = tr::lng_export_progress_title(tr::now, tr::bold);
+  auto text = tr::lng_proxy_incorrect_secret(tr::now, tr::rich);
+  // As placeholder value wrapper + projector:
+  auto desc = tr::lng_some_key(
+      tr::now,
+      lt_name,
+      tr::bold(userName),
+      lt_group,
+      tr::bold(groupName),
+      tr::rich);
+  // Nested tr::lng as placeholder:
+  auto linked = tr::lng_settings_birthday_contacts(
+      lt_link,
+      tr::lng_settings_birthday_contacts_link(tr::url(link)),
+      tr::marked);
+  ```
 
 ## RPL (Reactive Programming Library)
 
@@ -370,9 +496,15 @@ std::move(merged) | rpl::on_next([=](QString &&value) {
 }, lifetime);
 ```
 
+**Other pipeline starters** — besides `rpl::on_next`, there are:
+- `rpl::on_error([=](Error &&e) { ... }, lifetime)` — handle errors
+- `rpl::on_done([=] { ... }, lifetime)` — handle stream completion
+- `rpl::on_next_error_done(nextCb, errorCb, doneCb, lifetime)` — handle all three
+
+The `Error` template parameter defaults to `rpl::no_error`: `rpl::producer<Type, Error = no_error>`.
+
 **Key points:**
 - Explicitly `std::move` producers when starting pipelines
 - Pass `rpl::lifetime` to `on_...` methods or store returned lifetime
 - Use `rpl::duplicate(producer)` to reuse a producer multiple times
-- Combined producers automatically unpack tuples in lambdas
-
+- Combined producers automatically unpack tuples in lambdas (works with `rpl::map`, `rpl::filter`, and `rpl::on_next`)

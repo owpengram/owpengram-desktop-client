@@ -19,6 +19,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/file_utilities.h"
 #include "core/mime_type.h"
 #include "data/business/data_shortcut_messages.h"
+#include "data/components/recent_inline_bots.h"
+#include "data/data_chat_participant_status.h"
 #include "data/data_message_reaction_id.h"
 #include "data/data_premium_limits.h"
 #include "data/data_session.h"
@@ -92,6 +94,7 @@ public:
 
 	[[nodiscard]] rpl::producer<QString> title() override;
 	[[nodiscard]] rpl::producer<> sectionShowBack() override;
+	bool processChosenSticker(ChatHelpers::FileChosen &&chosen) override;
 	void setInnerFocus() override;
 
 	rpl::producer<Info::SelectedItems> selectedListValue() override;
@@ -127,7 +130,8 @@ private:
 	void listMarkContentsRead(
 		const base::flat_set<not_null<HistoryItem*>> &items) override;
 	MessagesBarData listMessagesBar(
-		const std::vector<not_null<Element*>> &elements) override;
+		const std::vector<not_null<Element*>> &elements,
+		bool markLastAsRead) override;
 	void listContentRefreshed() override;
 	void listUpdateDateLink(
 		ClickHandlerPtr &link,
@@ -195,9 +199,6 @@ private:
 		std::optional<bool> overrideSendImagesAsPhotos = std::nullopt,
 		const QString &insertTextOnCancel = QString());
 	bool confirmSendingFiles(
-		const QStringList &files,
-		const QString &insertTextOnCancel);
-	bool confirmSendingFiles(
 		Ui::PreparedList &&list,
 		const QString &insertTextOnCancel = QString());
 	bool confirmSendingFiles(
@@ -205,15 +206,11 @@ private:
 		std::optional<bool> overrideSendImagesAsPhotos,
 		const QString &insertTextOnCancel = QString());
 	bool showSendingFilesError(const Ui::PreparedList &list) const;
-	bool showSendingFilesError(
-		const Ui::PreparedList &list,
-		std::optional<bool> compress) const;
+	bool showSendingFilesError(const Ui::PreparedBundle &bundle) const;
+
 	void sendingFilesConfirmed(
-		Ui::PreparedList &&list,
-		Ui::SendFilesWay way,
-		TextWithTags &&caption,
-		Api::SendOptions options,
-		bool ctrlShiftEnter);
+		std::shared_ptr<Ui::PreparedBundle> bundle,
+		Api::SendOptions options);
 
 	bool sendExistingDocument(
 		not_null<DocumentData*> document,
@@ -696,6 +693,12 @@ void ShortcutMessages::setupComposeControls() {
 		});
 	}, lifetime());
 
+	_composeControls->setSendAsFileConfirmed(crl::guard(this, [=](
+			std::shared_ptr<Ui::PreparedBundle> bundle,
+			Api::SendOptions options) {
+		sendingFilesConfirmed(std::move(bundle), options);
+	}));
+
 	_composeControls->fileChosen(
 	) | rpl::on_next([=](ChatHelpers::FileChosen data) {
 		_controller->hideLayer(anim::type::normal);
@@ -917,7 +920,8 @@ void ShortcutMessages::listMarkContentsRead(
 }
 
 MessagesBarData ShortcutMessages::listMessagesBar(
-		const std::vector<not_null<Element*>> &elements) {
+		const std::vector<not_null<Element*>> &elements,
+		bool markLastAsRead) {
 	return {};
 }
 
@@ -1143,40 +1147,21 @@ void ShortcutMessages::uploadFile(
 
 bool ShortcutMessages::showSendingFilesError(
 		const Ui::PreparedList &list) const {
-	return showSendingFilesError(list, std::nullopt);
-}
-
-bool ShortcutMessages::showSendingFilesError(
-		const Ui::PreparedList &list,
-		std::optional<bool> compress) const {
 	if (showPremiumRequired()) {
 		return true;
 	}
-	const auto text = [&] {
-		using Error = Ui::PreparedList::Error;
-		switch (list.error) {
-		case Error::None: return QString();
-		case Error::EmptyFile:
-		case Error::Directory:
-		case Error::NonLocalUrl: return tr::lng_send_image_empty(
-			tr::now,
-			lt_name,
-			list.errorData);
-		case Error::TooLargeFile: return u"(toolarge)"_q;
-		}
-		return tr::lng_forward_send_files_cant(tr::now);
-	}();
-	if (text.isEmpty()) {
-		return false;
-	} else if (text == u"(toolarge)"_q) {
-		const auto fileSize = list.files.back().size;
-		_controller->show(
-			Box(FileSizeLimitBox, _session, fileSize, nullptr));
+	const auto show = _controller->uiShow();
+	const auto peer = _controller->session().user();
+	return Data::ShowSendError(show, peer, list, std::nullopt, true);
+}
+
+bool ShortcutMessages::showSendingFilesError(
+		const Ui::PreparedBundle &bundle) const {
+	if (showPremiumRequired()) {
 		return true;
 	}
-
-	_controller->showToast(text);
-	return true;
+	const auto peer = _controller->session().user();
+	return Data::ShowSendError(_controller->uiShow(), peer, bundle, true);
 }
 
 Api::SendAction ShortcutMessages::prepareSendAction(
@@ -1251,7 +1236,7 @@ void ShortcutMessages::edit(
 	if (!TextUtilities::CutPart(sending, left, maxCaptionSize)
 		&& !hasMediaWithCaption) {
 		if (item) {
-			_controller->show(Box<DeleteMessagesBox>(item, false));
+			_controller->show(Box<DeleteMessagesBox>(item));
 		} else {
 			doSetInnerFocus();
 		}
@@ -1360,20 +1345,16 @@ bool ShortcutMessages::confirmSendingFiles(
 		SendMenu::Details());
 
 	box->setConfirmedCallback(crl::guard(this, [=](
-			Ui::PreparedList &&list,
-			Ui::SendFilesWay way,
-			TextWithTags &&caption,
+			std::shared_ptr<Ui::PreparedBundle> bundle,
 			Api::SendOptions options,
-			bool ctrlShiftEnter) {
-		sendingFilesConfirmed(
-			std::move(list),
-			way,
-			std::move(caption),
-			options,
-			ctrlShiftEnter);
+			FullReplyTo) {
+		sendingFilesConfirmed(std::move(bundle), options);
 	}));
 	box->setCancelledCallback(_composeControls->restoreTextCallback(
 		insertTextOnCancel));
+	box->takeTextWithTagsRequests() | rpl::on_next([=](TextWithTags &&text) {
+		_composeControls->setText(std::move(text));
+	}, box->lifetime());
 
 	//ActivateWindow(_controller);
 	_controller->show(std::move(box));
@@ -1399,41 +1380,21 @@ bool ShortcutMessages::confirmSendingFiles(
 }
 
 void ShortcutMessages::sendingFilesConfirmed(
-		Ui::PreparedList &&list,
-		Ui::SendFilesWay way,
-		TextWithTags &&caption,
-		Api::SendOptions options,
-		bool ctrlShiftEnter) {
-	Expects(list.filesToProcess.empty());
-
-	if (showSendingFilesError(list, way.sendImagesAsPhotos())) {
+		std::shared_ptr<Ui::PreparedBundle> bundle,
+		Api::SendOptions options) {
+	if (showSendingFilesError(*bundle)) {
 		return;
 	}
-	auto groups = DivideByGroups(
-		std::move(list),
-		way,
-		_history->peer->slowmodeApplied());
-	const auto type = way.sendImagesAsPhotos()
-		? SendMediaType::Photo
-		: SendMediaType::File;
+	const auto compress = bundle->way.sendImagesAsPhotos();
+	const auto type = compress ? SendMediaType::Photo : SendMediaType::File;
 	auto action = prepareSendAction(options);
 	action.clearDraft = false;
-	if ((groups.size() != 1 || !groups.front().sentWithCaption())
-		&& !caption.text.isEmpty()) {
-		auto message = Api::MessageToSend(action);
-		message.textWithTags = base::take(caption);
-		_session->api().sendMessage(std::move(message));
-	}
-	for (auto &group : groups) {
+	auto &api = _session->api();
+	for (auto &group : bundle->groups) {
 		const auto album = (group.type != Ui::AlbumType::None)
 			? std::make_shared<SendingAlbum>()
 			: nullptr;
-		_session->api().sendFiles(
-			std::move(group.list),
-			type,
-			base::take(caption),
-			album,
-			action);
+		api.sendFiles(std::move(group.list), type, album, action);
 	}
 	if (_composeControls->replyingToMessage() == action.replyTo) {
 		_composeControls->cancelReplyMessage();
@@ -1486,6 +1447,14 @@ void ShortcutMessages::finishSending() {
 	//if (_previewData && _previewData->pendingTill) previewCancel();
 	doSetInnerFocus();
 	showAtEnd();
+}
+
+bool ShortcutMessages::processChosenSticker(ChatHelpers::FileChosen &&chosen) {
+	if (!_composeControls) {
+		return false;
+	}
+	_composeControls->processChosenSticker(std::move(chosen));
+	return true;
 }
 
 void ShortcutMessages::showAtEnd() {
@@ -1570,17 +1539,7 @@ void ShortcutMessages::sendInlineResult(
 	//_saveDraftStart = crl::now();
 	//onDraftSave();
 
-	auto &bots = cRefRecentInlineBots();
-	const auto index = bots.indexOf(bot);
-	if (index) {
-		if (index > 0) {
-			bots.removeAt(index);
-		} else if (bots.size() >= RecentInlineBotsLimit) {
-			bots.resize(RecentInlineBotsLimit - 1);
-		}
-		bots.push_front(bot);
-		bot->session().local().writeRecentHashtagsAndBots();
-	}
+	bot->session().recentInlineBots().bump(bot);
 	finishSending();
 }
 

@@ -215,7 +215,9 @@ void ToggleStarGiftSaved(
 		if (const auto onstack = done) {
 			onstack(false);
 		}
-		show->showToast(error.type());
+		if (!Ui::ShowGiftErrorToast(show, error)) {
+			show->showToast(error.type());
+		}
 	}).send();
 }
 
@@ -271,7 +273,9 @@ void ConvertStarGift(
 				tr::rich));
 		done(true);
 	}).fail([=](const MTP::Error &error) {
-		show->showToast(error.type());
+		if (!Ui::ShowGiftErrorToast(show, error)) {
+			show->showToast(error.type());
+		}
 		done(false);
 	}).send();
 }
@@ -457,7 +461,8 @@ void FillCreditOptions(
 		rpl::producer<> showFinishes,
 		rpl::producer<QString> subtitle,
 		std::vector<Data::CreditTopupOption> preloadedTopupOptions,
-		bool dark) {
+		bool dark,
+		PeerId spendPurposePeerId) {
 	const auto options = container->add(
 		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
 			container,
@@ -651,6 +656,7 @@ void FillCreditOptions(
 					.amount = option.amount,
 					.extended = option.extended,
 					.giftPeerId = PeerId(option.giftBarePeerId),
+					.spendPurposePeerId = spendPurposePeerId,
 				};
 
 				const auto weak = base::make_weak(button);
@@ -1135,6 +1141,9 @@ void FillUniqueGiftMenu(
 			if (Ui::ShowCraftLaterError(show, unique)) {
 				return;
 			}
+			if (Ui::ShowCraftAddressError(show, unique)) {
+				return;
+			}
 			const auto savedId = EntryToSavedStarGiftId(&show->session(), e);
 			if (const auto window = show->resolveWindow()) {
 				Ui::ShowGiftCraftInfoBox(window, unique, savedId);
@@ -1604,6 +1613,9 @@ void GenericCreditsEntryBody(
 			if (Ui::ShowCraftLaterError(show, unique)) {
 				return;
 			}
+			if (Ui::ShowCraftAddressError(show, unique)) {
+				return;
+			}
 			const auto savedId = EntryToSavedStarGiftId(&show->session(), e);
 			if (const auto window = show->resolveWindow()) {
 				Ui::ShowGiftCraftInfoBox(window, unique, savedId);
@@ -1643,6 +1655,8 @@ void GenericCreditsEntryBody(
 					? tr::lng_credits_box_history_entry_posts_search(tr::now)
 					: e.premiumMonthsForStars
 					? tr::lng_premium_summary_title(tr::now)
+					: e.giftOffer
+					? tr::lng_credits_box_history_entry_gift_offer(tr::now)
 					: !e.title.isEmpty()
 					? e.title
 					: e.starrefCommission
@@ -3167,6 +3181,40 @@ void SmallBalanceBox(
 			}));
 	}();
 
+	const auto peerIfBotOrChannel = [owner](PeerId id) -> PeerId {
+		if (!id) {
+			return PeerId();
+		}
+		const auto peer = owner->peer(id);
+		if (const auto broadcast = peer->monoforumBroadcast()) {
+			return broadcast->id;
+		} else if (!peer->isBot() && !peer->isChannel()) {
+			return PeerId();
+		}
+		return id;
+	};
+	const auto purposePeerId = v::match(source, [](SmallBalanceBot value) {
+		return value.botId ? peerFromUser(value.botId) : PeerId();
+	}, [](SmallBalanceReaction value) {
+		return value.channelId ? peerFromChannel(value.channelId) : PeerId();
+	}, [=](SmallBalanceVideoStream value) {
+		return peerIfBotOrChannel(value.streamerId);
+	}, [](SmallBalanceSubscription) {
+		return PeerId();
+	}, [](SmallBalanceDeepLink) {
+		return PeerId();
+	}, [](SmallBalanceStarGift) {
+		return PeerId();
+	}, [=](SmallBalanceForMessage value) {
+		return peerIfBotOrChannel(value.recipientId);
+	}, [=](SmallBalanceForSuggest value) {
+		return peerIfBotOrChannel(value.recipientId);
+	}, [](SmallBalanceForOffer) {
+		return PeerId();
+	}, [](SmallBalanceForSearch) {
+		return PeerId();
+	});
+
 	FillCreditOptions(
 		show,
 		box->verticalLayout(),
@@ -3176,7 +3224,8 @@ void SmallBalanceBox(
 		box->showFinishes(),
 		tr::lng_credits_summary_options_subtitle(),
 		{},
-		dark);
+		dark,
+		purposePeerId);
 
 	content->setMaximumHeight(st::creditsLowBalancePremiumCoverHeight);
 	content->setMinimumHeight(st::infoLayerTopBarHeight);
@@ -3294,13 +3343,12 @@ void AddWithdrawalWidget(
 		buttonsContainer,
 		rpl::never<QString>(),
 		stButton);
+	button->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 
 	const auto buttonCredits = Ui::CreateChild<Ui::RoundButton>(
 		buttonsContainer,
 		tr::lng_bot_earn_balance_button_buy_ads(),
 		stButton);
-	buttonCredits->setTextTransform(
-		Ui::RoundButton::TextTransform::NoTransform);
 	{
 		const auto icon = Ui::CreateChild<Ui::RpWidget>(buttonCredits);
 		const auto &st = st::msgBotKbUrlIcon;

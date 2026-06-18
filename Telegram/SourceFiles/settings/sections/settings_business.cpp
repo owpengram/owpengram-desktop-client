@@ -152,7 +152,6 @@ using Order = std::vector<QString>;
 				tr::lng_business_subtitle_chatbots(),
 				tr::lng_business_about_chatbots(),
 				PremiumFeature::BusinessBots,
-				true,
 			},
 		},
 		{
@@ -617,7 +616,9 @@ void BuildBusinessSectionContent(
 			) | rpl::on_next(check, content->lifetime());
 
 			AddBusinessSummary(content, controller, state, [=](PremiumFeature feature) {
-				if (!session->premium()) {
+				const auto alwaysAvailable
+					= (feature == PremiumFeature::BusinessBots);
+				if (!alwaysAvailable && !session->premium()) {
 					if (state && state->setPaused) {
 						state->setPaused(true);
 					}
@@ -740,8 +741,8 @@ void Business::setupSwipeBack() {
 		}
 	};
 
-	auto init = [=](int, Qt::LayoutDirection direction) {
-		return (direction == Qt::RightToLeft)
+	auto init = [=](Ui::Controls::SwipeHandlerInitData data) {
+		return (data.direction == Qt::RightToLeft)
 			? DefaultSwipeBackHandlerFinishData([=] {
 				_showBack.fire({});
 			})
@@ -809,6 +810,7 @@ base::weak_qptr<Ui::RpWidget> Business::createPinnedToTop(
 				.logo = u"dollar"_q,
 				.title = std::move(title),
 				.about = std::move(about),
+				.use3dCoin = true,
 			});
 	}();
 	_state->setPaused = [=](bool paused) {

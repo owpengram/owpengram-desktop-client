@@ -91,11 +91,15 @@ constexpr auto kDefaultChargeStars = 10;
 			| Flag::SendInline, tr::lng_rights_chat_stickers(tr::now) },
 		{ Flag::EmbedLinks, tr::lng_rights_chat_send_links(tr::now) },
 		{ Flag::SendPolls, tr::lng_rights_chat_send_polls(tr::now) },
+		{ Flag::SendReactions, tr::lng_rights_chat_send_reactions(tr::now) },
 	};
 	auto second = std::vector<RestrictionLabel>{
 		{ Flag::AddParticipants, tr::lng_rights_chat_add_members(tr::now) },
 		{ Flag::CreateTopics, tr::lng_rights_group_add_topics(tr::now) },
 		{ Flag::PinMessages, tr::lng_rights_group_pin(tr::now) },
+		{ Flag::EditRank, (options.isUserSpecific
+			? tr::lng_rights_group_edit_rank_single
+			: tr::lng_rights_group_edit_rank)(tr::now) },
 		{ Flag::ChangeInfo, tr::lng_rights_group_info(tr::now) },
 	};
 	if (!options.isForum) {
@@ -136,6 +140,7 @@ constexpr auto kDefaultChargeStars = 10;
 		};
 		auto second = std::vector<AdminRightLabel>{
 			{ Flag::ManageCall, tr::lng_rights_group_manage_calls(tr::now) },
+			{ Flag::ManageRanks, tr::lng_rights_group_manage_ranks(tr::now) },
 			{ Flag::Anonymous, tr::lng_rights_group_anonymous(tr::now) },
 			{ Flag::AddAdmins, tr::lng_rights_add_admins(tr::now) },
 		};
@@ -301,6 +306,7 @@ ChatRestrictions NegateRestrictions(ChatRestrictions value) {
 		//| Flag::ViewMessages
 		| Flag::ChangeInfo
 		| Flag::EmbedLinks
+		| Flag::SendReactions
 		| Flag::AddParticipants
 		| Flag::CreateTopics
 		| Flag::PinMessages
@@ -315,7 +321,8 @@ ChatRestrictions NegateRestrictions(ChatRestrictions value) {
 		| Flag::SendMusic
 		| Flag::SendVoiceMessages
 		| Flag::SendFiles
-		| Flag::SendOther);
+		| Flag::SendOther
+		| Flag::EditRank);
 }
 
 auto Dependencies(ChatAdminRights)
@@ -1202,6 +1209,7 @@ void ShowEditPeerPermissionsBox(
 	}
 
 	static constexpr auto kSendRestrictions = Flag::EmbedLinks
+		| Flag::SendReactions
 		| Flag::SendGames
 		| Flag::SendGifs
 		| Flag::SendInline

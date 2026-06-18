@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 #include "history/history.h"
 #include "history/view/history_view_element.h"
+#include "history/view/history_view_message.h"
 #include "history/view/history_view_cursor_state.h"
 #include "history/view/media/history_view_media_common.h"
 #include "history/view/media/history_view_media_spoiler.h"
@@ -52,6 +53,18 @@ constexpr auto kStoryWidth = 720;
 constexpr auto kStoryHeight = 1280;
 
 using Data::PhotoSize;
+
+[[nodiscard]] bool IsHostedInstantViewMedia(not_null<const Element*> parent) {
+	return parent->Get<InstantViewMediaRuntime>() != nullptr;
+}
+
+[[nodiscard]] QSize PhotoDesiredMediaSize(
+		QSize dimensions,
+		bool hostedInstantView) {
+	return hostedInstantView
+		? NonEmptySize(style::ConvertScale(dimensions))
+		: CountDesiredMediaSize(dimensions);
+}
 
 } // namespace
 
@@ -196,24 +209,31 @@ QSize Photo::countOptimalSize() {
 	if (_serviceWidth > 0) {
 		return { int(_serviceWidth), int(_serviceWidth) };
 	}
+	const auto hostedInstantView = IsHostedInstantViewMedia(_parent);
 	const auto dimensions = photoSize();
-	const auto scaled = CountDesiredMediaSize(dimensions);
+	const auto scaled = PhotoDesiredMediaSize(dimensions, hostedInstantView);
+	const auto maxMediaWidth = hostedInstantView
+		? std::max(scaled.width(), st::maxMediaSize)
+		: st::maxMediaSize;
 	const auto minWidth = std::clamp(
 		_parent->minWidthForMedia(),
 		(_parent->hasBubble()
 			? st::historyPhotoBubbleMinWidth
 			: st::minPhotoSize),
-		st::maxMediaSize);
+		maxMediaWidth);
 	const auto maxActualWidth = qMax(scaled.width(), minWidth);
 	auto maxWidth = qMax(maxActualWidth, scaled.height());
 	auto minHeight = qMax(scaled.height(), st::minPhotoSize);
 	if (_parent->hasBubble()) {
+		const auto botTop = _parent->Get<FakeBotAboutTop>();
 		const auto captionMaxWidth = _parent->textualMaxWidth();
-		const auto maxWithCaption = qMin(st::msgMaxWidth, captionMaxWidth);
-		maxWidth = qMin(qMax(maxWidth, maxWithCaption), st::msgMaxWidth);
-		minHeight = adjustHeightForLessCrop(
-			dimensions,
-			{ maxWidth, minHeight });
+		if (botTop || !_parent->data()->isFakeAboutView()) {
+			const auto maxWithCaption = qMin(st::msgMaxWidth, captionMaxWidth);
+			maxWidth = qMin(qMax(maxWidth, maxWithCaption), st::msgMaxWidth);
+			minHeight = adjustHeightForLessCrop(
+				dimensions,
+				{ maxWidth, minHeight });
+		}
 	}
 	return { maxWidth, minHeight };
 }
@@ -222,7 +242,10 @@ QSize Photo::countCurrentSize(int newWidth) {
 	if (_serviceWidth) {
 		return { int(_serviceWidth), int(_serviceWidth) };
 	}
-	const auto thumbMaxWidth = qMin(newWidth, st::maxMediaSize);
+	const auto hostedInstantView = IsHostedInstantViewMedia(_parent);
+	const auto thumbMaxWidth = hostedInstantView
+		? std::max(newWidth, 1)
+		: qMin(newWidth, st::maxMediaSize);
 	const auto minWidth = std::clamp(
 		_parent->minWidthForMedia(),
 		qMin(thumbMaxWidth, _parent->hasBubble()
@@ -230,14 +253,15 @@ QSize Photo::countCurrentSize(int newWidth) {
 			: st::minPhotoSize),
 		thumbMaxWidth);
 	const auto dimensions = photoSize();
+	const auto desired = PhotoDesiredMediaSize(dimensions, hostedInstantView);
 	auto pix = _data->extendedMediaVideoDuration()
 		? CountMediaSize(
-			CountDesiredMediaSize(dimensions),
+			desired,
 			newWidth)
 		: CountPhotoMediaSize(
-			CountDesiredMediaSize(dimensions),
+			desired,
 			newWidth,
-			maxWidth());
+			hostedInstantView ? newWidth : maxWidth());
 	newWidth = qMax(pix.width(), minWidth);
 	auto newHeight = qMax(pix.height(), st::minPhotoSize);
 	if (_parent->hasBubble()) {
@@ -246,11 +270,15 @@ QSize Photo::countCurrentSize(int newWidth) {
 		if (botTop) {
 			accumulate_max(captionMaxWidth, botTop->maxWidth);
 		}
-		const auto maxWithCaption = qMin(st::msgMaxWidth, captionMaxWidth);
-		newWidth = qMin(qMax(newWidth, maxWithCaption), thumbMaxWidth);
-		newHeight = adjustHeightForLessCrop(
-			dimensions,
-			{ newWidth, newHeight });
+		if (botTop || !_parent->data()->isFakeAboutView()) {
+			const auto maxWithCaption = qMin(
+				st::msgMaxWidth,
+				captionMaxWidth);
+			newWidth = qMin(qMax(newWidth, maxWithCaption), thumbMaxWidth);
+			newHeight = adjustHeightForLessCrop(
+				dimensions,
+				{ newWidth, newHeight });
+		}
 	}
 	if (newWidth >= maxWidth()) {
 		newHeight = qMin(newHeight, minHeight());
@@ -293,6 +321,7 @@ void Photo::draw(Painter &p, const PaintContext &context) const {
 	const auto loaded = preview || _dataMedia->loaded();
 	const auto displayLoading = !preview && _data->displayLoading();
 
+	const auto hostedInstantView = IsHostedInstantViewMedia(_parent);
 	auto inWebPage = (_parent->media() != this);
 	auto paintx = 0, painty = 0, paintw = width(), painth = height();
 	auto bubble = _parent->hasBubble();
@@ -309,10 +338,12 @@ void Photo::draw(Painter &p, const PaintContext &context) const {
 	if (_serviceWidth > 0) {
 		paintUserpicFrame(p, context, rthumb.topLeft());
 	} else {
-		const auto rounding = inWebPage
+		const auto rounding = hostedInstantView
+			? std::optional<Ui::BubbleRounding>(Ui::BubbleRounding())
+			: inWebPage
 			? std::optional<Ui::BubbleRounding>()
 			: adjustedBubbleRounding();
-		if (!bubble) {
+		if (!bubble && !hostedInstantView) {
 			Assert(rounding.has_value());
 			fillImageShadow(p, rthumb, *rounding, context);
 		}
@@ -529,8 +560,8 @@ QImage Photo::prepareImageCacheWithLarge(QSize outer, Image *large) const {
 		blurred = thumbnail;
 	} else if (const auto small = _dataMedia->image(Size::Small)) {
 		blurred = small;
-	} else {
-		blurred = large;
+		} else {
+			blurred = large;
 	}
 	const auto resize = large
 		? ::Media::Streaming::DecideFrameResize(outer, large->size())
@@ -539,9 +570,9 @@ QImage Photo::prepareImageCacheWithLarge(QSize outer, Image *large) const {
 }
 
 void Photo::paintUserpicFrame(
-		Painter &p,
-		QPoint photoPosition,
-		bool markFrameShown) const {
+	Painter &p,
+	QPoint photoPosition,
+	bool markFrameShown) const {
 	const auto autoplay = _data->videoCanBePlayed()
 		&& videoAutoplayEnabled();
 	const auto startPlay = autoplay && !_streamed;
@@ -596,9 +627,9 @@ void Photo::paintUserpicFrame(
 }
 
 void Photo::paintUserpicFrame(
-		Painter &p,
-		const PaintContext &context,
-		QPoint photoPosition) const {
+	Painter &p,
+	const PaintContext &context,
+	QPoint photoPosition) const {
 	paintUserpicFrame(p, photoPosition, !context.paused);
 
 	if (_data->videoCanBePlayed() && !_streamed) {
@@ -628,6 +659,9 @@ void Photo::paintUserpicFrame(
 QSize Photo::photoSize() const {
 	if (_storyId) {
 		return { kStoryWidth, kStoryHeight };
+	} else if (_parent->data()->isFakeAboutView()
+		&& !_parent->Get<FakeBotAboutTop>()) {
+		return { st::managedBotImageWidth, st::managedBotImageHeight };
 	}
 	return QSize(_data->width(), _data->height());
 }

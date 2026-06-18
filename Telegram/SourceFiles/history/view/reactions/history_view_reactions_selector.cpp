@@ -359,10 +359,11 @@ int Selector::effectPreviewHeight() const {
 	if (_listMode != ChatHelpers::EmojiListMode::MessageEffects) {
 		return 0;
 	}
-	return st::previewMenu.shadow.extend.top()
+	const auto extend = Ui::BoxShadow::ExtendFor(st::previewMenu.shadow);
+	return extend.top()
 		+ HistoryView::Sticker::MessageEffectSize().height()
 		+ st::effectPreviewSend.height
-		+ st::previewMenu.shadow.extend.bottom();
+		+ extend.bottom();
 }
 
 QMargins Selector::marginsForShadow() const {
@@ -465,6 +466,10 @@ void Selector::setBubbleUp(bool bubbleUp) {
 	_bubbleUp = bubbleUp;
 }
 
+void Selector::setExpandDown(bool expandDown) {
+	_expandDown = expandDown;
+}
+
 void Selector::initGeometry(int innerTop) {
 	const auto margins = marginsForShadow();
 	const auto parent = parentWidget()->rect();
@@ -474,10 +479,11 @@ void Selector::initGeometry(int innerTop) {
 		? (innerWidth + margins.left() + margins.right())
 		: parent.width();
 	const auto forAbout = width - margins.left() - margins.right();
-	_collapsedTopSkip = _useTransparency
+	const auto categoriesAndAboutTop = _useTransparency
 		? (extendTopForCategoriesAndAbout(forAbout) + _specialExpandTopSkip)
 		: opaqueExtendTopAbout(forAbout);
-	_topAddOnExpand = _collapsedTopSkip - _aboutExtend;
+	_collapsedTopSkip = _expandDown ? _aboutExtend : categoriesAndAboutTop;
+	_topAddOnExpand = categoriesAndAboutTop - _aboutExtend;
 	const auto height = margins.top()
 		+ _aboutExtend
 		+ innerHeight
@@ -802,7 +808,7 @@ void Selector::paintNonTransparentExpandRect(
 		inner.y() + inner.height(),
 		inner.width(),
 		st::lineWidth,
-		st::defaultPopupMenu.shadow.fallback);
+		st::defaultPopupMenu.shadowFallback);
 }
 
 void Selector::paintExpanded(QPainter &p) {
@@ -996,11 +1002,24 @@ void Selector::expand() {
 		margins.top() + heightLimit + margins.bottom());
 	const auto additionalBottom = willBeHeight - height();
 	const auto additional = _specialExpandTopSkip + additionalBottom;
+	const auto additionalTop = _expandDown ? _topAddOnExpand : 0;
 	if (additionalBottom < 0 || additional <= 0) {
 		return;
-	} else if (additionalBottom > 0) {
-		resize(width(), height() + additionalBottom);
+	} else if (additionalBottom > 0 || additionalTop > 0) {
+		setGeometry(
+			x(),
+			y() - additionalTop,
+			width(),
+			height() + additionalTop + additionalBottom);
 		raise();
+		if (additionalTop > 0) {
+			_outer.translate(0, additionalTop);
+			_outerWithBubble.translate(0, additionalTop);
+			_inner.translate(0, additionalTop);
+			if (_about) {
+				_about->move(_about->x(), _about->y() + additionalTop);
+			}
+		}
 	}
 
 	createList();
@@ -1247,7 +1266,7 @@ bool AdjustMenuGeometryForSelector(
 		selector->effectPreviewHeight());
 	const auto willBeHeightWithoutBottomPadding = fullTop
 		+ height
-		- menu->st().shadow.extend.top();
+		- Ui::BoxShadow::ExtendFor(menu->st().shadow).top();
 	const auto additionalPaddingBottom
 		= (willBeHeightWithoutBottomPadding >= minimalHeight
 			? 0

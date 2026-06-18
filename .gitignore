@@ -54,6 +54,7 @@ stage
 *.*~
 .idea/
 cmake-build-debug/
+*.qsb
 
 # Local configuration files
 api_credentials.local.ps1
@@ -72,3 +73,5 @@ settings.local.json
 
 # Windows nul files (created by shell redirection)
 nul
+# Generated changelog page (built by CI, deployed to GitHub Pages)
+/docs/changelog/

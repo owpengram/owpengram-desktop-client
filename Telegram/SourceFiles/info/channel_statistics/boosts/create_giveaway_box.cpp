@@ -971,7 +971,8 @@ void CreateGiveawayBox(
 				Ui::SelectCountriesBox,
 				state->countriesValue.current(),
 				std::move(done),
-				std::move(error)));
+				std::move(error),
+				Countries::Naming::Default));
 		};
 
 		const auto createCallback = [=](GiveawayType type) {
@@ -1379,7 +1380,6 @@ void CreateGiveawayBox(
 			loadingAnimation->showOn(state->confirmButtonBusy.value());
 		}
 
-		button->setTextTransform(Ui::RoundButton::TextTransform::NoTransform);
 		state->typeValue.value(
 		) | rpl::on_next([=, raw = button.data()] {
 			raw->resizeToWidth(box->width()

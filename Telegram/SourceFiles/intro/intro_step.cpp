@@ -34,7 +34,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_user.h"
 #include "data/data_session.h"
 #include "data/data_auto_download.h"
-#include "mtproto/mtp_user_normalize.h"
 #include "data/data_chat_filters.h"
 #include "window/window_controller.h"
 #include "core/branding.h"
@@ -159,7 +158,7 @@ void Step::goReplace(Step *step, Animate animate) {
 
 void Step::finish(const MTPauth_Authorization &auth, QImage &&photo) {
 	auth.match([&](const MTPDauth_authorization &data) {
-		const auto user = MTP::NormalizeUser(data.vuser());
+		const auto user = data.vuser();
 		if (user.type() != mtpc_user || !user.c_user().is_self()) {
 			showError(rpl::single(Lang::Hard::ServerError())); // wtf?
 			return;
@@ -180,7 +179,7 @@ void Step::finish(const MTPauth_Authorization &auth, QImage &&photo) {
 }
 
 void Step::finish(const MTPUser &user, QImage &&photo) {
-	const auto normalized = MTP::NormalizeUser(user);
+	const auto normalized = user;
 	if (normalized.type() != mtpc_user
 		|| !normalized.c_user().is_self()
 		|| !normalized.c_user().vid().v) {

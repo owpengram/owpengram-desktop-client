@@ -146,6 +146,13 @@ QSize GroupedMedia::countOptimalSize() {
 			media->initDimensions();
 			accumulate_max(maxWidth, media->maxWidth());
 		}
+		auto index = 0;
+		for (const auto &part : _parts) {
+			const auto last = (++index == _parts.size());
+			accumulate_max(
+				maxWidth,
+				part.content->widenGroupingMaxWidth(maxWidth, last));
+		}
 	}
 	auto index = 0;
 	for (const auto &part : _parts) {
@@ -299,6 +306,15 @@ QMargins GroupedMedia::groupedPadding() const {
 		(normal.top() - grouped.top()) - topMinus,
 		0,
 		(normal.bottom() - grouped.bottom()) + addToBottom);
+}
+
+QRect GroupedMedia::groupItemRect(int index) const {
+	if (index >= 0 && index < int(_parts.size())) {
+		return _parts[index].geometry.translated(
+			0,
+			groupedPadding().top());
+	}
+	return {};
 }
 
 Media *GroupedMedia::lookupSpoilerTagMedia() const {
@@ -882,6 +898,19 @@ std::optional<PaidInformation> GroupedMedia::paidInformation() const {
 
 bool GroupedMedia::enforceBubbleWidth() const {
 	return _mode == Mode::Grid;
+}
+
+int GroupedMedia::contributedMaxMonospaceWidth() const {
+	if (_mode != Mode::Column) {
+		return 0;
+	}
+	auto result = 0;
+	for (const auto &part : _parts) {
+		accumulate_max(
+			result,
+			part.content->contributedMaxMonospaceWidth());
+	}
+	return result;
 }
 
 bool GroupedMedia::computeNeedBubble() const {

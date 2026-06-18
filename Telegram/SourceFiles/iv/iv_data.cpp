@@ -8,7 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "iv/iv_data.h"
 
 #include "iv/iv_prepare.h"
-#include "webview/webview_interface.h"
+#include "core/cached_webview_availability.h"
 
 #include <QtCore/QRegularExpression>
 #include <QtCore/QUrl>
@@ -71,6 +71,10 @@ bool Data::partial() const {
 
 Data::~Data() = default;
 
+const Source &Data::source() const {
+	return *_source;
+}
+
 void Data::updateCachedViews(int cachedViews) {
 	_source->updatedCachedViews = std::max(
 		_source->updatedCachedViews,
@@ -102,12 +106,9 @@ QString SiteNameFromUrl(const QString &url) {
 }
 
 bool ShowButton() {
-	static const auto Supported = [&] {
-		const auto availability = Webview::Availability();
-		return availability.customSchemeRequests
-			&& availability.customRangeRequests;
-	}();
-	return Supported;
+	const auto &availability = Core::CachedWebviewAvailability();
+	return availability.customSchemeRequests
+		&& availability.customRangeRequests;
 }
 
 void RecordShowFailure() {

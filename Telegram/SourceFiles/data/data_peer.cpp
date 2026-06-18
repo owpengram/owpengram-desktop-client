@@ -37,6 +37,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mtproto/mtproto_config.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
+#include "window/notifications_manager.h"
 #include "window/window_session_controller.h"
 #include "ui/image/image.h"
 #include "ui/chat/chat_style.h"
@@ -577,7 +578,7 @@ Data::FileOrigin PeerData::userpicOrigin() const {
 
 Data::FileOrigin PeerData::userpicPhotoOrigin() const {
 	return (isUser() && userpicPhotoId())
-		? Data::FileOriginUserPhoto(peerToUser(id).bare, userpicPhotoId())
+		? Data::FileOriginFullUser(peerToUser(id))
 		: Data::FileOrigin();
 }
 
@@ -689,7 +690,7 @@ bool PeerData::canPinMessages() const {
 	Unexpected("Peer type in PeerData::canPinMessages.");
 }
 
-bool PeerData::canCreatePolls() const {
+bool PeerData::canCreatePolls(bool forbidInForums) const {
 	if (const auto user = asUser()) {
 		return user->isSelf()
 			|| (user->isBot()
@@ -699,15 +700,16 @@ bool PeerData::canCreatePolls() const {
 	} else if (isMonoforum()) {
 		return false;
 	}
-	return Data::CanSend(this, ChatRestriction::SendPolls);
+	return Data::CanSend(this, ChatRestriction::SendPolls, forbidInForums);
 }
 
-bool PeerData::canCreateTodoLists() const {
+bool PeerData::canCreateTodoLists(bool forbidInForums) const {
 	if (isMonoforum() || isBroadcast()) {
 		return false;
 	}
 	return session().premium()
-		&& (Data::CanSend(this, ChatRestriction::SendPolls) || isUser());
+		&& (Data::CanSend(this, ChatRestriction::SendPolls, forbidInForums)
+			|| isUser());
 }
 
 bool PeerData::canCreateTopics() const {
@@ -1693,6 +1695,23 @@ bool PeerData::useSubsectionTabs() const {
 	return false;
 }
 
+bool PeerData::displayAsForum() const {
+	if (!isForum()) {
+		return false;
+	} else if (Data::IsBotCreatesTopics(this)) {
+		const auto forum = asBot()->botInfo->forum();
+		return forum && !forum->topicsList()->empty();
+	}
+	return true;
+}
+
+bool PeerData::displaySubsectionTabs() const {
+	if (asBot()) {
+		return displayAsForum();
+	}
+	return useSubsectionTabs();
+}
+
 bool PeerData::viewForumAsMessages() const {
 	if (const auto channel = asChannel()) {
 		return channel->viewForumAsMessages();
@@ -1707,8 +1726,8 @@ void PeerData::processTopics(const MTPVector<MTPForumTopic> &topics) {
 }
 
 bool PeerData::allowsForwarding() const {
-	if (isUser()) {
-		return true;
+	if (const auto user = asUser()) {
+		return user->allowsForwarding();
 	} else if (const auto channel = asChannel()) {
 		return channel->allowsForwarding();
 	} else if (const auto chat = asChat()) {
@@ -1861,6 +1880,17 @@ bool PeerData::canManageGroupCall() const {
 			|| (group->adminRights() & ChatAdminRight::ManageCall);
 	}
 	Unexpected("Peer type in PeerData::canManageGroupCall.");
+}
+
+bool PeerData::canManageRanks() const {
+	if (const auto chat = asChat()) {
+		return chat->amCreator()
+			|| (chat->adminRights() & ChatAdminRight::ManageRanks);
+	} else if (const auto channel = asChannel()) {
+		return channel->amCreator()
+			|| (channel->adminRights() & ChatAdminRight::ManageRanks);
+	}
+	return false;
 }
 
 bool PeerData::amMonoforumAdmin() const {
@@ -2060,6 +2090,7 @@ void PeerData::setIsBlocked(bool is) {
 			}
 		}
 		session().changes().peerUpdated(this, UpdateFlag::IsBlocked);
+		Core::App().notifications().checkDelayed();
 	}
 }
 
@@ -2214,9 +2245,16 @@ std::optional<uint8> ColorIndexFromColor(const MTPPeerColor *color) {
 	});
 }
 
-bool IsBotCanManageTopics(not_null<PeerData*> peer) {
+bool IsBotUserCreatesTopics(not_null<PeerData*> peer) {
 	if (const auto user = peer->asUser()) {
-		return user->botInfo && user->botInfo->canManageTopics;
+		return user->botInfo && user->botInfo->userCreatesTopics;
+	}
+	return false;
+}
+
+bool IsBotCreatesTopics(not_null<const PeerData*> peer) {
+	if (const auto user = peer->asUser()) {
+		return user->botInfo && !user->botInfo->userCreatesTopics;
 	}
 	return false;
 }
