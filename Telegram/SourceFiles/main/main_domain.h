@@ -92,10 +92,6 @@ public:
 
 private:
 	void activateAfterStarting();
-	// Blocks input with a modal while a freshly-activated account connects to its
-	// server; on timeout switches to a working account (Telegram if available).
-	void guardServerConnection(not_null<Main::Account*> account);
-	void switchToFallbackAccount(not_null<Main::Account*> failed);
 	void closeAccountWindows(not_null<Main::Account*> account);
 	bool removePasscodeIfEmpty();
 	void watchSession(not_null<Account*> account);

@@ -21,9 +21,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mtproto/facade.h"
 #include "mtproto/mtp_instance.h"
 #include "owpengram/owpengram_servers.h"
-#include "boxes/abstract_box.h"
-#include "boxes/owpengram_connecting_box.h"
-#include "ui/toast/toast.h"
 #include "storage/storage_domain.h"
 #include "storage/storage_account.h"
 #include "storage/localstorage.h"
@@ -444,69 +441,17 @@ void Domain::checkForLastProductionConfig(
 }
 
 void Domain::maybeActivate(not_null<Main::Account*> account) {
+	// Deliberately no connection guard here: switching accounts must be
+	// instant and never blocked on network state, so a self-hosted server
+	// that's temporarily offline still lets the user open that account and
+	// read whatever is already cached locally. Actual connection status
+	// resolves the normal way in the background afterward.
 	if (Core::App().separateWindowFor(account)) {
 		activate(account);
-		guardServerConnection(account);
 	} else {
 		Core::App().preventOrInvoke(crl::guard(account, [=] {
 			activate(account);
-			guardServerConnection(account);
 		}));
-	}
-}
-
-void Domain::guardServerConnection(not_null<Main::Account*> account) {
-	// Only authorized accounts have a live MTP instance to wait on.
-	if (!account->sessionExists()) {
-		return;
-	}
-	auto &mtp = account->mtp();
-	if (mtp.dcstate(mtp.mainDcId()) == MTP::ConnectedState) {
-		return; // Already connected: switch instantly, no modal needed.
-	}
-	const auto server = Owpengram::CurrentServerForAccount(account);
-	const auto box = Ui::show(Box<ConnectingBox>());
-	Owpengram::WaitForServerConnection(
-		account,
-		server,
-		crl::guard(account, [=](bool ok) {
-			if (box) {
-				box->closeBox();
-			}
-			if (!ok) {
-				switchToFallbackAccount(account);
-			}
-		}));
-}
-
-void Domain::switchToFallbackAccount(not_null<Main::Account*> failed) {
-	// Prefer the official Telegram account, otherwise any connected account.
-	Main::Account *telegram = nullptr;
-	Main::Account *anyConnected = nullptr;
-	for (const auto &one : _accounts) {
-		const auto raw = one.account.get();
-		if (raw == failed.get() || !raw->sessionExists()) {
-			continue;
-		}
-		auto &mtp = raw->mtp();
-		if (mtp.dcstate(mtp.mainDcId()) != MTP::ConnectedState) {
-			continue;
-		}
-		if (!anyConnected) {
-			anyConnected = raw;
-		}
-		if (Owpengram::CurrentServerForAccount(raw).isTelegram) {
-			telegram = raw;
-			break;
-		}
-	}
-	const auto target = telegram ? telegram : anyConnected;
-	if (target) {
-		Ui::Toast::Show(
-			u"Connection failed — switched to a working account."_q);
-		activate(target);
-	} else {
-		Ui::Toast::Show(u"Connection failed."_q);
 	}
 }
 
