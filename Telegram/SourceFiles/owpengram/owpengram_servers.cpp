@@ -642,10 +642,10 @@ void CheckServerOnline(
 	});
 }
 
-void FetchServerPublicKey(
+void FetchServerInfo(
 		const QString &host,
 		int port,
-		Fn<void(std::optional<QString> pem)> done) {
+		Fn<void(std::optional<ServerInfoFetchResult> result)> done) {
 	if (host.isEmpty() || port <= 0) {
 		done(std::nullopt);
 		return;
@@ -694,12 +694,17 @@ void FetchServerPublicKey(
 			fail();
 			return;
 		}
-		const auto pem = document.object().value("rsa_public_key_pem").toString();
+		const auto object = document.object();
+		const auto pem = object.value("rsa_public_key_pem").toString();
 		if (pem.isEmpty()) {
 			fail();
 			return;
 		}
-		crl::on_main([=]() mutable { done(pem); });
+		const auto result = ServerInfoFetchResult{
+			.rsaPublicKeyPem = pem,
+			.dcId = object.value("dc_id").toInt(),
+		};
+		crl::on_main([=]() mutable { done(result); });
 	});
 }
 

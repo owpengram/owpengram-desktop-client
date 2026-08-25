@@ -98,15 +98,21 @@ void CheckServerOnline(
 	const Server &server,
 	Fn<void(bool online, int latencyMs)> done);
 
-// Fetches the server's RSA public key from its well-known same-port HTTP
-// endpoint (GET host:port/owpengram/server-info), so "Add Server" can be
-// filled in from just host:port instead of a manual PEM copy-paste. Calls
-// done(pem) on success, done(std::nullopt) on any failure (offline,
-// unsupported server, malformed response) -- always on the main thread.
-void FetchServerPublicKey(
+struct ServerInfoFetchResult {
+	QString rsaPublicKeyPem;
+	int dcId = 0;
+};
+
+// Fetches the server's RSA public key and home DC id from its well-known
+// same-port HTTP endpoint (GET host:port/owpengram/server-info), so "Add
+// Server" can be filled in from just host:port instead of manual PEM
+// copy-paste + guessing the DC id. Calls done(result) on success,
+// done(std::nullopt) on any failure (offline, unsupported server, malformed
+// response) -- always on the main thread.
+void FetchServerInfo(
 	const QString &host,
 	int port,
-	Fn<void(std::optional<QString> pem)> done);
+	Fn<void(std::optional<ServerInfoFetchResult> result)> done);
 
 // Calls done(true) once the account's MTP is connected to the given server,
 // or done(false) after a 30s timeout.

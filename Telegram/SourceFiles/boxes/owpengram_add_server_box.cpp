@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/owpengram_add_server_box.h"
 
 #include "core/file_utilities.h"
+#include "info/channel_statistics/boosts/giveaway/boost_badge.h"
 #include "lang/lang_keys.h"
 #include "ui/effects/ripple_animation.h"
 #include "ui/image/image.h"
@@ -21,11 +22,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/wrap/vertical_layout.h"
 #include "styles/style_intro.h"
 #include "styles/style_layers.h"
+#include "styles/style_widgets.h"
 
 namespace {
 
 constexpr auto kBoxWidth = 700;
 constexpr auto kAvatarGap = 14;
+constexpr auto kAddressSpinnerSize = 20;
+constexpr auto kFetchDebounceMs = crl::time(500);
 
 // ── Avatar circle picker ──────────────────────────────────────────────────
 
@@ -240,66 +244,100 @@ AddServerBox::AddServerBox(
 			st::defaultInputField,
 			tr::lng_owpengram_server_host_hint()),
 		st::boxRowPadding);
+	_addressSpinner = Info::Statistics::InfiniteRadialAnimationWidget(
+		_address,
+		kAddressSpinnerSize,
+		&st::defaultInfiniteRadialAnimation);
+	_addressSpinner->hide();
+	_address->sizeValue(
+	) | rpl::on_next([=](QSize size) {
+		_addressSpinner->moveToRight(
+			0,
+			(size.height() - kAddressSpinnerSize) / 2,
+			size.width());
+	}, _address->lifetime());
 
 	_content->add(object_ptr<Ui::FixedHeightWidget>(
 		_content,
 		st::introServerAddSectionSkip));
 
-	// ── server type ───────────────────────────────────────────────────────
-	_content->add(
-		object_ptr<Ui::FlatLabel>(
+	// ── advanced (collapsed by default -- everything below only matters
+	// for servers that don't serve their key/DC over /owpengram/server-info,
+	// or to override what auto-fetch filled in) ───────────────────────────
+	_advancedToggle = _content->add(
+		object_ptr<Ui::LinkButton>(
 			_content,
-			u"Server type"_q,
-			st::boxLabel),
+			u"Advanced"_q,
+			st::defaultLinkButton),
 		st::boxRowPadding);
+	_advancedToggle->setClickedCallback([=] { toggleAdvanced(); });
+
 	_content->add(object_ptr<Ui::FixedHeightWidget>(_content, 6));
-	_content->add(
-		object_ptr<RadioTypeRow>(_content, _typeGroup),
-		st::boxRowPadding);
 
-	_content->add(object_ptr<Ui::FixedHeightWidget>(
-		_content,
-		st::introServerAddSectionSkip / 2));
-
-	// ── main DC (single-server only) ─────────────────────────────────────
-	_mainDcWrap = _content->add(
+	_advancedWrap = _content->add(
 		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
 			_content,
 			object_ptr<Ui::VerticalLayout>(_content)));
 	{
-		const auto inner = _mainDcWrap->entity();
-		inner->add(
+		const auto advanced = _advancedWrap->entity();
+
+		// ── server type ─────────────────────────────────────────────────
+		advanced->add(
 			object_ptr<Ui::FlatLabel>(
-				inner,
-				u"Main data center"_q,
+				advanced,
+				u"Server type"_q,
 				st::boxLabel),
 			st::boxRowPadding);
-		_mainDcField = inner->add(
-			object_ptr<Ui::InputField>(
-				inner,
-				st::defaultInputField,
-				rpl::single(u"1..5"_q),
-				u"2"_q),
+		advanced->add(object_ptr<Ui::FixedHeightWidget>(advanced, 6));
+		advanced->add(
+			object_ptr<RadioTypeRow>(advanced, _typeGroup),
 			st::boxRowPadding);
-		inner->add(object_ptr<Ui::FixedHeightWidget>(
-			inner,
-			st::introServerAddSectionSkip / 2));
-	}
 
-	// ── RSA key ───────────────────────────────────────────────────────────
-	_content->add(
-		object_ptr<Ui::FlatLabel>(
-			_content,
-			tr::lng_owpengram_server_rsa_key(tr::now),
-			st::boxLabel),
-		st::boxRowPadding);
-	_rsaPublicKey = _content->add(
-		object_ptr<Ui::InputField>(
-			_content,
-			st::defaultInputField,
-			Ui::InputField::Mode::MultiLine,
-			tr::lng_owpengram_server_rsa_key_hint()),
-		st::boxRowPadding);
+		advanced->add(object_ptr<Ui::FixedHeightWidget>(
+			advanced,
+			st::introServerAddSectionSkip / 2));
+
+		// ── main DC (single-server only) ────────────────────────────────
+		_mainDcWrap = advanced->add(
+			object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+				advanced,
+				object_ptr<Ui::VerticalLayout>(advanced)));
+		{
+			const auto inner = _mainDcWrap->entity();
+			inner->add(
+				object_ptr<Ui::FlatLabel>(
+					inner,
+					u"Main data center"_q,
+					st::boxLabel),
+				st::boxRowPadding);
+			_mainDcField = inner->add(
+				object_ptr<Ui::InputField>(
+					inner,
+					st::defaultInputField,
+					rpl::single(u"1..5"_q),
+					u"2"_q),
+				st::boxRowPadding);
+			inner->add(object_ptr<Ui::FixedHeightWidget>(
+				inner,
+				st::introServerAddSectionSkip / 2));
+		}
+
+		// ── RSA key ──────────────────────────────────────────────────────
+		advanced->add(
+			object_ptr<Ui::FlatLabel>(
+				advanced,
+				tr::lng_owpengram_server_rsa_key(tr::now),
+				st::boxLabel),
+			st::boxRowPadding);
+		_rsaPublicKey = advanced->add(
+			object_ptr<Ui::InputField>(
+				advanced,
+				st::defaultInputField,
+				Ui::InputField::Mode::MultiLine,
+				tr::lng_owpengram_server_rsa_key_hint()),
+			st::boxRowPadding);
+	}
+	_advancedWrap->toggle(false, anim::type::instant);
 
 	_content->add(object_ptr<Ui::FixedHeightWidget>(
 		_content,
@@ -310,11 +348,18 @@ AddServerBox::AddServerBox(
 		_mainDcWrap->toggle(value == 0, anim::type::normal);
 	});
 
-	// ── auto-fetch the RSA key once the user finishes typing an address ───
+	// ── auto-fetch the key + DC as the user types the address (debounced),
+	// and immediately on losing focus (covers paste-then-tab-away) ────────
+	_address->changes(
+	) | rpl::on_next([=] {
+		_fetchDebounce.callOnce(kFetchDebounceMs);
+	}, _address->lifetime());
+	_fetchDebounce.setCallback([=] { fetchPublicKeyForAddress(); });
 	_address->focusedChanges(
 	) | rpl::filter([](bool focused) {
 		return !focused;
 	}) | rpl::on_next([=] {
+		_fetchDebounce.cancel();
 		fetchPublicKeyForAddress();
 	}, lifetime());
 
@@ -332,6 +377,10 @@ AddServerBox::AddServerBox(
 		}
 		_rsaPublicKey->setText(existing.rsaPublicKey);
 		_mainDcWrap->toggle(!existing.multiDc, anim::type::instant);
+		// Show what's already configured instead of hiding it behind a
+		// click -- Advanced only collapses by default for the new-server,
+		// auto-fetch-does-everything case.
+		toggleAdvanced();
 	}
 }
 
@@ -376,6 +425,14 @@ void AddServerBox::chooseLogo() {
 		crl::guard(this, callback));
 }
 
+void AddServerBox::toggleAdvanced() {
+	_advancedExpanded = !_advancedExpanded;
+	_advancedWrap->toggle(_advancedExpanded, anim::type::normal);
+	_advancedToggle->setText(_advancedExpanded
+		? u"Hide advanced"_q
+		: u"Advanced"_q);
+}
+
 void AddServerBox::fetchPublicKeyForAddress() {
 	const auto address = _address->getLastText().trimmed();
 	if (address.isEmpty() || address == _lastFetchedAddress) {
@@ -385,27 +442,22 @@ void AddServerBox::fetchPublicKeyForAddress() {
 	if (host.isEmpty() || port <= 0) {
 		return;
 	}
-	// Only auto-fill while the key field is empty or still holds our own
-	// previous auto-fetched value -- never clobber a manually pasted key.
-	const auto current = _rsaPublicKey->getLastText().trimmed();
-	if (!current.isEmpty() && current != _autoFetchedRsaPublicKey) {
-		return;
-	}
 	_lastFetchedAddress = address;
-	Owpengram::FetchServerPublicKey(host, port, crl::guard(this, [=](
-			std::optional<QString> pem) {
-		if (!pem || _lastFetchedAddress != address) {
+	_addressSpinner->show();
+	Owpengram::FetchServerInfo(host, port, crl::guard(this, [=](
+			std::optional<Owpengram::ServerInfoFetchResult> result) {
+		_addressSpinner->hide();
+		if (!result || _lastFetchedAddress != address) {
 			return;
 		}
-		const auto stillDefault = [&] {
-			const auto now = _rsaPublicKey->getLastText().trimmed();
-			return now.isEmpty() || now == _autoFetchedRsaPublicKey;
-		}();
-		if (!stillDefault) {
-			return;
+		// Always overwrite -- the server is the source of truth once it
+		// answers, even if the user had typed/pasted something already.
+		if (!result->rsaPublicKeyPem.isEmpty()) {
+			_rsaPublicKey->setText(result->rsaPublicKeyPem);
 		}
-		_autoFetchedRsaPublicKey = *pem;
-		_rsaPublicKey->setText(*pem);
+		if (result->dcId > 0 && _mainDcField) {
+			_mainDcField->setText(QString::number(result->dcId));
+		}
 	}));
 }
 

@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "base/timer.h"
 #include "ui/layers/box_content.h"
 #include "ui/wrap/slide_wrap.h"
 #include "owpengram/owpengram_servers.h"
@@ -18,6 +19,8 @@ namespace Ui {
 class InputField;
 class VerticalLayout;
 class RadiobuttonGroup;
+class LinkButton;
+class RpWidget;
 } // namespace Ui
 
 class AddServerBox : public Ui::BoxContent {
@@ -43,20 +46,24 @@ private:
 	Fn<void()> _refreshAvatar;
 
 	void fetchPublicKeyForAddress();
+	void toggleAdvanced();
 
 	Ui::InputField *_name = nullptr;
 	Ui::InputField *_description = nullptr;
 	Ui::InputField *_address = nullptr;
 	Ui::InputField *_rsaPublicKey = nullptr;
 	Ui::InputField *_mainDcField = nullptr;
+	Ui::RpWidget *_addressSpinner = nullptr;
 
-	// Guards the auto-fetched key against clobbering text the user typed
-	// by hand -- only overwrite while the field still holds what we fetched.
-	QString _autoFetchedRsaPublicKey;
+	// Suppresses re-fetching for an address we already have a result for.
 	QString _lastFetchedAddress;
+	base::Timer _fetchDebounce;
 
 	std::shared_ptr<Ui::RadiobuttonGroup> _typeGroup;
 	Ui::SlideWrap<Ui::VerticalLayout> *_mainDcWrap = nullptr;
+	Ui::SlideWrap<Ui::VerticalLayout> *_advancedWrap = nullptr;
+	Ui::LinkButton *_advancedToggle = nullptr;
+	bool _advancedExpanded = false;
 
 	QString _editingId;
 };
