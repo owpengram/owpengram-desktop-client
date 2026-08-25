@@ -24,6 +24,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_layers.h"
 #include "styles/style_widgets.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QTemporaryFile>
+
 namespace {
 
 constexpr auto kBoxWidth = 700;
@@ -458,7 +461,48 @@ void AddServerBox::fetchPublicKeyForAddress() {
 		if (result->dcId > 0 && _mainDcField) {
 			_mainDcField->setText(QString::number(result->dcId));
 		}
+		if (!result->name.isEmpty()) {
+			_name->setText(result->name);
+		}
+		if (!result->description.isEmpty()) {
+			_description->setText(result->description);
+		}
+		if (result->hasIcon) {
+			Owpengram::FetchServerIcon(host, port, crl::guard(this, [=](
+					QByteArray data) {
+				if (_lastFetchedAddress != address) {
+					return;
+				}
+				applyFetchedIcon(data);
+			}));
+		}
 	}));
+}
+
+void AddServerBox::applyFetchedIcon(const QByteArray &data) {
+	if (data.isEmpty()) {
+		return;
+	}
+	auto file = QTemporaryFile(
+		QDir::tempPath() + u"/owpengram-server-icon-XXXXXX"_q);
+	file.setAutoRemove(false);
+	if (!file.open() || file.write(data) < 0) {
+		return;
+	}
+	file.close();
+	const auto path = file.fileName();
+	auto image = Images::Read({ .path = path, .forceOpaque = true }).image;
+	if (image.isNull()) {
+		return;
+	}
+	// Always overwrite, same as the RSA key/DC/name/description above -- the
+	// server answering is the source of truth even if the user already
+	// picked a local file via chooseLogo().
+	_logoSourcePath = path;
+	_logoPreview = std::move(image);
+	if (_refreshAvatar) {
+		_refreshAvatar();
+	}
 }
 
 void AddServerBox::save() {

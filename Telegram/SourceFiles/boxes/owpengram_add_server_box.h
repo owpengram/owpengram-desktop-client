@@ -46,6 +46,7 @@ private:
 	Fn<void()> _refreshAvatar;
 
 	void fetchPublicKeyForAddress();
+	void applyFetchedIcon(const QByteArray &data);
 	void toggleAdvanced();
 
 	Ui::InputField *_name = nullptr;

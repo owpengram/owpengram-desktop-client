@@ -642,6 +642,48 @@ void CheckServerOnline(
 	});
 }
 
+// RawHttpGetBody performs a blocking plain-HTTP GET and returns the response
+// body on a 200 status, or std::nullopt on any failure (connect/write/read
+// timeout, non-200, malformed response). Must run off the main thread (see
+// callers, always inside crl::async) -- waitForConnected/waitForReadyRead
+// block the calling thread. Shared by FetchServerInfo and FetchServerIcon
+// so the same-port HTTP endpoints they hit only need one socket dance.
+[[nodiscard]] std::optional<QByteArray> RawHttpGetBody(
+		const QString &host,
+		int port,
+		const QByteArray &path) {
+	QTcpSocket socket;
+	socket.connectToHost(host, port);
+	if (!socket.waitForConnected(kCheckTimeoutMs)) {
+		return std::nullopt;
+	}
+	const auto request = "GET " + path + " HTTP/1.1\r\n"
+		"Host: " + host.toUtf8() + "\r\n"
+		"Connection: close\r\n"
+		"\r\n";
+	socket.write(request);
+	if (!socket.waitForBytesWritten(kCheckTimeoutMs)) {
+		return std::nullopt;
+	}
+
+	QByteArray raw;
+	while (socket.waitForReadyRead(kCheckTimeoutMs)) {
+		raw += socket.readAll();
+	}
+	raw += socket.readAll();
+	socket.disconnectFromHost();
+
+	const auto headerEnd = raw.indexOf("\r\n\r\n");
+	if (headerEnd < 0) {
+		return std::nullopt;
+	}
+	const auto statusLine = raw.left(raw.indexOf("\r\n"));
+	if (!statusLine.contains(" 200 ")) {
+		return std::nullopt;
+	}
+	return raw.mid(headerEnd + 4);
+}
+
 void FetchServerInfo(
 		const QString &host,
 		int port,
@@ -651,60 +693,44 @@ void FetchServerInfo(
 		return;
 	}
 	crl::async([=, done = std::move(done)]() mutable {
-		const auto fail = [&] {
+		const auto body = RawHttpGetBody(host, port, "/owpengram/server-info");
+		if (!body) {
 			crl::on_main([=]() mutable { done(std::nullopt); });
-		};
-
-		QTcpSocket socket;
-		socket.connectToHost(host, port);
-		if (!socket.waitForConnected(kCheckTimeoutMs)) {
-			fail();
 			return;
 		}
-		const auto request = "GET /owpengram/server-info HTTP/1.1\r\n"
-			"Host: " + host.toUtf8() + "\r\n"
-			"Connection: close\r\n"
-			"\r\n";
-		socket.write(request);
-		if (!socket.waitForBytesWritten(kCheckTimeoutMs)) {
-			fail();
-			return;
-		}
-
-		QByteArray raw;
-		while (socket.waitForReadyRead(kCheckTimeoutMs)) {
-			raw += socket.readAll();
-		}
-		raw += socket.readAll();
-		socket.disconnectFromHost();
-
-		const auto headerEnd = raw.indexOf("\r\n\r\n");
-		if (headerEnd < 0) {
-			fail();
-			return;
-		}
-		const auto statusLine = raw.left(raw.indexOf("\r\n"));
-		if (!statusLine.contains(" 200 ")) {
-			fail();
-			return;
-		}
-		const auto body = raw.mid(headerEnd + 4);
-		const auto document = QJsonDocument::fromJson(body);
+		const auto document = QJsonDocument::fromJson(*body);
 		if (!document.isObject()) {
-			fail();
+			crl::on_main([=]() mutable { done(std::nullopt); });
 			return;
 		}
 		const auto object = document.object();
 		const auto pem = object.value("rsa_public_key_pem").toString();
 		if (pem.isEmpty()) {
-			fail();
+			crl::on_main([=]() mutable { done(std::nullopt); });
 			return;
 		}
 		const auto result = ServerInfoFetchResult{
 			.rsaPublicKeyPem = pem,
 			.dcId = object.value("dc_id").toInt(),
+			.name = object.value("name").toString(),
+			.description = object.value("description").toString(),
+			.hasIcon = object.value("has_icon").toBool(),
 		};
 		crl::on_main([=]() mutable { done(result); });
+	});
+}
+
+void FetchServerIcon(
+		const QString &host,
+		int port,
+		Fn<void(QByteArray data)> done) {
+	if (host.isEmpty() || port <= 0) {
+		done(QByteArray());
+		return;
+	}
+	crl::async([=, done = std::move(done)]() mutable {
+		const auto body = RawHttpGetBody(host, port, "/owpengram/server-icon");
+		crl::on_main([=]() mutable { done(body.value_or(QByteArray())); });
 	});
 }
 

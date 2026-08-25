@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <optional>
 #include <vector>
 
+#include <QtCore/QByteArray>
 #include <QtCore/QString>
 
 namespace Main {
@@ -101,18 +102,34 @@ void CheckServerOnline(
 struct ServerInfoFetchResult {
 	QString rsaPublicKeyPem;
 	int dcId = 0;
+	// Name/description/hasIcon are admin-edited on the server (Server
+	// Settings' identity section) and optional -- empty/false means the
+	// operator hasn't set them, not that the server failed to answer.
+	QString name;
+	QString description;
+	bool hasIcon = false;
 };
 
-// Fetches the server's RSA public key and home DC id from its well-known
-// same-port HTTP endpoint (GET host:port/owpengram/server-info), so "Add
-// Server" can be filled in from just host:port instead of manual PEM
-// copy-paste + guessing the DC id. Calls done(result) on success,
-// done(std::nullopt) on any failure (offline, unsupported server, malformed
-// response) -- always on the main thread.
+// Fetches the server's RSA public key, home DC id, and identity
+// (name/description/icon presence) from its well-known same-port HTTP
+// endpoint (GET host:port/owpengram/server-info), so "Add Server" can be
+// filled in from just host:port instead of manual PEM copy-paste + guessing
+// the DC id. Calls done(result) on success, done(std::nullopt) on any
+// failure (offline, unsupported server, malformed response) -- always on
+// the main thread.
 void FetchServerInfo(
 	const QString &host,
 	int port,
 	Fn<void(std::optional<ServerInfoFetchResult> result)> done);
+
+// Fetches the server's icon (GET host:port/owpengram/server-icon) as raw
+// image bytes -- only worth calling when a prior FetchServerInfo answered
+// with hasIcon=true. done(bytes) on success, done(QByteArray()) (empty) on
+// any failure -- always on the main thread.
+void FetchServerIcon(
+	const QString &host,
+	int port,
+	Fn<void(QByteArray data)> done);
 
 // Calls done(true) once the account's MTP is connected to the given server,
 // or done(false) after a 30s timeout.
