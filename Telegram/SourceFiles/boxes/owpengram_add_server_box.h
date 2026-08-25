@@ -42,12 +42,18 @@ private:
 	QString _logoSourcePath;
 	Fn<void()> _refreshAvatar;
 
+	void fetchPublicKeyForAddress();
+
 	Ui::InputField *_name = nullptr;
 	Ui::InputField *_description = nullptr;
-	Ui::InputField *_host = nullptr;
-	Ui::InputField *_portField = nullptr;
+	Ui::InputField *_address = nullptr;
 	Ui::InputField *_rsaPublicKey = nullptr;
 	Ui::InputField *_mainDcField = nullptr;
+
+	// Guards the auto-fetched key against clobbering text the user typed
+	// by hand -- only overwrite while the field still holds what we fetched.
+	QString _autoFetchedRsaPublicKey;
+	QString _lastFetchedAddress;
 
 	std::shared_ptr<Ui::RadiobuttonGroup> _typeGroup;
 	Ui::SlideWrap<Ui::VerticalLayout> *_mainDcWrap = nullptr;

@@ -25,7 +25,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace {
 
 constexpr auto kBoxWidth = 700;
-constexpr auto kPortFieldWidth = 90;
 constexpr auto kAvatarGap = 14;
 
 // ── Avatar circle picker ──────────────────────────────────────────────────
@@ -156,45 +155,6 @@ int AvatarNameDescRow::resizeGetHeight(int newWidth) {
 	return totalH;
 }
 
-// ── Host + Port row ────────────────────────────────────────────────────────
-// Two fields side-by-side; floating placeholders serve as labels.
-
-class HostPortRow final : public Ui::RpWidget {
-public:
-	explicit HostPortRow(QWidget *parent);
-
-	[[nodiscard]] Ui::InputField *host() const { return _host; }
-	[[nodiscard]] Ui::InputField *port() const { return _port; }
-
-protected:
-	int resizeGetHeight(int newWidth) override;
-
-private:
-	Ui::InputField *_host = nullptr;
-	Ui::InputField *_port = nullptr;
-};
-
-HostPortRow::HostPortRow(QWidget *parent) : RpWidget(parent) {
-	_host = Ui::CreateChild<Ui::InputField>(
-		this,
-		st::defaultInputField,
-		tr::lng_owpengram_server_host_hint());
-	_port = Ui::CreateChild<Ui::InputField>(
-		this,
-		st::defaultInputField,
-		tr::lng_owpengram_server_port());
-}
-
-int HostPortRow::resizeGetHeight(int newWidth) {
-	const auto portW = kPortFieldWidth;
-	const auto hostW = std::max(newWidth - portW - 8, 1);
-	_host->resizeToWidth(hostW);
-	_host->moveToLeft(0, 0);
-	_port->resizeToWidth(portW);
-	_port->moveToLeft(hostW + 8, 0);
-	return _host->height();
-}
-
 // ── Side-by-side radio buttons ────────────────────────────────────────────
 
 class RadioTypeRow final : public Ui::RpWidget {
@@ -231,6 +191,17 @@ int RadioTypeRow::resizeGetHeight(int newWidth) {
 	return std::max(_single->height(), _multi->height());
 }
 
+// Splits "host:port" on the last colon (IPv6-literal-safe enough for our
+// purposes -- this UI only ever targets IPv4/hostname backends). Returns
+// port = 0 when the address has no ':' or a non-numeric tail.
+[[nodiscard]] std::pair<QString, int> ParseAddress(const QString &address) {
+	const auto colon = address.lastIndexOf(':');
+	if (colon <= 0) {
+		return { address, 0 };
+	}
+	return { address.left(colon).trimmed(), address.mid(colon + 1).trimmed().toInt() };
+}
+
 } // namespace
 
 // ── AddServerBox ──────────────────────────────────────────────────────────
@@ -262,12 +233,13 @@ AddServerBox::AddServerBox(
 		_content,
 		st::introServerAddSectionSkip));
 
-	// ── host + port ───────────────────────────────────────────────────────
-	const auto hostPortRow = _content->add(
-		object_ptr<HostPortRow>(_content),
+	// ── address (host:port) ──────────────────────────────────────────────
+	_address = _content->add(
+		object_ptr<Ui::InputField>(
+			_content,
+			st::defaultInputField,
+			tr::lng_owpengram_server_host_hint()),
 		st::boxRowPadding);
-	_host      = hostPortRow->host();
-	_portField = hostPortRow->port();
 
 	_content->add(object_ptr<Ui::FixedHeightWidget>(
 		_content,
@@ -338,15 +310,22 @@ AddServerBox::AddServerBox(
 		_mainDcWrap->toggle(value == 0, anim::type::normal);
 	});
 
+	// ── auto-fetch the RSA key once the user finishes typing an address ───
+	_address->focusedChanges(
+	) | rpl::filter([](bool focused) {
+		return !focused;
+	}) | rpl::on_next([=] {
+		fetchPublicKeyForAddress();
+	}, lifetime());
+
 	// ── pre-fill when editing an existing server ──────────────────────────
 	if (existing.valid()) {
 		_editingId = existing.id;
 		_name->setText(existing.name);
 		_description->setText(existing.description);
-		_host->setText(existing.host);
-		if (existing.port > 0) {
-			_portField->setText(QString::number(existing.port));
-		}
+		_address->setText(existing.port > 0
+			? existing.host + ':' + QString::number(existing.port)
+			: existing.host);
 		_typeGroup->setValue(existing.multiDc ? 2 : 0);
 		if (existing.mainDcId > 0) {
 			_mainDcField->setText(QString::number(existing.mainDcId));
@@ -397,10 +376,43 @@ void AddServerBox::chooseLogo() {
 		crl::guard(this, callback));
 }
 
+void AddServerBox::fetchPublicKeyForAddress() {
+	const auto address = _address->getLastText().trimmed();
+	if (address.isEmpty() || address == _lastFetchedAddress) {
+		return;
+	}
+	const auto [host, port] = ParseAddress(address);
+	if (host.isEmpty() || port <= 0) {
+		return;
+	}
+	// Only auto-fill while the key field is empty or still holds our own
+	// previous auto-fetched value -- never clobber a manually pasted key.
+	const auto current = _rsaPublicKey->getLastText().trimmed();
+	if (!current.isEmpty() && current != _autoFetchedRsaPublicKey) {
+		return;
+	}
+	_lastFetchedAddress = address;
+	Owpengram::FetchServerPublicKey(host, port, crl::guard(this, [=](
+			std::optional<QString> pem) {
+		if (!pem || _lastFetchedAddress != address) {
+			return;
+		}
+		const auto stillDefault = [&] {
+			const auto now = _rsaPublicKey->getLastText().trimmed();
+			return now.isEmpty() || now == _autoFetchedRsaPublicKey;
+		}();
+		if (!stillDefault) {
+			return;
+		}
+		_autoFetchedRsaPublicKey = *pem;
+		_rsaPublicKey->setText(*pem);
+	}));
+}
+
 void AddServerBox::save() {
 	const auto name = _name->getLastText().trimmed();
-	auto host = _host->getLastText().trimmed();
-	auto port = _portField->getLastText().toInt();
+	const auto address = _address->getLastText().trimmed();
+	const auto [host, port] = ParseAddress(address);
 	const auto rsaPublicKey = _rsaPublicKey->getLastText().trimmed();
 	const auto description = _description->getLastText().trimmed();
 	const auto multiDc = (_typeGroup->current() == 2);
@@ -408,28 +420,14 @@ void AddServerBox::save() {
 		? _mainDcField->getLastText().trimmed().toInt()
 		: 0;
 
-	// Allow "host:port" shorthand in the host field.
-	if (host.contains(':')) {
-		const auto parts = host.split(':');
-		if (parts.size() == 2 && port <= 0) {
-			host = parts[0].trimmed();
-			port = parts[1].trimmed().toInt();
-		}
-	}
-
 	if (name.isEmpty()) {
 		Ui::Toast::Show(tr::lng_owpengram_server_invalid(tr::now));
 		_name->setFocusFast();
 		return;
 	}
-	if (host.isEmpty()) {
+	if (host.isEmpty() || port <= 0) {
 		Ui::Toast::Show(tr::lng_owpengram_server_invalid(tr::now));
-		_host->setFocusFast();
-		return;
-	}
-	if (port <= 0) {
-		Ui::Toast::Show(tr::lng_owpengram_server_invalid(tr::now));
-		_portField->setFocusFast();
+		_address->setFocusFast();
 		return;
 	}
 	if (!Owpengram::IsValidRsaPublicKeyPem(rsaPublicKey)) {

@@ -642,4 +642,65 @@ void CheckServerOnline(
 	});
 }
 
+void FetchServerPublicKey(
+		const QString &host,
+		int port,
+		Fn<void(std::optional<QString> pem)> done) {
+	if (host.isEmpty() || port <= 0) {
+		done(std::nullopt);
+		return;
+	}
+	crl::async([=, done = std::move(done)]() mutable {
+		const auto fail = [&] {
+			crl::on_main([=]() mutable { done(std::nullopt); });
+		};
+
+		QTcpSocket socket;
+		socket.connectToHost(host, port);
+		if (!socket.waitForConnected(kCheckTimeoutMs)) {
+			fail();
+			return;
+		}
+		const auto request = "GET /owpengram/server-info HTTP/1.1\r\n"
+			"Host: " + host.toUtf8() + "\r\n"
+			"Connection: close\r\n"
+			"\r\n";
+		socket.write(request);
+		if (!socket.waitForBytesWritten(kCheckTimeoutMs)) {
+			fail();
+			return;
+		}
+
+		QByteArray raw;
+		while (socket.waitForReadyRead(kCheckTimeoutMs)) {
+			raw += socket.readAll();
+		}
+		raw += socket.readAll();
+		socket.disconnectFromHost();
+
+		const auto headerEnd = raw.indexOf("\r\n\r\n");
+		if (headerEnd < 0) {
+			fail();
+			return;
+		}
+		const auto statusLine = raw.left(raw.indexOf("\r\n"));
+		if (!statusLine.contains(" 200 ")) {
+			fail();
+			return;
+		}
+		const auto body = raw.mid(headerEnd + 4);
+		const auto document = QJsonDocument::fromJson(body);
+		if (!document.isObject()) {
+			fail();
+			return;
+		}
+		const auto pem = document.object().value("rsa_public_key_pem").toString();
+		if (pem.isEmpty()) {
+			fail();
+			return;
+		}
+		crl::on_main([=]() mutable { done(pem); });
+	});
+}
+
 } // namespace Owpengram

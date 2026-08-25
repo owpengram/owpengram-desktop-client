@@ -8570,7 +8570,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_offline" = "Offline";
 "lng_owpengram_server_ip_line" = "IP: {host}";
 "lng_owpengram_server_port_line" = "Port: {port}";
-"lng_owpengram_server_host_hint" = "IP address or host:port";
+"lng_owpengram_server_host_hint" = "Address:port (e.g. 1.2.3.4:2398)";
 "lng_owpengram_server_telegram_name" = "Telegram";
 "lng_owpengram_server_telegram_description" = "Official Telegram cloud. Sign in with your Telegram account.";
 "lng_owpengram_server_official_name" = "OwpenGram";
