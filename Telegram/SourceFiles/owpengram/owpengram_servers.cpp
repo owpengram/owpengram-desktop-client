@@ -410,6 +410,59 @@ std::optional<Server> AddCustomServer(
 	return server;
 }
 
+std::optional<Server> UpdateCustomServer(
+		const QString &id,
+		const QString &name,
+		const QString &host,
+		int port,
+		const QString &description,
+		const QString &rsaPublicKey,
+		const QString &logoSourcePath,
+		bool multiDc,
+		int mainDcId) {
+	if (id.isEmpty()
+		|| name.trimmed().isEmpty()
+		|| host.trimmed().isEmpty()
+		|| port <= 0) {
+		return std::nullopt;
+	}
+	auto array = ReadCustomServersJson();
+	auto index = -1;
+	for (auto i = 0; i != array.size(); ++i) {
+		if (array.at(i).isObject()
+			&& array.at(i).toObject().value(u"id"_q).toString() == id) {
+			index = i;
+			break;
+		}
+	}
+	if (index < 0) {
+		return std::nullopt;
+	}
+
+	auto server = Server();
+	server.id = id;
+	server.name = name.trimmed();
+	server.host = host.trimmed();
+	server.port = port;
+	server.description = description.trimmed();
+	server.rsaPublicKey = rsaPublicKey.trimmed();
+	server.isOfficial = false;
+	server.multiDc = multiDc;
+	server.mainDcId = (mainDcId > 0) ? mainDcId : 0;
+	// logoSourcePath empty means "unchanged" -- keep whatever this server
+	// already had on disk instead of silently dropping it.
+	server.logoPath = array.at(index).toObject().value(u"logoPath"_q).toString();
+	if (!logoSourcePath.isEmpty()) {
+		if (const auto saved = SaveCustomServerLogo(server.id, logoSourcePath)) {
+			server.logoPath = *saved;
+		}
+	}
+
+	array[index] = ServerToJson(server);
+	WriteCustomServersJson(array);
+	return server;
+}
+
 bool IsRemovableServer(const Server &server) {
 	return !server.isOfficial
 		&& server.id != QString::fromLatin1(kTelegramServerId)

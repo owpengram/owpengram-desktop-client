@@ -532,10 +532,11 @@ void AddServerBox::save() {
 		return;
 	}
 
-	if (!_editingId.isEmpty()) {
-		Owpengram::RemoveCustomServer(_editingId);
-	}
-	if (const auto server = Owpengram::AddCustomServer(
+	// Editing updates the existing row in place -- NOT delete + re-add, which
+	// would mint a fresh id and silently break every account already
+	// pointed at this server (see UpdateCustomServer's doc comment).
+	const auto server = _editingId.isEmpty()
+		? Owpengram::AddCustomServer(
 			name,
 			host,
 			port,
@@ -543,7 +544,18 @@ void AddServerBox::save() {
 			rsaPublicKey,
 			_logoSourcePath,
 			multiDc,
-			mainDcId)) {
+			mainDcId)
+		: Owpengram::UpdateCustomServer(
+			_editingId,
+			name,
+			host,
+			port,
+			description,
+			rsaPublicKey,
+			_logoSourcePath,
+			multiDc,
+			mainDcId);
+	if (server) {
 		if (_done) {
 			_done(*server);
 		}

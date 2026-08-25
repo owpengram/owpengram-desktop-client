@@ -64,6 +64,27 @@ struct Server {
 	const QString &logoSourcePath = QString(),
 	bool multiDc = false,
 	int mainDcId = 0);
+// Updates an existing custom server IN PLACE, keeping its id -- unlike
+// deleting and re-AddCustomServer-ing it (which mints a fresh
+// QUuid::createUuid() id), this keeps every account already pointed at this
+// server (Main::Account's saved OwpengramServerSelection.id) resolving to
+// it correctly after the edit. See CurrentServerForAccount /
+// ServerFromStoredSelection: a stale id it can no longer FindServer() falls
+// back to a synthetic Server with name = host, which is the account-switcher
+// "server name disappeared, shows the address instead" bug this fixes.
+// Returns std::nullopt if id doesn't match any existing custom server.
+// logoSourcePath empty means "keep the current logo", not "clear it" --
+// this box has no clear-logo affordance today.
+[[nodiscard]] std::optional<Server> UpdateCustomServer(
+	const QString &id,
+	const QString &name,
+	const QString &host,
+	int port,
+	const QString &description,
+	const QString &rsaPublicKey = QString(),
+	const QString &logoSourcePath = QString(),
+	bool multiDc = false,
+	int mainDcId = 0);
 [[nodiscard]] bool IsValidRsaPublicKeyPem(const QString &pem);
 [[nodiscard]] QString ResolveServerLogoPath(const QString &logoPath);
 [[nodiscard]] bool RemoveCustomServer(const QString &id);
