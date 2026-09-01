@@ -49,7 +49,14 @@ RSA *CreateRaw(bytes::const_span key) {
 	case Format::RSA_PUBKEY:
 		return PEM_read_bio_RSA_PUBKEY(bio.get(), nullptr, nullptr, nullptr);
 	}
-	Unexpected("format in RSAPublicKey::Private::Create.");
+	// Format::Unknown is reachable with real (if malformed) untrusted input --
+	// a hand-typed or link-provided RSA key that doesn't contain either PEM
+	// header -- not just a "should never happen" internal invariant, so this
+	// has to fail gracefully (nullptr, same as PEM_read_bio_* itself returns
+	// on a parse failure) rather than assert/crash the whole app. Every
+	// caller already handles a null result: RSAPublicKey::Private's
+	// constructor skips computeFingerprint(), and valid() reports false.
+	return nullptr;
 }
 
 } // namespace

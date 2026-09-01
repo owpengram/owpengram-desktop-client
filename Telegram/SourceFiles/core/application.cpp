@@ -1239,19 +1239,19 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 		return openCustomUrl("tg://", LocalUrlHandlers(), tgUrl, tgContext);
 	}
 
-	// owpg://addserver?host=...&port=...[&name=...][&description=...]
-	// [&key=...][&dc=...][&multidc=1] lets an operator hand out a ready-made
-	// "add my server" button/link: opens AddServerBox pre-filled with
-	// whatever the link carries, minus the id (minted fresh on save, same as
-	// filling the form by hand). Only host+port are required: an OwpenGram
-	// server answers with its own name/description/key/DC when asked (see
-	// AddServerBox::fetchPublicKeyForAddress, triggered here too when the
-	// link omits the key), so a link to one of our own servers can stay
-	// short -- the rest only matters for a non-OwpenGram/custom backend that
-	// doesn't implement that discovery. Works from any window, logged in or
-	// not -- adding a server to the local list doesn't require being logged
-	// out, it only becomes reachable to log into afterwards via Add Account
-	// / the server-select screen.
+	// owpg://addserver?host=...&port=... lets an operator hand out a
+	// ready-made "add my server" button/link: opens AddServerBox pre-filled
+	// with just the address, minus the id (minted fresh on save, same as
+	// filling the form by hand). Deliberately carries NOTHING else -- no
+	// name, description, key, or DC. Those always come from the server
+	// itself, fetched over ServerInfoPath the exact same way a hand-typed
+	// address triggers AddServerBox::fetchPublicKeyForAddress below.
+	// Accepting an attacker-supplied key/name/DC in the link itself would be
+	// a real MITM vector: whoever crafts the link controls what the victim
+	// ends up trusting as "this server's identity", regardless of who
+	// actually operates the host the link points at. host+port alone can't
+	// misrepresent anything -- the RSA key that answers for that host+port
+	// at connect time is the only thing that ever gets trusted.
 	// See kOwpgCommandRe above for why the "/" before the query is optional.
 	static const auto kOwpgAddServerRe = QRegularExpression(
 		u"^owpg://addserver/?(\\?.*)?$"_q,
@@ -1261,31 +1261,22 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 		if (!_lastActivePrimaryWindow) {
 			return true;
 		}
-		const auto query = QUrlQuery(QUrl(urlTrimmed).query(
-			QUrl::FullyDecoded));
+		// The server encodes this link with Go's url.Values.Encode(), which
+		// -- like every application/x-www-form-urlencoded producer -- writes
+		// a literal space as '+', not '%20'. QUrlQuery only understands %XX
+		// escapes, so a raw '+' would survive decoding unchanged. host/port
+		// are never expected to contain a space, but fixing this on the RAW
+		// (still percent-encoded) query string costs nothing and keeps this
+		// parsing correct if that ever changes.
+		auto rawQuery = QUrl(urlTrimmed).query(QUrl::FullyEncoded);
+		rawQuery.replace('+', u"%20"_q);
+		const auto query = QUrlQuery(rawQuery);
 		auto server = Owpengram::Server();
-		server.name = query.queryItemValue(
-			u"name"_q,
-			QUrl::FullyDecoded).trimmed();
 		server.host = query.queryItemValue(
 			u"host"_q,
 			QUrl::FullyDecoded).trimmed();
 		server.port = query.queryItemValue(u"port"_q).toInt();
-		server.description = query.queryItemValue(
-			u"description"_q,
-			QUrl::FullyDecoded).trimmed();
-		server.rsaPublicKey = query.queryItemValue(
-			u"key"_q,
-			QUrl::FullyDecoded).trimmed();
-		server.multiDc = (query.queryItemValue(u"multidc"_q) == u"1"_q);
-		server.mainDcId = query.queryItemValue(u"dc"_q).toInt();
-		// Only host+port are mandatory. A key, if the link bothered to
-		// include one, still has to actually be a valid PEM -- an empty key
-		// just means "ask the server", a garbled one is a broken link.
-		if (server.host.isEmpty()
-			|| server.port <= 0
-			|| (!server.rsaPublicKey.isEmpty()
-				&& !Owpengram::IsValidRsaPublicKeyPem(server.rsaPublicKey))) {
+		if (server.host.isEmpty() || server.port <= 0) {
 			_lastActivePrimaryWindow->activate();
 			_lastActivePrimaryWindow->show(Ui::MakeInformBox(
 				tr::lng_owpengram_server_link_invalid(tr::now)));
