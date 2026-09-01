@@ -9,6 +9,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "base/flat_map.h"
 
+#include <rpl/event_stream.h>
+#include <rpl/producer.h>
+
 #include <optional>
 #include <vector>
 
@@ -89,6 +92,15 @@ struct Server {
 [[nodiscard]] QString ResolveServerLogoPath(const QString &logoPath);
 [[nodiscard]] bool RemoveCustomServer(const QString &id);
 [[nodiscard]] bool IsRemovableServer(const Server &server);
+
+// Fires whenever the stored custom-server list changes (Add/Update/Remove
+// CustomServer, from ANY code path -- including one triggered from outside
+// the currently-visible UI, e.g. an owpg://addserver link opened while the
+// server-select screen happens to already be showing). Any UI presenting
+// that list should subscribe instead of only refreshing from its own local
+// "just saved" callback, or it goes stale until the user navigates away and
+// back.
+[[nodiscard]] rpl::producer<> CustomServersChanges();
 
 void ApplyServerToAccount(
 	not_null<Main::Account*> account,

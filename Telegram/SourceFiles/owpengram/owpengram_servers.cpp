@@ -71,6 +71,15 @@ B5VRJ1e0q7P/9/w21T0p9uV3eNXhnPnLFQIDAQAB\n\
 	return document.array();
 }
 
+// Single choke point every AddCustomServer/UpdateCustomServer/
+// RemoveCustomServer writes through, so firing the change notification here
+// (rather than separately in each of those three) can never drift out of
+// sync with a future fourth mutator.
+[[nodiscard]] rpl::event_stream<> &CustomServersChangedStream() {
+	static auto stream = rpl::event_stream<>();
+	return stream;
+}
+
 void WriteCustomServersJson(const QJsonArray &array) {
 	const auto path = ServersFilePath();
 	QDir().mkpath(QFileInfo(path).absolutePath());
@@ -79,6 +88,7 @@ void WriteCustomServersJson(const QJsonArray &array) {
 		return;
 	}
 	file.write(QJsonDocument(array).toJson(QJsonDocument::Compact));
+	CustomServersChangedStream().fire({});
 }
 
 [[nodiscard]] std::optional<Storage::OwpengramServerSelection>
@@ -492,6 +502,10 @@ bool RemoveCustomServer(const QString &id) {
 		WriteCustomServersJson(array);
 	}
 	return changed;
+}
+
+rpl::producer<> CustomServersChanges() {
+	return CustomServersChangedStream().events();
 }
 
 void RestoreServerToConfig(

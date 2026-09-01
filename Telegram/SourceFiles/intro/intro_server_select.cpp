@@ -344,6 +344,19 @@ ServerSelectWidget::ServerSelectWidget(
 			});
 		}));
 	});
+
+	// The custom-server list can also change from outside this screen's own
+	// Add Server button -- e.g. an owpg://addserver link opened from a
+	// browser while this screen already happens to be showing opens
+	// AddServerBox globally (see Core::Application::openLocalUrl), with no
+	// reference back to this particular widget to refresh directly.
+	// Subscribing here instead of relying only on the button's own callback
+	// above is what makes a just-added server show up immediately rather
+	// than only after leaving and re-entering this screen.
+	Owpengram::CustomServersChanges(
+	) | rpl::on_next([=] {
+		rebuildList();
+	}, lifetime());
 }
 
 void ServerSelectWidget::finishInit() {
