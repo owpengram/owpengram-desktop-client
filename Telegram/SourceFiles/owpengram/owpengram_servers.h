@@ -115,6 +115,14 @@ void RestoreServerToAccount(not_null<Main::Account*> account);
 [[nodiscard]] Server CurrentServerForAccount(
 	not_null<Main::Account*> account);
 
+// Every currently-configured account (any state, not just fully signed in)
+// whose saved server selection resolves to serverId -- used to warn before
+// deleting a custom server that doing so will orphan those accounts (see the
+// "Remove server" confirm box), since nothing else keeps an account pointed
+// at a server that no longer exists in the list from silently breaking.
+[[nodiscard]] std::vector<not_null<Main::Account*>> AccountsUsingServer(
+	const QString &serverId);
+
 // Stable key for grouping per-server local device state (currently: recent/frequently-used
 // custom emoji, see Core::Settings::recentEmojiForScope) by backend rather than by device. Two
 // different custom servers do NOT share a document-id namespace — a custom-emoji document id

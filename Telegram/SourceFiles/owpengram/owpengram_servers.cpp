@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "crl/crl_on_main.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
+#include "main/main_domain.h"
 #include "mtproto/facade.h"
 #include "mtproto/mtproto_config.h"
 #include "mtproto/details/mtproto_rsa_public_key.h"
@@ -617,6 +618,20 @@ Server CurrentServerForAccount(not_null<Main::Account*> account) {
 		}
 	}
 	return OfficialServer();
+}
+
+std::vector<not_null<Main::Account*>> AccountsUsingServer(
+		const QString &serverId) {
+	auto result = std::vector<not_null<Main::Account*>>();
+	if (serverId.isEmpty()) {
+		return result;
+	}
+	for (const auto &account : Core::App().domain().orderedAccounts()) {
+		if (CurrentServerForAccount(account).id == serverId) {
+			result.push_back(account);
+		}
+	}
+	return result;
 }
 
 QString ServerScopeKeyForAccount(not_null<Main::Account*> account) {

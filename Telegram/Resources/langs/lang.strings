@@ -8600,6 +8600,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_details_status" = "Connection status";
 "lng_owpengram_server_delete" = "Delete";
 "lng_owpengram_server_delete_confirm" = "Remove server \"{name}\" from the list?";
+"lng_owpengram_server_delete_confirm_with_accounts#one" = "Remove server \"{name}\" from the list? This will log out {count} account signed in to it.";
+"lng_owpengram_server_delete_confirm_with_accounts#other" = "Remove server \"{name}\" from the list? This will log out {count} accounts signed in to it.";
 "lng_owpengram_server_checking" = "Checking…";
 "lng_owpengram_server_page_prev" = "◀";
 "lng_owpengram_server_page_next" = "▶";
