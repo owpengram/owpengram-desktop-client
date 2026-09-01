@@ -1210,9 +1210,13 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 	// openOwpengramUrl does for host-routed links, bypassing the
 	// Telegram-only guard further below (this must work on OwpenGram
 	// accounts too).
+	// The trailing "/?" before the query is optional: some browsers
+	// normalize a path-less "scheme://host?query" into "scheme://host/?query"
+	// before invoking the OS protocol handler, so both shapes must match.
 	static const auto kOwpgCommandRe = QRegularExpression(
-		u"^owpg://(oauth|resolve)(\\?.*)?$"_q,
-		QRegularExpression::CaseInsensitiveOption);
+		u"^owpg://(oauth|resolve)/?(\\?.*)?$"_q,
+		QRegularExpression::CaseInsensitiveOption
+			| QRegularExpression::DotMatchesEverythingOption);
 	if (const auto m = kOwpgCommandRe.match(urlTrimmed);
 			m.hasMatch() && !passcodeLocked()) {
 		const auto my = context.value<ClickHandlerContext>();
@@ -1235,17 +1239,24 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 		return openCustomUrl("tg://", LocalUrlHandlers(), tgUrl, tgContext);
 	}
 
-	// owpg://addserver?name=...&host=...&port=...&key=...[&description=...]
-	// [&dc=...][&multidc=1] lets an operator hand out a ready-made "add my
-	// server" button/link: opens AddServerBox pre-filled with everything
-	// except the id (minted fresh on save, same as filling the form by
-	// hand), so the user only has to review and press Save. Works from any
-	// window, logged in or not -- adding a server to the local list doesn't
-	// require being logged out, it only becomes reachable to log into
-	// afterwards via Add Account / the server-select screen.
+	// owpg://addserver?host=...&port=...[&name=...][&description=...]
+	// [&key=...][&dc=...][&multidc=1] lets an operator hand out a ready-made
+	// "add my server" button/link: opens AddServerBox pre-filled with
+	// whatever the link carries, minus the id (minted fresh on save, same as
+	// filling the form by hand). Only host+port are required: an OwpenGram
+	// server answers with its own name/description/key/DC when asked (see
+	// AddServerBox::fetchPublicKeyForAddress, triggered here too when the
+	// link omits the key), so a link to one of our own servers can stay
+	// short -- the rest only matters for a non-OwpenGram/custom backend that
+	// doesn't implement that discovery. Works from any window, logged in or
+	// not -- adding a server to the local list doesn't require being logged
+	// out, it only becomes reachable to log into afterwards via Add Account
+	// / the server-select screen.
+	// See kOwpgCommandRe above for why the "/" before the query is optional.
 	static const auto kOwpgAddServerRe = QRegularExpression(
-		u"^owpg://addserver(\\?.*)?$"_q,
-		QRegularExpression::CaseInsensitiveOption);
+		u"^owpg://addserver/?(\\?.*)?$"_q,
+		QRegularExpression::CaseInsensitiveOption
+			| QRegularExpression::DotMatchesEverythingOption);
 	if (kOwpgAddServerRe.match(urlTrimmed).hasMatch() && !passcodeLocked()) {
 		if (!_lastActivePrimaryWindow) {
 			return true;
@@ -1268,10 +1279,13 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 			QUrl::FullyDecoded).trimmed();
 		server.multiDc = (query.queryItemValue(u"multidc"_q) == u"1"_q);
 		server.mainDcId = query.queryItemValue(u"dc"_q).toInt();
-		if (server.name.isEmpty()
-			|| server.host.isEmpty()
+		// Only host+port are mandatory. A key, if the link bothered to
+		// include one, still has to actually be a valid PEM -- an empty key
+		// just means "ask the server", a garbled one is a broken link.
+		if (server.host.isEmpty()
 			|| server.port <= 0
-			|| !Owpengram::IsValidRsaPublicKeyPem(server.rsaPublicKey)) {
+			|| (!server.rsaPublicKey.isEmpty()
+				&& !Owpengram::IsValidRsaPublicKeyPem(server.rsaPublicKey))) {
 			_lastActivePrimaryWindow->activate();
 			_lastActivePrimaryWindow->show(Ui::MakeInformBox(
 				tr::lng_owpengram_server_link_invalid(tr::now)));

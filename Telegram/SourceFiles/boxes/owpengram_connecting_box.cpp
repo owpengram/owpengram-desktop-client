@@ -91,6 +91,6 @@ void ConnectingBox::showFailed() {
 	// The connection attempt is already over, so relabel the same button
 	// rather than layering a second one on top of it.
 	if (_button) {
-		_button->setText(tr::lng_close(tr::now));
+		_button->setText(tr::lng_close());
 	}
 }

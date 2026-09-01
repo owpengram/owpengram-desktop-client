@@ -389,6 +389,18 @@ AddServerBox::AddServerBox(
 		// click -- Advanced only collapses by default for the new-server,
 		// auto-fetch-does-everything case.
 		toggleAdvanced();
+		// An owpg://addserver link only has to carry host+port -- an
+		// OwpenGram server answers with its own name/description/key/DC on
+		// request (the same discovery an address typed by hand triggers, see
+		// fetchPublicKeyForAddress), so a link for one of our own servers
+		// can stay short. A non-OwpenGram/custom backend that doesn't
+		// implement that discovery endpoint needs the key spelled out in
+		// the link itself instead -- existing.rsaPublicKey is then already
+		// non-empty here, so no fetch is triggered and the link's own value
+		// is kept as-is.
+		if (existing.rsaPublicKey.isEmpty()) {
+			fetchPublicKeyForAddress();
+		}
 	}
 }
 
