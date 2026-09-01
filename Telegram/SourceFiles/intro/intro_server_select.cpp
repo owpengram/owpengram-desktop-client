@@ -143,8 +143,16 @@ ServerRow::ServerRow(
 				p.setPen(Qt::NoPen);
 				p.setBrush(st::boxBg);
 				p.drawEllipse(0, 0, size, size);
-				p.setClipRect(0, 0, size, size);
-				p.setClipRegion(QRegion(0, 0, size, size, QRegion::Ellipse));
+				// QRegion-based clipping (the previous QRegion::Ellipse) is
+				// always rasterized with hard, aliased edges in Qt no matter
+				// what PainterHighQualityEnabler sets -- it's a genuinely
+				// different clip path than a QPainterPath's, which does
+				// respect antialiasing. That mismatch is what made a custom
+				// server's logo render as a visibly jagged circle instead of
+				// a smooth one.
+				auto clipPath = QPainterPath();
+				clipPath.addEllipse(0, 0, size, size);
+				p.setClipPath(clipPath);
 			}
 			p.drawPixmap(left, top, image);
 		}
