@@ -88,6 +88,16 @@ void WriteCustomServersJson(const QJsonArray &array) {
 		return;
 	}
 	file.write(QJsonDocument(array).toJson(QJsonDocument::Compact));
+	// Close (flush) explicitly before firing: the change notification's
+	// subscribers re-read this same file synchronously and immediately
+	// (ServerSelectWidget's list rebuild), and on Windows a second QFile
+	// opened for reading against a path this object still has open for
+	// writing can see stale buffered content rather than what was just
+	// written -- this was the actual cause of the server-select list not
+	// updating live for an owpg://addserver-added server until the screen
+	// was left and re-entered (by which point this object had long since
+	// gone out of scope and closed on its own).
+	file.close();
 	CustomServersChangedStream().fire({});
 }
 
