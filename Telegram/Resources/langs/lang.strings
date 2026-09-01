@@ -8590,6 +8590,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_endpoint" = "IP: {host}  Port: {port}";
 "lng_owpengram_server_offline_confirm" = "This server appears to be offline. Join anyway?";
 "lng_owpengram_server_invalid" = "Please fill in a valid name, IP address and port.";
+"lng_owpengram_server_link_invalid" = "This server link is missing or has an invalid name, address, port, or public key.";
+"lng_owpengram_server_added" = "Server added. You can now log in to it from Add Account.";
 "lng_owpengram_server_latency" = "latency: {latency}ms";
 "lng_owpengram_server_details_host" = "IP address";
 "lng_owpengram_server_details_port" = "Port";
@@ -8603,8 +8605,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_page_next" = "▶";
 "lng_owpengram_server_page" = "{current} / {total}";
 "lng_owpengram_tg_link_no_account" = "This link is for Telegram's official network. Please log in to a Telegram account in this app to open it.";
-"lng_owpengram_tg_link_switch_account" = "This link is for Telegram's official network. Please switch to your Telegram account to open it.";
-"lng_owpengram_owpg_other_server" = "This link belongs to a server you're not connected to:";
+"lng_owpengram_tg_link_switch_account" = "This link is for Telegram's official network. Please switch to your Telegram account to open it.";"lng_owpengram_owpg_other_server" = "This link belongs to a server you're not connected to:";
 "lng_sr_country_column_name" = "Country name";
 "lng_sr_languages_column_native" = "Native name";
 "lng_sr_languages_column_name" = "Language name";

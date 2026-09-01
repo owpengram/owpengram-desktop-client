@@ -50,6 +50,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_global_ttl.h"
 #include "settings/sections/settings_local_passcode.h"
 #include "settings/sections/settings_passkeys.h"
+#include "settings/cloud_password/settings_cloud_password_login_email.h"
 #include "settings/sections/settings_premium.h"
 #include "settings/settings_privacy_controllers.h"
 #include "settings/sections/settings_websites.h"
@@ -727,7 +728,16 @@ void BuildSecuritySection(
 			.icon = { &st::menuIconRecoveryEmail },
 			.label = std::move(loginEmailLabel),
 			.onClick = [=] {
-				UrlClickHandler::Open(u"tg://settings/login_email"_q);
+				// Navigate to the section directly instead of firing a fake
+				// tg:// URL just to trigger internal routing (the previous
+				// approach): that URL scheme is meant for genuine external
+				// links and gets caught by Core::Application's
+				// official-Telegram guard, which has nothing to do with
+				// whether this server actually supports login email --
+				// account.sendVerifyEmailCode/verifyEmail are real,
+				// implemented RPCs on telesrv (not Telegram-exclusive), so
+				// this must work the same way on any server.
+				controller->showSettings(CloudLoginEmailId());
 			},
 			.keywords = { u"email"_q, u"login"_q },
 			.shown = std::move(loginEmailShown),

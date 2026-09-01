@@ -645,13 +645,17 @@ void ApplyServerToAccount(
 	}
 }
 
-void WaitForServerConnection(
+Fn<void()> WaitForServerConnection(
 		not_null<Main::Account*> account,
 		const Server &server,
 		Fn<void(bool ok)> done) {
 	const auto timer = std::make_shared<base::Timer>();
 	const auto started = crl::now();
+	const auto cancelled = std::make_shared<bool>(false);
 	timer->setCallback([=]() {
+		if (*cancelled) {
+			return;
+		}
 		auto &mtp = account->mtp();
 		const auto dcId = mtp.mainDcId();
 		const auto connected = (mtp.dcstate(dcId) == MTP::ConnectedState)
@@ -666,6 +670,10 @@ void WaitForServerConnection(
 		timer->callOnce(100);
 	});
 	timer->callOnce(100);
+	return [=] {
+		*cancelled = true;
+		timer->cancel();
+	};
 }
 
 void CheckServerOnline(

@@ -90,6 +90,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_session_controller.h"
 #include "window/window_controller.h"
 #include "boxes/abstract_box.h"
+#include "boxes/owpengram_add_server_box.h"
+#include "ui/toast/toast.h"
 #include "base/qthelp_regex.h"
 #include "base/qthelp_url.h"
 #include "boxes/premium_limits_box.h"
@@ -101,6 +103,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtCore/QStandardPaths>
 #include <QtCore/QMimeDatabase>
+#include <QtCore/QUrl>
+#include <QtCore/QUrlQuery>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QScreen>
 
@@ -1229,6 +1233,57 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 			return true;
 		}
 		return openCustomUrl("tg://", LocalUrlHandlers(), tgUrl, tgContext);
+	}
+
+	// owpg://addserver?name=...&host=...&port=...&key=...[&description=...]
+	// [&dc=...][&multidc=1] lets an operator hand out a ready-made "add my
+	// server" button/link: opens AddServerBox pre-filled with everything
+	// except the id (minted fresh on save, same as filling the form by
+	// hand), so the user only has to review and press Save. Works from any
+	// window, logged in or not -- adding a server to the local list doesn't
+	// require being logged out, it only becomes reachable to log into
+	// afterwards via Add Account / the server-select screen.
+	static const auto kOwpgAddServerRe = QRegularExpression(
+		u"^owpg://addserver(\\?.*)?$"_q,
+		QRegularExpression::CaseInsensitiveOption);
+	if (kOwpgAddServerRe.match(urlTrimmed).hasMatch() && !passcodeLocked()) {
+		if (!_lastActivePrimaryWindow) {
+			return true;
+		}
+		const auto query = QUrlQuery(QUrl(urlTrimmed).query(
+			QUrl::FullyDecoded));
+		auto server = Owpengram::Server();
+		server.name = query.queryItemValue(
+			u"name"_q,
+			QUrl::FullyDecoded).trimmed();
+		server.host = query.queryItemValue(
+			u"host"_q,
+			QUrl::FullyDecoded).trimmed();
+		server.port = query.queryItemValue(u"port"_q).toInt();
+		server.description = query.queryItemValue(
+			u"description"_q,
+			QUrl::FullyDecoded).trimmed();
+		server.rsaPublicKey = query.queryItemValue(
+			u"key"_q,
+			QUrl::FullyDecoded).trimmed();
+		server.multiDc = (query.queryItemValue(u"multidc"_q) == u"1"_q);
+		server.mainDcId = query.queryItemValue(u"dc"_q).toInt();
+		if (server.name.isEmpty()
+			|| server.host.isEmpty()
+			|| server.port <= 0
+			|| !Owpengram::IsValidRsaPublicKeyPem(server.rsaPublicKey)) {
+			_lastActivePrimaryWindow->activate();
+			_lastActivePrimaryWindow->show(Ui::MakeInformBox(
+				tr::lng_owpengram_server_link_invalid(tr::now)));
+			return true;
+		}
+		_lastActivePrimaryWindow->activate();
+		_lastActivePrimaryWindow->show(Box<AddServerBox>(
+			[=](Owpengram::Server) {
+				Ui::Toast::Show(tr::lng_owpengram_server_added(tr::now));
+			},
+			server));
+		return true;
 	}
 
 	// OwpenGram self-hosted links (owpg://<host>/<rest>) are routed to the matching

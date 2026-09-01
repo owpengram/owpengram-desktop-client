@@ -366,8 +366,13 @@ AddServerBox::AddServerBox(
 		fetchPublicKeyForAddress();
 	}, lifetime());
 
-	// ── pre-fill when editing an existing server ──────────────────────────
-	if (existing.valid()) {
+	// ── pre-fill when editing an existing server, or when opened from an
+	// owpg://addserver link carrying a server's details but no id yet (that
+	// case must still populate the fields, just not enter editing mode --
+	// _editingId only gets set below when id is actually non-empty, so
+	// save() correctly goes through AddCustomServer, not UpdateCustomServer
+	// against an id nothing in the stored list has). ─────────────────────
+	if (!existing.host.isEmpty()) {
 		_editingId = existing.id;
 		_name->setText(existing.name);
 		_description->setText(existing.description);

@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "lang/lang_keys.h"
 #include "ui/widgets/labels.h"
+#include "ui/widgets/buttons.h"
 #include "ui/wrap/padding_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "styles/style_intro.h"
@@ -21,13 +22,15 @@ constexpr auto kMaxDots = 3;
 
 } // namespace
 
-ConnectingBox::ConnectingBox(QWidget*, Fn<void()> onFailedClose)
-: _onFailedClose(std::move(onFailedClose))
+ConnectingBox::ConnectingBox(QWidget*, Fn<void()> onCancel)
+: _onCancel(std::move(onCancel))
 , _content(this) {
 }
 
 void ConnectingBox::prepare() {
-	// While connecting the box must block every interaction.
+	// Escape and outside click stay off even with the button present, so a
+	// stray click elsewhere can never drop an in-flight connection attempt
+	// by accident -- cancelling is only ever a deliberate button press.
 	setCloseByEscape(false);
 	setCloseByOutsideClick(false);
 
@@ -54,12 +57,14 @@ void ConnectingBox::prepare() {
 	});
 	_dotsTimer.callEach(kDotsIntervalMs);
 
-	boxClosing(
-	) | rpl::on_next([=] {
-		if (_failed && _onFailedClose) {
-			_onFailedClose();
+	// Present from the very first frame, not only after a timeout: a dead
+	// server must never force the user to sit through the full 30s wait.
+	_button = addButton(tr::lng_cancel(), [=] {
+		if (_onCancel) {
+			_onCancel();
 		}
-	}, lifetime());
+		closeBox();
+	});
 
 	setDimensionsToContent(st::boxWidth, _content);
 }
@@ -83,8 +88,9 @@ void ConnectingBox::showFailed() {
 	_dotsTimer.cancel();
 	updateText();
 
-	// Now allow the user to dismiss the box, but stay on the current screen.
-	setCloseByEscape(true);
-	setCloseByOutsideClick(true);
-	addButton(tr::lng_close(), [=] { closeBox(); });
+	// The connection attempt is already over, so relabel the same button
+	// rather than layering a second one on top of it.
+	if (_button) {
+		_button->setText(tr::lng_close(tr::now));
+	}
 }

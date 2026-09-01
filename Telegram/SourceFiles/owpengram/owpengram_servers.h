@@ -153,8 +153,10 @@ void FetchServerIcon(
 	Fn<void(QByteArray data)> done);
 
 // Calls done(true) once the account's MTP is connected to the given server,
-// or done(false) after a 30s timeout.
-void WaitForServerConnection(
+// or done(false) after a 30s timeout. Returns a cancel handle: call it to
+// stop polling and guarantee done() is never called afterwards (e.g. when
+// the user dismisses the "Connecting..." box before either outcome).
+[[nodiscard]] Fn<void()> WaitForServerConnection(
 	not_null<Main::Account*> account,
 	const Server &server,
 	Fn<void(bool ok)> done);

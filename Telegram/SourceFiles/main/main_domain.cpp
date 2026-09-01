@@ -375,7 +375,11 @@ void Domain::closeAccountWindows(not_null<Main::Account*> account) {
 			another = other;
 		}
 	}
-	if (another) {
+	// Only steal the active slot if the account that just logged out was
+	// actually the one showing -- logging out a background account (e.g.
+	// from the account switcher without switching to it first) must not
+	// silently jump the user to a different account.
+	if (another && _active.current() == account.get()) {
 		activate(another);
 	}
 }

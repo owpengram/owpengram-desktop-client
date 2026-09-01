@@ -505,10 +505,17 @@ void ServerSelectWidget::proceedJoin(const Owpengram::Server &server) {
 		return;
 	}
 	const auto weak = base::make_weak(this);
-	// Block all input with a modal until the connection succeeds or times out.
-	const auto box = Ui::show(Box<ConnectingBox>());
 	Owpengram::ApplyServerToAccount(&account(), server);
-	Owpengram::WaitForServerConnection(&account(), server, crl::guard(weak, [=](
+	const auto cancel = std::make_shared<Fn<void()>>();
+	// Shown from the first frame with a working Cancel button (see
+	// ConnectingBox) -- a dead/unreachable server must never force the user
+	// to sit through the full 30s timeout with no way out.
+	const auto box = Ui::show(Box<ConnectingBox>(crl::guard(weak, [=] {
+		if (*cancel) {
+			(*cancel)();
+		}
+	})));
+	*cancel = Owpengram::WaitForServerConnection(&account(), server, crl::guard(weak, [=](
 			bool ok) {
 		if (!weak) {
 			return;
