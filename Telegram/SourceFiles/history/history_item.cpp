@@ -2437,7 +2437,27 @@ void HistoryItem::applyEdition(const MTPDmessageService &message) {
 		_flags &= ~MessageFlag::DisplayFromChecked;
 
 		updateReactions(message.vreactions());
-	} else if (isService()) {
+	} else {
+		// Not just the already-service case: a live edit can also turn a
+		// still-regular content message (photo/document/etc) into a service
+		// message for the first time -- e.g. a server-side retention-purge
+		// edit converting a purged file's message into a
+		// messageActionCustomAction notice. isService() still reflects this
+		// item's PRE-edit state at this point, so gating on it here would
+		// silently drop that conversion: the live update would do nothing
+		// and the old content would keep rendering until the next full
+		// history reload rebuilds the item from scratch (which already goes
+		// through this same createServiceFromMtp path via a different call
+		// site). Apply the same generic conversion regardless of whether
+		// this item was already a service message before this edit -- and,
+		// same as the messageActionConferenceCall case above, drop any real
+		// media (and its shared-media index entry) it still owns first, or
+		// the chat's Documents/Photos browser would keep listing an item
+		// that no longer has a real file behind it.
+		if (!isService()) {
+			removeFromSharedMediaIndex();
+			_media = nullptr;
+		}
 		if (const auto reply = Get<HistoryMessageReply>()) {
 			reply->clearData(this);
 		}
