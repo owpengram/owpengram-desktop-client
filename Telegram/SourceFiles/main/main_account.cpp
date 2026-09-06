@@ -35,6 +35,18 @@ namespace {
 
 constexpr auto kWideIdsTag = ~uint64(0);
 
+// Small FNV-1a hash, dependency-free -- mirrors the identical helper in
+// main_session.cpp (Session::uniqueId), which this function's result must
+// stay consistent with (see the "See also" comments on both).
+[[nodiscard]] uint32 Fnv1aHash(const QByteArray &bytes) {
+	auto hash = uint32(2166136261u);
+	for (const auto byte : bytes) {
+		hash ^= uint32(uchar(byte));
+		hash *= uint32(16777619u);
+	}
+	return hash;
+}
+
 // Max time to wait for the server to acknowledge auth.logOut before logging out
 // locally anyway (so accounts can be removed even when the server is offline).
 constexpr auto kLogoutFallbackTimeout = crl::time(2000);
@@ -129,12 +141,21 @@ void Account::watchSessionChanges() {
 }
 
 uint64 Account::willHaveSessionUniqueId(MTP::Config *config) const {
-	// See also Session::uniqueId.
+	// See also Session::uniqueId -- same server-scope disambiguation, kept
+	// consistent so anything comparing this predicted value against the
+	// session's eventual real uniqueId() (once it exists) still matches.
 	if (!_sessionUserId) {
 		return 0;
 	}
-	return _sessionUserId.bare
+	auto result = _sessionUserId.bare
 		| (config && config->isTestMode() ? 0x0100'0000'0000'0000ULL : 0ULL);
+	const auto scopeKey = Owpengram::ServerScopeKeyForAccount(
+		const_cast<Account*>(this));
+	if (!scopeKey.isEmpty()) {
+		const auto hash = Fnv1aHash(scopeKey.toUtf8());
+		result ^= (uint64(hash) & 0xFFFFULL) << 40;
+	}
+	return result;
 }
 
 void Account::createSession(

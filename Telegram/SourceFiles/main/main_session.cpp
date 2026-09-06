@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_app_config.h"
 #include "main/session/send_as_peers.h"
 #include "mtproto/mtproto_config.h"
+#include "owpengram/owpengram_servers.h"
 #include "chat_helpers/stickers_emoji_pack.h"
 #include "chat_helpers/stickers_dice_pack.h"
 #include "chat_helpers/stickers_gift_box_pack.h"
@@ -91,6 +92,19 @@ constexpr auto kTmpPasswordReserveTime = TimeId(10);
 	return MTP::ConfigFields(
 		session->mtp().environment()
 	).internalLinksDomain;
+}
+
+// Small FNV-1a hash, dependency-free (no extra Qt/std hashing include needed)
+// -- only used to mix a handful of distinct server hostnames into a few
+// unused high bits of Session::uniqueId() below, not for anything requiring
+// cryptographic quality.
+[[nodiscard]] uint32 Fnv1aHash(const QByteArray &bytes) {
+	auto hash = uint32(2166136261u);
+	for (const auto byte : bytes) {
+		hash ^= uint32(uchar(byte));
+		hash *= uint32(16777619u);
+	}
+	return hash;
 }
 
 } // namespace
@@ -379,8 +393,28 @@ bool Session::isTestMode() const {
 
 uint64 Session::uniqueId() const {
 	// See also Account::willHaveSessionUniqueId.
-	return userId().bare
+	auto result = userId().bare
 		| (isTestMode() ? 0x0100'0000'0000'0000ULL : 0ULL);
+	// Two independent self-hosted servers can coincidentally assign the SAME
+	// numeric user id to unrelated accounts -- there is no shared id
+	// namespace across custom servers the way there is across official
+	// Telegram's own DCs, which is all the test-mode bit above accounts for.
+	// Without this, Notifications::System::findSession (keyed by uniqueId)
+	// can resolve a notification click to the WRONG logged-in account
+	// whenever two of them share a user id on different servers -- up to and
+	// including opening a different account's own Saved Messages instead of
+	// the chat the notification was actually for. Folding in a hash of the
+	// account's own server host (empty/no-op for real Telegram accounts, so
+	// their uniqueId is unchanged) disambiguates same-numbered accounts on
+	// different servers. Bits 40-55 are unused by both the bare user id
+	// (Telegram ids fit well under 2^40) and the test-mode bit (56), so this
+	// can't collide with either.
+	const auto scopeKey = Owpengram::ServerScopeKeyForAccount(&account());
+	if (!scopeKey.isEmpty()) {
+		const auto hash = Fnv1aHash(scopeKey.toUtf8());
+		result ^= (uint64(hash) & 0xFFFFULL) << 40;
+	}
+	return result;
 }
 
 UserId Session::userId() const {
