@@ -2168,7 +2168,17 @@ void SendFilesBox::applySendImagesAsPhotosOverride(
 }
 
 bool SendFilesBox::addFiles(Ui::PreparedList list) {
-	if (list.error != Ui::PreparedList::Error::None) {
+	if (list.error == Ui::PreparedList::Error::TooLargeFile) {
+		const auto fileSize = list.files.empty()
+			? 0
+			: list.files.front().size;
+		_show->show(Box(
+			FileSizeLimitBox,
+			&_show->session(),
+			fileSize,
+			nullptr));
+		return false;
+	} else if (list.error != Ui::PreparedList::Error::None) {
 		return false;
 	}
 	applySendImagesAsPhotosOverride(list);

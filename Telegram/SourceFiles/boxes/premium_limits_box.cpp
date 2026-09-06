@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/checkbox.h"
 #include "ui/wrap/padding_wrap.h"
 #include "ui/text/text_utilities.h"
+#include "ui/text/format_values.h"
 #include "ui/vertical_list.h"
 #include "main/main_session.h"
 #include "main/main_account.h"
@@ -1017,6 +1018,36 @@ void FileSizeLimitBox(
 
 	const auto defaultGb = float64(int(defaultLimit + 999) / 2000);
 	const auto premiumGb = float64(int(premiumLimit + 999) / 2000);
+	// upload_max_fileparts_default/_premium are exact multiples of 2000
+	// (1000 MiB, this box's "1 GB" unit) at stock values (4000/8000, i.e.
+	// 2/4 GB) -- defaultGb/premiumGb reconstruct them exactly. A
+	// self-hosted server's own configured per-file ceiling can be any
+	// byte count, though, and whenever it isn't itself a round multiple
+	// of 1000 MiB, the same floor-division silently rounds the DISPLAYED
+	// limit down (e.g. a configured ~1100 MB ceiling would show "1 GB"),
+	// understating the real allowance by up to ~1000 MiB. Below ~500 MiB
+	// it rounds all the way to 0, which is worse than misleading: it
+	// feeds AddBubbleRow's (current - min) / float64(max - min) below a
+	// literal 0/0 and crashes on the resulting NaN geometry.
+	const auto exactGb = defaultGb * 2000. == defaultLimit
+		&& premiumGb * 2000. == premiumLimit;
+
+	if (!exactGb) {
+		const auto limitBytes = int64(premiumLimit) * 512 * 1024;
+		box->setWidth(st::boxWideWidth);
+		box->setTitle(tr::lng_file_size_limit_title());
+		box->addRow(object_ptr<Ui::FlatLabel>(
+			box,
+			tr::lng_file_size_limit1(
+				lt_size,
+				rpl::single(tr::bold(Ui::FormatSizeText(limitBytes))),
+				tr::rich),
+			st::aboutRevokePublicLabel));
+		box->addButton(tr::lng_box_ok(), [=] {
+			box->closeBox();
+		});
+		return;
+	}
 
 	const auto tooLarge = (fileSizeBytes > premiumLimit * 512ULL * 1024);
 	const auto showLimit = tooLarge ? premiumGb : defaultGb;

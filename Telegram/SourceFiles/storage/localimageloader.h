@@ -24,6 +24,16 @@ constexpr auto kFileSizeLimit = 2'000 * int64(1024 * 1024);
 // Load files up to 4'000 MB.
 constexpr auto kFileSizePremiumLimit = 4'000 * int64(1024 * 1024);
 
+// Same limits as above, but reflecting the active account's own server
+// config (upload_max_fileparts_default/_premium app config keys) when it
+// declares a smaller ceiling than the protocol defaults -- a self-hosted
+// server may cap uploads well below 2/4 GB. Falls back to the constants
+// above when no session is active yet. Main-thread only: reads live account
+// state, unlike kFileSizeLimit/kFileSizePremiumLimit above, which stay safe
+// to use from FileLoadTask::process() (a background thread).
+[[nodiscard]] int64 FileSizeLimit();
+[[nodiscard]] int64 FileSizePremiumLimit();
+
 [[nodiscard]] int PhotoSideLimit(bool large);
 [[nodiscard]] int PhotoSideLimit();
 

@@ -147,7 +147,7 @@ MimeDataState ComputeMimeDataState(const QMimeData *data) {
 
 		using namespace Core;
 		const auto filesize = info.size();
-		if (filesize > kFileSizePremiumLimit) {
+		if (filesize > FileSizePremiumLimit()) {
 			return MimeDataState::None;
 		//} else if (filesize > kFileSizeLimit) {
 		//	return MimeDataState::PremiumFile;
@@ -214,8 +214,8 @@ PreparedList PrepareMediaList(
 				PreparedList::Error::EmptyFile,
 				file
 			};
-		} else if (filesize > kFileSizePremiumLimit
-			|| (filesize > kFileSizeLimit && !premium)) {
+		} else if (filesize > FileSizePremiumLimit()
+			|| (filesize > FileSizeLimit() && !premium)) {
 			auto errorResult = PreparedList(
 				PreparedList::Error::TooLargeFile,
 				QString());

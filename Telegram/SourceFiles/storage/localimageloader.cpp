@@ -38,7 +38,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/themes/window_theme_preview.h"
 #include "mainwidget.h"
 #include "mainwindow.h"
+#include "main/main_account.h"
 #include "main/main_session.h"
+#include "data/data_premium_limits.h"
 
 #include <QtCore/QBuffer>
 #include <QtGui/QImageWriter>
@@ -201,6 +203,24 @@ struct PreparedFileThumbnail {
 }
 
 } // namespace
+
+int64 FileSizeLimit() {
+	const auto &account = Core::App().activeAccount();
+	if (!account.sessionExists()) {
+		return kFileSizeLimit;
+	}
+	return int64(Data::PremiumLimits(&account.session()).uploadMaxDefault())
+		* 512 * 1024;
+}
+
+int64 FileSizePremiumLimit() {
+	const auto &account = Core::App().activeAccount();
+	if (!account.sessionExists()) {
+		return kFileSizePremiumLimit;
+	}
+	return int64(Data::PremiumLimits(&account.session()).uploadMaxPremium())
+		* 512 * 1024;
+}
 
 int PhotoSideLimit(bool large) {
 	return large ? 2560 : 1280;
@@ -1049,14 +1069,19 @@ void FileLoadTask::finish() {
 		return;
 	}
 	const auto premium = session->user()->isPremium();
+	const auto limits = Data::PremiumLimits(session);
+	const auto sizeLimit
+		= int64(limits.uploadMaxDefault()) * 512 * 1024;
+	const auto sizePremiumLimit
+		= int64(limits.uploadMaxPremium()) * 512 * 1024;
 	if (!_result || !_result->filesize || _result->filesize < 0) {
 		Ui::show(
 			Ui::MakeInformBox(
 				tr::lng_send_image_empty(tr::now, lt_name, _filepath)),
 			Ui::LayerOption::KeepOther);
 		removeFromAlbum();
-	} else if (_result->filesize > kFileSizePremiumLimit
-		|| (_result->filesize > kFileSizeLimit && !premium)) {
+	} else if (_result->filesize > sizePremiumLimit
+		|| (_result->filesize > sizeLimit && !premium)) {
 		Ui::show(
 			Box(FileSizeLimitBox, session, _result->filesize, nullptr),
 			Ui::LayerOption::KeepOther);
