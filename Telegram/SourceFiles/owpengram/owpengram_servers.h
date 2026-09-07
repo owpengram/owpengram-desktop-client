@@ -172,6 +172,21 @@ void FetchServerIcon(
 	int port,
 	Fn<void(QByteArray data)> done);
 
+// Re-reads the admin-edited identity (name/description/icon) of every server
+// that serves /owpengram/server-info and stores it, so a logo or title the
+// operator changed shows up without the user having to open Edit Server and
+// re-fetch by hand. Call it when a server list becomes visible.
+//
+// Deliberately cosmetic-only: host, port, RSA key, DC id and id are NEVER
+// touched by this. That endpoint is plain HTTP, so anything able to MITM it
+// could otherwise redirect the connection or swap the key the handshake is
+// verified against; a wrong name or icon is merely wrong, not dangerous.
+//
+// The Telegram server is skipped -- it is not an OwpenGram backend and has
+// no such endpoint. Fetches are fire-and-forget, deduplicated per server
+// while one is in flight, and any failure silently keeps the stored values.
+void RefreshServersInfo();
+
 // Calls done(true) once the account's MTP is connected to the given server,
 // or done(false) after a 30s timeout. Returns a cancel handle: call it to
 // stop polling and guarantee done() is never called afterwards (e.g. when

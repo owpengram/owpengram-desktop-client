@@ -204,7 +204,15 @@ HeaderRow::HeaderRow(
 			p.setFont(font);
 			p.drawText(QRect(0, 0, logoSize, logoSize), Qt::AlignCenter, ch);
 		} else {
-			const auto circleMask = !isOfficial;
+			// Keyed on "is this bundled art" rather than on isOfficial:
+			// ":/gui/art/..." logos ship pre-shaped and carry transparency
+			// outside the circle, so masking them would clip the design.
+			// Everything else is an arbitrary rectangular image -- picked by
+			// the user, or fetched from the server by RefreshServersInfo --
+			// and has to be cropped to the circle. The official server now
+			// gets a fetched logo too, so isOfficial no longer implies
+			// bundled art, which is what left it square here.
+			const auto circleMask = !path.startsWith(u":/"_q);
 			const auto image = QPixmap(path).scaled(
 				logoSize,
 				logoSize,
@@ -218,8 +226,15 @@ HeaderRow::HeaderRow(
 				p.setPen(Qt::NoPen);
 				p.setBrush(st::boxBg);
 				p.drawEllipse(0, 0, logoSize, logoSize);
-				p.setClipRect(0, 0, logoSize, logoSize);
-				p.setClipRegion(QRegion(0, 0, logoSize, logoSize, QRegion::Ellipse));
+				// QRegion-based clipping is always rasterized with hard,
+				// aliased edges in Qt no matter what PainterHighQualityEnabler
+				// sets -- a QPainterPath clip is a genuinely different path
+				// that does respect antialiasing. Same fix as ServerRow in
+				// intro_server_select.cpp, which this had drifted out of sync
+				// with (visibly jagged circle here, smooth one there).
+				auto clipPath = QPainterPath();
+				clipPath.addEllipse(0, 0, logoSize, logoSize);
+				p.setClipPath(clipPath);
 			}
 			p.drawPixmap(left, top, image);
 		}

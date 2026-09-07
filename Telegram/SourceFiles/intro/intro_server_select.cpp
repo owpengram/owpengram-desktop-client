@@ -129,7 +129,15 @@ ServerRow::ServerRow(
 			p.setFont(font);
 			p.drawText(QRect(0, 0, size, size), Qt::AlignCenter, ch);
 		} else {
-			const auto circleMask = !_server.isOfficial;
+			// Keyed on "is this bundled art" rather than on isOfficial:
+			// ":/gui/art/..." logos ship pre-shaped and carry transparency
+			// outside the circle, so masking them would clip the design.
+			// Everything else is an arbitrary rectangular image -- picked by
+			// the user, or fetched from the server by RefreshServersInfo --
+			// and has to be cropped to the circle. The official server now
+			// gets a fetched logo too, so isOfficial no longer implies
+			// bundled art, which is what left it square here.
+			const auto circleMask = !path.startsWith(u":/"_q);
 			const auto image = QPixmap(path).scaled(
 				size,
 				size,
@@ -383,6 +391,18 @@ void ServerSelectWidget::activate() {
 	_addServer->show();
 	_statusTimer.cancel();
 	_statusTimer.callEach(30000);
+
+	// Pull each server's current name/description/icon. Without this the
+	// list keeps showing whatever identity was captured when the server was
+	// added, so an operator changing the logo or title only reached users
+	// who happened to open Edit Server and re-fetch by hand.
+	//
+	// Fire-and-forget: anything that actually changed is written and fires
+	// CustomServersChanges, which the constructor subscribes to, so the
+	// rows update themselves once the replies land. Nothing changed means
+	// no notification and no rebuild -- which is also why this is called
+	// from activate() and never from rebuildList().
+	Owpengram::RefreshServersInfo();
 }
 
 void ServerSelectWidget::submit() {
