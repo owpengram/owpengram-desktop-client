@@ -54,6 +54,9 @@ public:
 	[[nodiscard]] bool searching() const {
 		return _searching;
 	}
+	[[nodiscard]] bool searchContentFits() const {
+		return _searchContentFits;
+	}
 	void activateTab(const QString &id, bool animated = true);
 	void restoreActiveTab(const QString &id);
 
@@ -86,8 +89,11 @@ private:
 	void pushViewportToActive();
 	void scheduleBodySync();
 	void scheduleHeightSync();
+	void scheduleVisibilitySync();
 	void syncBodyNow();
 	void syncHeightNow();
+	void syncStripVisibility();
+	void syncVisibilityNow();
 	void scrollToBodyTop();
 	[[nodiscard]] QRect bodyVisibleRect() const;
 	void startSlideAnimation(
@@ -99,6 +105,7 @@ private:
 	std::vector<MediaTabDescriptor> _tabs;
 	std::vector<TextWithEntities> _stripTitles;
 	std::vector<bool> _tabsShown;
+	std::vector<bool> _syncedTabsShown;
 	std::vector<int> _order;
 	int _mainTabIndex = -1;
 
@@ -121,9 +128,11 @@ private:
 	bool _userChosenTab = false;
 	bool _bodySyncQueued = false;
 	bool _heightSyncQueued = false;
+	bool _visibilitySyncQueued = false;
 	bool _viewportPushPending = false;
 	bool _scrolledToTop = true;
 	bool _searching = false;
+	bool _searchContentFits = false;
 	int _keepMinHeight = 0;
 	rpl::variable<MediaTabContent*> _activeTab = nullptr;
 

@@ -40,7 +40,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mainwindow.h"
 #include "apiwrap.h"
 #include "styles/style_chat_helpers.h"
-#include "styles/style_menu_icons.h"
 
 namespace ChatHelpers {
 
@@ -796,6 +795,10 @@ void TabbedSelector::resizeEvent(QResizeEvent *e) {
 	update();
 }
 
+void TabbedSelector::contextMenuEvent(QContextMenuEvent *e) {
+	e->accept();
+}
+
 void TabbedSelector::updateScrollGeometry(QSize oldSize) {
 	auto scrollWidth = width() - st::emojiPanRadius;
 	auto scrollHeight = height() - scrollTop() - scrollBottom();
@@ -862,8 +865,12 @@ void TabbedSelector::paintEvent(QPaintEvent *e) {
 		paintSlideFrame(p);
 		if (!_a_slide.animating()) {
 			_slideAnimation.reset();
-			afterShown();
-			_slideFinished.fire({});
+			InvokeQueued(this, [=] {
+				if (!_slideAnimation) {
+					afterShown();
+					_slideFinished.fire({});
+				}
+			});
 		}
 	} else {
 		paintContent(p);
@@ -1105,6 +1112,16 @@ void TabbedSelector::provideRecentEmoji(
 		if (tab.type() == SelectorTab::Emoji) {
 			const auto emoji = static_cast<EmojiListWidget*>(tab.widget());
 			emoji->provideRecent(customRecentList);
+		}
+	}
+}
+
+void TabbedSelector::setMarkedCustomIds(
+		const base::flat_set<DocumentId> &ids) {
+	for (const auto &tab : _tabs) {
+		if (tab.type() == SelectorTab::Emoji) {
+			const auto emoji = static_cast<EmojiListWidget*>(tab.widget());
+			emoji->setMarkedCustomIds(ids);
 		}
 	}
 }

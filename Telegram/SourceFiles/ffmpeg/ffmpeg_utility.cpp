@@ -17,6 +17,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #endif // !Q_OS_WIN && !Q_OS_MAC
 
 #include <QImage>
+#include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <new>
 
@@ -92,8 +94,8 @@ struct AlignedFrameStorageLayout {
 };
 
 void AlignedImageBufferCleanupHandler(void *data) {
-	const auto buffer = static_cast<uchar*>(data);
-	delete[] buffer;
+	// Paired with the ::malloc() in CreateFrameStorage().
+	::free(data);
 }
 
 [[nodiscard]] bool ComputeAlignedFrameStorageLayout(
@@ -338,6 +340,14 @@ void IODeleter::operator()(AVIOContext *value) {
 	}
 }
 
+void RestrictToCustomIO(AVFormatContext *format) {
+	// We always read the media through custom IO callbacks, so ffmpeg must
+	// never resolve a protocol on its own. An empty whitelist makes demuxers
+	// like dash / hls refuse to open the external segment URLs they may
+	// reference, closing an IP-leak / local-file-read vector.
+	av_opt_set(format, "protocol_whitelist", "", 0);
+}
+
 FormatPointer MakeFormatPointer(
 		void *opaque,
 		int(*read)(void *opaque, uint8_t *buffer, int bufferSize),
@@ -346,7 +356,8 @@ FormatPointer MakeFormatPointer(
 #else
 		int(*write)(void *opaque, uint8_t *buffer, int bufferSize),
 #endif
-		int64_t(*seek)(void *opaque, int64_t offset, int whence)) {
+		int64_t(*seek)(void *opaque, int64_t offset, int whence),
+		FormatSettings settings) {
 	auto io = MakeIOPointer(opaque, read, write, seek);
 	if (!io) {
 		return {};
@@ -359,10 +370,14 @@ FormatPointer MakeFormatPointer(
 	}
 	result->pb = io.get();
 	result->flags |= AVFMT_FLAG_CUSTOM_IO;
+	RestrictToCustomIO(result);
 
 	auto options = (AVDictionary*)nullptr;
 	const auto guard = gsl::finally([&] { av_dict_free(&options); });
 	av_dict_set(&options, "usetoc", "1", 0);
+	if (settings.ignoreEditList) {
+		av_dict_set(&options, "ignore_editlist", "1", 0);
+	}
 
 	const auto error = AvErrorWrap(avformat_open_input(
 		&result,
@@ -738,9 +753,12 @@ int ReadRotationFromMetadata(not_null<AVStream*> stream) {
 		AV_PKT_DATA_DISPLAYMATRIX);
 	if (displaymatrix) {
 		const auto matrix = (int32_t*)displaymatrix->data;
-		if (const auto result = NormalizeRotation(
-				-base::SafeRound(av_display_rotation_get(matrix)))) {
-			return result;
+		const auto angle = av_display_rotation_get(matrix);
+		if (std::isfinite(angle)) {
+			if (const auto result = NormalizeRotation(
+					-base::SafeRound(angle))) {
+				return result;
+			}
 		}
 	}
 	const auto rotateTag = av_dict_get(
@@ -790,7 +808,11 @@ QImage CreateFrameStorage(QSize size) {
 	if (!ComputeAlignedFrameStorageLayout(size, &layout)) {
 		return {};
 	}
-	const auto buffer = new (std::nothrow) uchar[layout.totalBytes];
+	// Not `new (std::nothrow)`: the operator new handler installed by
+	// CrashReports fires from inside operator new before the nothrow
+	// wrapper can return nullptr, so a recoverable out-of-memory here
+	// aborted the process instead of taking the null path below.
+	const auto buffer = static_cast<uchar*>(::malloc(layout.totalBytes));
 	if (!buffer) {
 		return {};
 	}

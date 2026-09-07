@@ -70,6 +70,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
+#include "menu/menu_mark_as_read.h"
 #include "menu/menu_sponsored.h"
 #include "window/notifications_manager.h"
 #include "window/window_controller.h"
@@ -616,7 +617,7 @@ bool InnerWidget::updateEntryHeight(not_null<Entry*> entry) {
 			top += result.row->height();
 		}
 	}
-	if (_openedCommunity) {
+	if (communityModeShown()) {
 		if (const auto history = entry->asHistory()) {
 			const auto recount = [&](CommunityRowsView &view) {
 				if (view.contains(history)) {
@@ -637,7 +638,7 @@ void InnerWidget::setNarrowRatio(float64 narrowRatio) {
 	_geometryInited = true;
 	_narrowRatio = narrowRatio;
 	auto changed = _shownList->updateHeights(_narrowRatio);
-	if (_openedCommunity) {
+	if (communityModeShown()) {
 		const auto recount = [&](CommunityRowsView &view) {
 			const auto was = view.height();
 			view.recountHeights(_narrowRatio);
@@ -709,7 +710,7 @@ int InnerWidget::dialogsOffset() const {
 	return collapsedRowsOffset()
 		+ (_collapsedRows.size() * st::dialogsImportantBarHeight)
 		- skipTopHeight()
-		+ ((_openedCommunity && !_shownList->empty())
+		+ ((communityModeShown() && !_shownList->empty())
 			? st::searchedBarHeight
 			: 0);
 }
@@ -832,6 +833,10 @@ int InnerWidget::communityRowAbsoluteTop(int index) const {
 		+ _communityViewable.rowTop(index);
 }
 
+bool InnerWidget::communityModeShown() const {
+	return _openedCommunity && !_openedForum;
+}
+
 void InnerWidget::changeOpenedFolder(Data::Folder *folder) {
 	Expects(!folder || !_savedSublists);
 
@@ -870,6 +875,9 @@ void InnerWidget::changeOpenedForum(Data::Forum *forum) {
 	_openedForum = forum;
 	_st = forum ? &st::forumTopicRow : &st::defaultDialogRow;
 	refreshShownList();
+	if (!forum && _openedCommunity) {
+		rebuildCommunitySections();
+	}
 
 	_openedForumLifetime.destroy();
 	if (forum) {
@@ -895,7 +903,7 @@ void InnerWidget::rebuildCommunitySections() {
 	_communityViewable.clear();
 	_communitySelected = -1;
 	setCommunityPressed(-1);
-	if (!_openedCommunity) {
+	if (!communityModeShown()) {
 		return;
 	}
 	const auto owner = &session().data();
@@ -1012,14 +1020,14 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 		.topicJumpCache = _topicJumpCache.get(),
 		.folder = _openedFolder,
 		.forum = _openedForum,
-		.community = _openedCommunity,
+		.community = communityModeShown() ? _openedCommunity : nullptr,
 		.currentBg = currentBg(),
 		.filter = _filterId,
 		.now = ms,
 		.width = fullWidth,
 		.paused = videoPaused,
 		.narrow = (fullWidth < st::columnMinimalWidthLeft / 2),
-		.insideCommunity = (_openedCommunity != nullptr),
+		.insideCommunity = communityModeShown(),
 	};
 	const auto fillGuard = gsl::finally([&] {
 		// We translate painter down, but it'll be cropped below rect.
@@ -1179,7 +1187,7 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 			const auto view = thread
 				? &thread->lastItemDialogsView()
 				: nullptr;
-			auto &badge = row->entry()->chatListPeerBadge();
+			const auto &badge = row->entry()->chatListPeerBadge();
 			_rowsScrollCache.paintRow(
 				p,
 				cacheKey,
@@ -1216,14 +1224,14 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 		}
 	};
 	if (_state == WidgetState::Default) {
-		if (_openedCommunity) {
+		if (communityModeShown()) {
 			p.save();
 		}
 		const auto collapsedSkip = collapsedRowsOffset();
 		p.translate(0, collapsedSkip);
 		paintCollapsedRows(p, r.translated(0, -collapsedSkip));
 
-		if (_openedCommunity && !_shownList->empty()) {
+		if (communityModeShown() && !_shownList->empty()) {
 			p.translate(0, st::searchedBarHeight);
 		}
 
@@ -1309,7 +1317,7 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 		} else {
 			p.fillRect(dialogsClip, currentBg());
 		}
-		if (_openedCommunity) {
+		if (communityModeShown()) {
 			p.restore();
 			const auto paintBar = [&](const QString &text) {
 				p.fillRect(
@@ -1405,11 +1413,11 @@ void InnerWidget::paintEvent(QPaintEvent *e) {
 
 				p.setFont(st::mentionFont);
 				for (; from < to; ++from) {
-					auto &result = _hashtagResults[from];
+					const auto &result = _hashtagResults[from];
 					bool selected = (from == (isPressed() ? _hashtagPressed : _hashtagSelected));
 					p.fillRect(0, 0, fullWidth, st::mentionHeight, selected ? st::mentionBgOver : currentBg());
 					result->row.paintRipple(p, 0, 0, fullWidth);
-					auto &tag = result->tag;
+					const auto &tag = result->tag;
 					if (selected) {
 						int skip = (st::mentionHeight - st::smallCloseIconOver.height()) / 2;
 						st::smallCloseIconOver.paint(p, QPoint(fullWidth - st::smallCloseIconOver.width() - skip, skip), width());
@@ -2196,6 +2204,12 @@ void InnerWidget::selectByMouse(QPoint globalPosition) {
 	const auto w = width();
 	const auto mouseY = local.y();
 	clearIrrelevantState();
+	if ((_pressButton == Qt::MiddleButton)
+		&& _activeQuickAction
+		&& (local.x() < 0 || local.x() >= w)) {
+		deselectAllRows();
+		return;
+	}
 	if (_state == WidgetState::Default) {
 		const auto offset = dialogsOffset();
 		const auto collapsedSelected = (mouseY >= 0
@@ -2213,7 +2227,7 @@ void InnerWidget::selectByMouse(QPoint globalPosition) {
 		const auto selectedRightButton = selected
 			&& lookupIsInBotAppButton(selected, QPoint(local.x(), mappedY));
 		auto communitySelected = -1;
-		if (_openedCommunity && !selected && collapsedSelected < 0) {
+		if (communityModeShown() && !selected && collapsedSelected < 0) {
 			const auto pick = [&](
 					int sectionTop,
 					int flatBase,
@@ -2476,7 +2490,17 @@ void InnerWidget::mousePressEvent(QMouseEvent *e) {
 		const auto filterId = _filterId;
 		const auto origin = e->pos()
 			- QPoint(0, filteredOffset() + result.top);
-		const auto updateCallback = [=] { repaintDialogRow(filterId, row); };
+		// The ripple can be parked in _rightButtons, which is owned by us and
+		// outlives the Row, so hold the row weakly rather than raw.
+		const auto weakThis = base::make_weak(this);
+		const auto weakRow = base::make_weak(row);
+		const auto updateCallback = [weakThis, weakRow, filterId] {
+			const auto that = weakThis.get();
+			const auto strong = weakRow.get();
+			if (that && strong) {
+				that->repaintDialogRow(filterId, strong);
+			}
+		};
 		if (addRightButtonRipple(origin, updateCallback)) {
 		} else if (_pressedTopicJump) {
 			row->addTopicJumpRipple(
@@ -2506,7 +2530,7 @@ void InnerWidget::mousePressEvent(QMouseEvent *e) {
 				updateCallback);
 		}
 	} else if (base::in_range(_searchedPressed, 0, _searchResults.size())) {
-		auto &row = _searchResults[_searchedPressed];
+		const auto &row = _searchResults[_searchedPressed];
 		row->addRipple(
 			e->pos() - QPoint(0, searchedOffset() + _searchedPressed * _st->height),
 			QSize(width(), _st->height),
@@ -2537,11 +2561,26 @@ bool InnerWidget::addRightButtonRipple(QPoint origin, Fn<void()> updateCallback)
 	}
 	const auto size = _pressedRightButtonData->bg.size()
 		/ style::DevicePixelRatio();
-	if (!_pressedRightButtonData->ripple) {
-		_pressedRightButtonData->ripple = std::make_unique<Ui::RippleAnimation>(
-			_pressedRightButtonData->st->button.ripple,
+	// The ripple outlives the row it was created for: it is owned per peer by
+	// _rightButtons, which is cleared only on a palette change. Keep the
+	// callback in the button and refresh it on every press, so a ripple never
+	// keeps calling the one captured on the very first press.
+	//
+	// Capturing the RightButton raw is safe: _rightButtons is a node based
+	// unordered_map, so inserting more buttons never invalidates pointers to
+	// the existing ones, and the only thing that removes this one - clear()
+	// above - destroys the ripple that holds this callback along with it.
+	const auto data = _pressedRightButtonData;
+	data->rippleUpdate = std::move(updateCallback);
+	if (!data->ripple) {
+		data->ripple = std::make_unique<Ui::RippleAnimation>(
+			data->st->button.ripple,
 			Ui::RippleAnimation::RoundRectMask(size, size.height() / 2),
-			std::move(updateCallback));
+			[=] {
+				if (const auto &callback = data->rippleUpdate) {
+					callback();
+				}
+			});
 	}
 	const auto shift = QPoint(
 		width() - size.width() - _pressedRightButtonData->st->margin.right(),
@@ -3258,7 +3297,7 @@ void InnerWidget::handleChatListEntryRefreshes() {
 			return (topic->forum() == _openedForum);
 		} else if (const auto sublist = event.key.sublist()) {
 			return sublist->parent() == _savedSublists;
-		} else if (_openedCommunity) {
+		} else if (communityModeShown()) {
 			const auto history = event.key.history();
 			return history
 				&& (history->communityListInfo() == _openedCommunity);
@@ -3286,7 +3325,7 @@ void InnerWidget::handleChatListEntryRefreshes() {
 				? (key.topic()->forum() == _openedForum)
 				: key.sublist()
 				? (key.sublist()->parent() == _savedSublists)
-				: _openedCommunity
+				: communityModeShown()
 				? (entry->asHistory()
 					&& entry->asHistory()->communityListInfo()
 						== _openedCommunity)
@@ -3324,7 +3363,7 @@ void InnerWidget::handleChatListEntryRefreshes() {
 				}
 				_updated.fire({});
 			}
-			if (_openedCommunity) {
+			if (communityModeShown()) {
 				rebuildCommunitySections();
 			}
 			refresh();
@@ -3776,22 +3815,27 @@ void InnerWidget::clearSelection() {
 	_mouseSelection = false;
 	_lastMousePosition = std::nullopt;
 	_lastRowLocalMouseX = -1;
-	if (isSelected()) {
-		updateSelectedRow();
-		_collapsedSelected = -1;
-		_selectedMorePosts = false;
-		_selectedChatTypeFilter = false;
-		_selected = nullptr;
-		_communitySelected = -1;
-		_filteredSelected
-			= _searchedSelected
-			= _previewSelected
-			= _peerSearchSelected
-			= _hashtagSelected
-			= -1;
-		setCursor(style::cur_default);
-	}
+	deselectAllRows();
 	setCommunityPressed(-1);
+}
+
+void InnerWidget::deselectAllRows() {
+	if (!isSelected()) {
+		return;
+	}
+	updateSelectedRow();
+	_collapsedSelected = -1;
+	_selectedMorePosts = false;
+	_selectedChatTypeFilter = false;
+	_selected = nullptr;
+	_communitySelected = -1;
+	_filteredSelected
+		= _searchedSelected
+		= _previewSelected
+		= _peerSearchSelected
+		= _hashtagSelected
+		= -1;
+	setCursor(style::cur_default);
 }
 
 void InnerWidget::fillSupportSearchMenu(not_null<Ui::PopupMenu*> menu) {
@@ -3861,6 +3905,9 @@ void InnerWidget::contextMenuEvent(QContextMenuEvent *e) {
 	const auto fromMouse = e->reason() == QContextMenuEvent::Mouse;
 
 	if (fromMouse) {
+		if (e->modifiers() & Qt::AltModifier) {
+			return;
+		}
 		selectByMouse(e->globalPos());
 	}
 
@@ -4769,7 +4816,7 @@ void InnerWidget::refresh(bool toTop) {
 	}
 	auto h = 0;
 	if (_state == WidgetState::Default) {
-		if (_openedCommunity) {
+		if (communityModeShown()) {
 			const auto requestableShown = _communityRequestableList
 				&& (_communityRequestableCount > 0);
 			if (_shownList->empty()
@@ -5009,7 +5056,7 @@ void InnerWidget::updateCommunityRequestableGeometry() {
 	if (!_communityRequestableList) {
 		return;
 	}
-	const auto shown = _openedCommunity
+	const auto shown = communityModeShown()
 		&& (_state == WidgetState::Default)
 		&& (_communityRequestableCount > 0);
 	_communityRequestableList->setVisible(shown);
@@ -5063,7 +5110,7 @@ bool InnerWidget::archiveSearchActive() const {
 }
 
 bool InnerWidget::communitySearchActive() const {
-	return (_openedCommunity || _searchState.community)
+	return (communityModeShown() || _searchState.community)
 		&& ((_searchState.tab == ChatSearchTab::ThisCommunity)
 			|| !QStringView(_searchState.query).trimmed().isEmpty());
 }
@@ -5136,7 +5183,7 @@ void InnerWidget::updateSearchIn() {
 		: nullptr;
 	const auto communityChannel = _searchState.community
 		? _searchState.community
-		: _openedCommunity
+		: communityModeShown()
 		? _openedCommunity->channel().get()
 		: nullptr;
 	const auto communityIcon = (communityChannel && !_searchState.inChat)
@@ -5371,7 +5418,7 @@ void InnerWidget::scrollToEntry(const RowDescriptor &entry) {
 			}
 		}
 		for (auto i = 0, c = int(_filterResults.size()); i != c; ++i) {
-			auto &result = _filterResults[i];
+			const auto &result = _filterResults[i];
 			if (result.key() == entry.key) {
 				const auto from = filteredOffset() + result.top;
 				scrollToItem(from, result.row->height());
@@ -6220,8 +6267,8 @@ void InnerWidget::setupShortcuts() {
 			if (!thread) {
 				return false;
 			}
-			if (Window::IsUnreadThread(thread)) {
-				Window::MarkAsReadThread(thread);
+			if (MarkAsReadMenu::IsUnreadThread(thread)) {
+				MarkAsReadMenu::MarkAsReadThread(thread);
 			}
 			return true;
 		});
@@ -6328,17 +6375,19 @@ void InnerWidget::setSwipeContextData(
 				&& !context->icon->frameIndex()
 				&& !context->icon->animating()) {
 				context->icon->animate(
-					[=] { update(); },
+					[=] { updateQuickActionRow(key); },
 					0,
 					context->icon->framesCount());
 			}
 		} else if (context->data.ratio < kResetAnimateThreshold) {
 			if (context->icon
 				&& context->icon->frameIndex()) {
-				context->icon->jumpTo(0, [=] { update(); });
+				context->icon->jumpTo(
+					0,
+					[=] { updateQuickActionRow(key); });
 			}
 		}
-		update();
+		updateQuickActionRow(key);
 	}
 }
 
@@ -6403,6 +6452,12 @@ void InnerWidget::deactivateQuickAction() {
 		_activeQuickAction->finishedAt = crl::now();
 		_inactiveQuickActions.push_back(
 			QuickActionPtr{ _activeQuickAction.release() });
+	}
+}
+
+void InnerWidget::updateQuickActionRow(int64 key) {
+	if (const auto history = session().data().historyLoaded(PeerId(key))) {
+		repaintDialogRow({ history, FullMsgId() });
 	}
 }
 

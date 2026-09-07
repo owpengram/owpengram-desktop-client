@@ -153,6 +153,8 @@ public:
 
 	void provideRecent(const std::vector<EmojiStatusId> &customRecentList);
 
+	void setMarkedCustomIds(base::flat_set<DocumentId> ids);
+
 	void setSearchRightReserved(int value);
 
 	void prepareExpanding();
@@ -214,6 +216,7 @@ private:
 		DocumentData *thumbnailDocument = nullptr;
 		QString title;
 		std::vector<CustomOne> list;
+		mutable std::unique_ptr<Ui::Text::CustomEmoji> shortcutIcon;
 		mutable std::unique_ptr<Ui::RippleAnimation> ripple;
 		bool painted = false;
 		bool expanded = false;
@@ -384,6 +387,7 @@ private:
 	[[nodiscard]] base::unique_qptr<Ui::PopupMenu> fillSetContextMenu(
 		const CustomSet &set);
 
+	[[nodiscard]] bool customMarked(int section, int index) const;
 	[[nodiscard]] EmojiPtr lookupOverEmoji(const OverEmoji *over) const;
 	[[nodiscard]] ResolvedCustom lookupCustomEmoji(
 		const OverEmoji *over) const;
@@ -472,7 +476,8 @@ private:
 	[[nodiscard]] not_null<Ui::Text::CustomEmoji*> resolveCustomEmoji(
 		EmojiStatusId id,
 		not_null<DocumentData*> document,
-		uint64 setId);
+		uint64 setId,
+		bool search = false);
 	[[nodiscard]] Ui::Text::CustomEmoji *resolveCustomRecent(
 		Core::RecentEmojiId customId);
 	[[nodiscard]] not_null<Ui::Text::CustomEmoji*> resolveCustomRecent(
@@ -480,6 +485,7 @@ private:
 	[[nodiscard]] not_null<Ui::Text::CustomEmoji*> resolveCustomRecent(
 		EmojiStatusId id);
 	[[nodiscard]] Fn<void()> repaintCallback(
+		EmojiStatusId id,
 		DocumentId documentId,
 		uint64 setId);
 
@@ -529,6 +535,8 @@ private:
 	int _customSingleSize = 0;
 	bool _allowWithoutPremium = false;
 	Ui::RoundRect _overBg;
+	Ui::RoundRect _markedBg;
+	base::flat_set<DocumentId> _markedCustomIds;
 	QImage _searchExpandCache;
 
 	std::unique_ptr<StickerPremiumMark> _premiumMark;

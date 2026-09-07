@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "info/info_memento.h"
 #include "info/info_wrap_widget.h"
 #include "info/profile/info_profile_widget.h"
+#include "info/profile/tabs/adapters/info_profile_tab_chats.h"
 #include "info/profile/tabs/adapters/info_profile_tab_media.h"
 #include "info/profile/tabs/adapters/info_profile_tab_members.h"
 #include "info/profile/tabs/adapters/info_profile_tab_peer_lists.h"
@@ -176,6 +177,7 @@ InnerWidget::InnerWidget(
 , _migrated(_controller->migrated())
 , _topic(_controller->key().topic())
 , _sublist(_controller->key().sublist())
+, _savedMessages(_controller->key().savedMessages() != nullptr)
 , _content(setupContent(this, origin)) {
 	_content->heightValue(
 	) | rpl::on_next([this](int height) {
@@ -198,7 +200,7 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 			user,
 			Data::PeerUpdate::Flag::FullInfo
 		) | rpl::on_next([=] {
-			auto &photos = user->session().api().peerPhoto();
+			const auto &photos = user->session().api().peerPhoto();
 			if (const auto original = photos.nonPersonalPhoto(user)) {
 				// Preload it for the edit contact box.
 				_nonPersonalView = original->createMediaView();
@@ -210,16 +212,18 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 
 	auto result = object_ptr<Ui::VerticalLayout>(parent);
 
-	const auto musicPeer = _sublist
-		? _sublist->sublistPeer().get()
-		: _peer.get();
-	AddSavedMusic(
-		result.data(),
-		_controller,
-		musicPeer,
-		_topBarColor.value());
-	if (const auto user = _peer->asUser()) {
-		AddUnofficialSecurityRiskWarning(result.data(), user);
+	if (!_savedMessages) {
+		const auto musicPeer = _sublist
+			? _sublist->sublistPeer().get()
+			: _peer.get();
+		AddSavedMusic(
+			result.data(),
+			_controller,
+			musicPeer,
+			_topBarColor.value());
+		if (const auto user = _peer->asUser()) {
+			AddUnofficialSecurityRiskWarning(result.data(), user);
+		}
 	}
 
 	auto stack = SectionStack(result.data());
@@ -228,13 +232,15 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 		return result;
 	}
 
-	BuildProfileDetailsSections(
-		stack,
-		_controller,
-		_peer,
-		_topic,
-		_sublist,
-		origin);
+	if (!_savedMessages) {
+		BuildProfileDetailsSections(
+			stack,
+			_controller,
+			_peer,
+			_topic,
+			_sublist,
+			origin);
+	}
 
 	const auto thirdColumn = (_controller->wrap() == Wrap::Side);
 	const auto tabs = UseProfileMediaTabs() && !thirdColumn;
@@ -302,7 +308,10 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 			addSplit(Type::Photo);
 			addSplit(Type::Video);
 		};
-		if (!_topic) {
+		if (_savedMessages) {
+			tabs.push_back(MakeChatsTabDescriptor());
+		}
+		if (!_topic && !_savedMessages) {
 			tabs.push_back(MakeStoriesTabDescriptor(tabsPeer));
 			if (!_sublist) {
 				tabs.push_back(MakeGiftsTabDescriptor(_peer));
@@ -317,7 +326,7 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 				MembersInTabValue(_peer)));
 		}
 		addMediaTabs();
-		if (!_topic) {
+		if (!_topic && !_savedMessages) {
 			tabs.push_back(MakeSavedTabDescriptor(tabsPeer));
 		}
 		addTab(Storage::SharedMediaType::File);
@@ -331,7 +340,7 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 			Storage::SharedMediaType::Poll) | rpl::map(_1 > 0)));
 		addTab(Storage::SharedMediaType::RoundVoiceFile);
 		addTab(Storage::SharedMediaType::GIF);
-		if (!_topic && !_sublist) {
+		if (!_topic && !_sublist && !_savedMessages) {
 			if (const auto user = _peer->asUser()) {
 				tabs.push_back(MakeCommonGroupsTabDescriptor(user));
 			}
@@ -370,9 +379,14 @@ object_ptr<Ui::RpWidget> InnerWidget::setupContent(
 			.shown = raw->heightValue() | rpl::map(_1 > 0),
 		});
 	};
-	if (_topic || _sublist) {
+	if (_topic || _sublist || _savedMessages) {
 		if (tabs) {
 			addTabsHost();
+			if (_savedMessages) {
+				// The bar is pinned at its minimum height there, so the
+				// tabs behave as docked from the very start.
+				_tabsDocked = true;
+			}
 		}
 		stack.finalize();
 		return result;
@@ -471,17 +485,20 @@ void InnerWidget::visibleTopBottomUpdated(
 	setChildVisibleTopBottom(_content, visibleTop, visibleBottom);
 	if (_tabsHost) {
 		const auto top = MapFrom(this, _tabsHost, QPoint()).y();
-		if (!_clampingTabsScroll
-			&& (top > 0)
-			&& (visibleTop < top)
-			&& _tabsHost->searching()) {
-			_clampingTabsScroll = true;
-			_scrollToRequests.fire({ top, -1 });
-			_clampingTabsScroll = false;
-			return;
+		if (!_clampingTabsScroll && (top > 0) && _tabsHost->searching()) {
+			const auto offDock = _tabsHost->searchContentFits()
+				? (visibleTop != top)
+				: (visibleTop < top);
+			if (offDock) {
+				_clampingTabsScroll = true;
+				_scrollToRequests.fire({ top, -1 });
+				_clampingTabsScroll = false;
+				return;
+			}
 		}
 		_tabsHost->setVisibleRegion(visibleTop - top, visibleBottom - top);
-		_tabsDocked = (top > 0) && (visibleTop >= top);
+		_tabsDocked = _savedMessages
+			|| ((top > 0) && (visibleTop >= top));
 	}
 }
 
@@ -534,6 +551,25 @@ void InnerWidget::showFinished() {
 	_showFinished.fire({});
 }
 
+void InnerWidget::checkBeforeCloseByEscape(Fn<void()> close) {
+	if (const auto top = _topBar.get()) {
+		top->checkBeforeCloseByEscape(std::move(close));
+	} else {
+		close();
+	}
+}
+
+bool InnerWidget::searchAvailable() const {
+	const auto top = _topBar.get();
+	return top && top->searchAvailable();
+}
+
+void InnerWidget::showSearch() {
+	if (const auto top = _topBar.get()) {
+		top->showSearch();
+	}
+}
+
 bool InnerWidget::hasFlexibleTopBar() const {
 	return true;
 }
@@ -549,6 +585,9 @@ base::weak_qptr<Ui::RpWidget> InnerWidget::createPinnedToTop(
 			.peer = _sublist ? _sublist->sublistPeer().get() : nullptr,
 			.backToggles = _backToggles.value(),
 			.showFinished = _showFinished.events(),
+			.customStatus = (_savedMessages
+				? SavedChatsCountStatus(&_peer->session())
+				: rpl::producer<TextWithEntities>()),
 		});
 	content->backRequest(
 	) | rpl::start_to_stream(_backClicks, content->lifetime());
@@ -564,11 +603,13 @@ base::weak_qptr<Ui::RpWidget> InnerWidget::createPinnedToTop(
 		content->setupStandaloneGroupControl(
 			members->groupByRoleValue(),
 			members->groupByRoleAvailableValue(),
+			members->rowsVisibleValue(),
 			crl::guard(members, [=](bool grouped) {
 				members->setGroupByRole(grouped);
 			}));
 	}
 	_topBarColor = content->edgeColor();
+	_topBar = content;
 	return base::make_weak(not_null<Ui::RpWidget*>{ content });
 }
 
