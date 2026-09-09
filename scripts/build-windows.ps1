@@ -227,10 +227,10 @@ try {
 
     if (-not (Test-Path $LibrariesMarker)) {
         Write-Step 'Prepare libraries (first time, long)'
-        # qt6: v6.9.x (layer 227) dropped Qt 5.15 support — lib_ui uses Qt 6.8+
-        # accessibility APIs unconditionally, so x64 must build against Qt 6.
-        # qt_version.py only picks Qt 6 when 'qt6' is literally in argv.
-        Invoke-Vs -Command 'Telegram\build\prepare\win.bat silent qt6' -WorkingDirectory $RepoRoot -Label 'prepare'
+        # No 'qt6': x64 builds against Qt 5.15.19 like the official Windows
+        # binaries. Qt 6 on Windows is only exercised upstream for ARM, and
+        # there nested popup submenus stop receiving clicks.
+        Invoke-Vs -Command 'Telegram\build\prepare\win.bat silent' -WorkingDirectory $RepoRoot -Label 'prepare'
     }
     else {
         Write-Ok 'Libraries present, skip prepare'
@@ -242,9 +242,9 @@ try {
     # Embedded debug info (/Z7) instead of a shared .pdb: avoids the mspdbsrv
     # "C1090 PDB API call failed" / "C2471 cannot update program database" crashes
     # on this toolchain. -D overrides cmake_helpers' non-FORCE cache default.
-    # qt6 arg (see prepare step above) + .\ prefix so configure.bat resolves even
-    # when CWD isn't on the executable search path in this invocation context.
-    $configure = ".\configure.bat x64 qt6 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash) -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded"
+    # .\ prefix so configure.bat resolves even when CWD isn't on the executable
+    # search path in this invocation context.
+    $configure = ".\configure.bat x64 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash) -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded"
     Invoke-Vs -Command $configure -WorkingDirectory $TelegramDir -Label 'configure'
 
     Write-Step "MSBuild $Configuration"
