@@ -57,7 +57,16 @@ mkdir -p "$HOME/.local/share/applications"
 # desktop environment resolves Exec= itself rather than through a login
 # shell's PATH. Pin it to the absolute path so the launcher works regardless.
 # Only touch Exec=/TryExec= lines - "Name=OwpenGram" must stay as-is.
-sed -E "s#^(Exec|TryExec)=OwpenGram#\1=$BIN_DST#" \
+#
+# Also drop DBusActivatable=true: it makes launchers try D-Bus activation
+# first, which needs the session dbus-daemon to see this user's
+# ~/.local/share/dbus-1/services (via $XDG_DATA_DIRS/$XDG_DATA_HOME) - not
+# reliable on every session setup, and when it isn't found the launcher
+# fails outright with "The name is not activatable" instead of falling back
+# to Exec=. A plain Exec= launch always works, so prefer that unconditionally.
+sed -E \
+    -e "s#^(Exec|TryExec)=OwpenGram#\1=$BIN_DST#" \
+    -e '/^DBusActivatable=/d' \
     "$XDG_DIR/org.owpengram.desktop.desktop" \
     > "$HOME/.local/share/applications/org.owpengram.desktop.desktop"
 chmod 644 "$HOME/.local/share/applications/org.owpengram.desktop.desktop"

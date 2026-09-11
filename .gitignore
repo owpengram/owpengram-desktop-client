@@ -1,6 +1,7 @@
 /logs/
 /out/
 /out-docker/
+*.deb
 Debug/
 Release/
 /ThirdParty/
