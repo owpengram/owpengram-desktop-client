@@ -228,21 +228,47 @@ build_via_docker() {
     local config_env=()
     if [ "$configuration" = "Debug" ]; then config_env=(-e "CONFIG=Debug"); fi
 
+    # build.sh's `cmake --build` has no job cap of its own, so ninja defaults
+    # to nproc-wide parallelism. Unlike ensure_docker_image's ~15 independent
+    # base-image stages, this is one flat build of the whole project - on a
+    # normal workstation that's still enough concurrent heavy TUs (MTProto
+    # scheme, style files, media viewer) to blow past RAM with no swap
+    # cushion, and the kernel's OOM killer can take out dockerd itself
+    # instead of just the compiler. Same RAM/4 heuristic as the image build.
+    local total_ram_gb build_jobs
+    total_ram_gb=$(( $(awk '/MemTotal/{print $2}' /proc/meminfo) / 1024 / 1024 ))
+    build_jobs=$(( total_ram_gb / 4 ))
+    if [ "$build_jobs" -lt 1 ]; then build_jobs=1; fi
+    if [ "$build_jobs" -gt "$(nproc)" ]; then build_jobs="$(nproc)"; fi
+
     # The default bfd `ld` OOM-kills on the final link even with 11+ GB RAM
     # (same issue as the native build, just bigger). lld is already bundled
     # in this image (no mold), and is far lighter on memory.
+    #
+    # These -D...LINKER_FLAGS overrides *replace* CMAKE_*_LINKER_FLAGS rather
+    # than extend it, which drops the image's own $LDFLAGS (normally seeded
+    # into the _INIT variant at first configure). Several system libraries
+    # here (EGL, GL, ...) are only linkable via Implib.so-generated stub
+    # archives (e.g. /usr/local/lib64/libEGL.a) that dlopen() the real .so at
+    # runtime - their trampoline resolvers need -ldl/-pthread from $LDFLAGS to
+    # link at all. Without it, Qt6Gui's HAVE_EGL check fails to link and the
+    # whole configure aborts. Reproduce $LDFLAGS here explicitly instead of
+    # relying on _INIT, since a -D on the command line skips that entirely.
+    local base_ldflags="-static-libstdc++ -static-libgcc -static-libasan -pthread -Wl,--push-state,--no-as-needed,-ldl,--pop-state -Wl,--as-needed -Wl,-z,muldefs"
+    local linker_flags="$base_ldflags -fuse-ld=lld -Wl,--allow-multiple-definition"
     docker run --rm "${tty_flags[@]}" \
         -u "$(id -u)" \
         -v "$REPO_ROOT:/usr/src/tdesktop" \
         -v "$docker_out_dir:/usr/src/tdesktop/out" \
         "${config_env[@]}" \
+        -e "CMAKE_BUILD_PARALLEL_LEVEL=$build_jobs" \
         "$DOCKER_IMAGE_TAG" \
         /usr/src/tdesktop/Telegram/build/docker/centos_env/build.sh \
         -D TDESKTOP_API_ID="$API_ID" \
         -D TDESKTOP_API_HASH="$API_HASH" \
-        -D CMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld -Wl,--allow-multiple-definition" \
-        -D CMAKE_SHARED_LINKER_FLAGS="-fuse-ld=lld -Wl,--allow-multiple-definition" \
-        -D CMAKE_MODULE_LINKER_FLAGS="-fuse-ld=lld -Wl,--allow-multiple-definition"
+        -D CMAKE_EXE_LINKER_FLAGS="$linker_flags" \
+        -D CMAKE_SHARED_LINKER_FLAGS="$linker_flags" \
+        -D CMAKE_MODULE_LINKER_FLAGS="$linker_flags"
 
     local binary_path="$docker_out_dir/$configuration/OwpenGram"
 

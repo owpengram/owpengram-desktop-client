@@ -44,7 +44,7 @@ CMAKE_ROOT="$(cmake --system-information | sed -n 's/^CMAKE_ROOT "\([^"]*\)"$/\1
 test -n "$CMAKE_ROOT"
 sed -i '/CMAKE_${lang}_FLAGS_DEBUG_INIT/s/")/ -O0 {% if LTO %}-fno-lto -fno-use-linker-plugin{% endif %}")/' "$CMAKE_ROOT/Modules/Compiler/GNU.cmake"
 for i in EXE SHARED MODULE; do
-	sed -i '1i string(APPEND CMAKE_'$i'_LINKER_FLAGS_DEBUG_INIT " -fuse-ld=lld")' "$CMAKE_ROOT/Modules/CMakeCommonLanguageInclude.cmake"
+	sed -i '1i string(APPEND CMAKE_'$i'_LINKER_FLAGS_INIT " -fuse-ld=lld")' "$CMAKE_ROOT/Modules/CMakeCommonLanguageInclude.cmake"
 done
 sed -i '/CMAKE_EXE_LINKER_FLAGS_INIT/s/")/ -Wl,--exclude-libs,ALL")/' "$CMAKE_ROOT/Modules/CMakeCommonLanguageInclude.cmake"
 sed -i '/__gcc_hints/d' "$CMAKE_ROOT/Modules/Compiler/GNU-FindBinUtils.cmake"
