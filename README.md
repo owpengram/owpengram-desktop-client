@@ -11,9 +11,11 @@ experience. Use the official network, your own private server, or any community
 node — each account independent, all in one app. Private by design, comfortable
 to use, and free from lock-in.
 
-> 🪟 **Available now for Windows.** macOS and Linux builds are planned.
+> 🪟🐧 **Available now for Windows and Linux** — grab a build from the
+> [Releases](https://github.com/owpengram/owpengram-desktop-client/releases)
+> tab. macOS is planned.
 
-> 🔗 Built on **MTProto API layer 228**.
+> 🔗 Built on **MTProto API layer 229**, on top of Telegram Desktop `v7.2.2`.
 
 <p align="center">
   <img src="media/readme/desktop_hero.png" alt="OwpenGram Desktop — chats" width="880">
@@ -21,10 +23,39 @@ to use, and free from lock-in.
 
 ---
 
+## 📥 Download
+
+Builds live in the
+[Releases](https://github.com/owpengram/owpengram-desktop-client/releases) tab.
+
+| Platform | File | What it is |
+|---|---|---|
+| 🪟 Windows | Windows x64 build | Unpack and run. Built against Qt 5.15.19, the same Qt the official Windows client uses. |
+| 🐧 Ubuntu / Debian | `owpengram-desktop_<version>_amd64.deb` | A real distro package for **Ubuntu 18.04+ / Debian 10+** — installs to `/usr/bin`, adds the app-menu entry with proper icons, and a D-Bus activation service. Install with `sudo apt install ./owpengram-desktop_<version>_amd64.deb`. |
+| 🐧 Any modern distro | `OwpenGram` | **Not an installer — the client binary itself.** `chmod +x OwpenGram && ./OwpenGram` and you're in. Qt, WebRTC and the X11/EGL client libraries are bundled and lazy-loaded, so it needs nothing but a current glibc. |
+
+Both Linux files come out of the same portable build, so pick by taste: the
+`.deb` if you want OwpenGram registered as an installed app, the bare binary if
+you'd rather keep it self-contained or your distro isn't Debian-based. On a
+Debian-based distro you can use either.
+
+`tg://` and `owpg://` links work in both cases — the app registers itself as
+their handler on first launch, no install step involved. What the `.deb` adds is
+the desktop integration around that: an entry in the application menu with the
+right name and icons, `OwpenGram` on your `PATH`, D-Bus activation, and a fixed
+install path, so the link handler doesn't break the day you move the binary
+somewhere else.
+
+Want that integration without a package — on Arch, Fedora, anything — run
+[`install-linux.sh`](install-linux.sh) next to the binary. It does the same
+thing under `~/.local`, no root needed, and re-running it after an update
+refreshes the installed copy.
+
 ## ✨ Why you'll like it
 
 - 🌐 **Multi-server** — add accounts on different servers and switch between them freely.
 - 🏠 **Bring your own server** — connect to a server you host and fully control.
+- 🔎 **Adding one takes an address** — type `host:port`, the client fetches the server's key, DC and identity itself.
 - 🧠 **Familiar & comfortable** — the experience you already know, no learning curve.
 - 🔒 **Private** — talk on infrastructure you trust, away from the cloud.
 - 🛡️ **Censorship-resistant** — your own server stays reachable when others are blocked.
@@ -40,7 +71,15 @@ OwpenGram comes with ready-to-use options:
 - **Custom** — any server you or your community runs
 
 Add several accounts on different servers and they stay cleanly separated —
-different identities, different data, one app.
+different identities, different data, one app. Separation is real, not cosmetic:
+each account's cached peers, files and ids are scoped to the server they came
+from, so two servers that happen to hand out the same numeric id never bleed
+into each other. Official Telegram accounts still count against Telegram's own
+limit (3, or 6 with Premium); self-hosted ones aren't subject to that — the only
+ceiling is the app's own **50 accounts in total**, across every server combined.
+
+Remove a server and every account on it goes with it — no orphaned logins left
+behind pointing at a host that no longer exists.
 
 <p align="center">
   <img src="media/readme/desktop_multiserver.png" alt="Server selection and accounts grouped by server" width="880">
@@ -49,20 +88,30 @@ different identities, different data, one app.
 ## 🔌 Connect your own server
 
 On the **server selection screen** (shown when you log in or add a new account),
-click **➕ Add server** and fill in:
+click **➕ Add server** and type the address — `chat.example.com:2398`, or
+`203.0.113.10:2398`. That is the only field you have to fill in.
 
-- **Name** — any label you like (e.g. *My Server*)
-- **Host** — your server's IP or domain (e.g. `203.0.113.10` or `chat.example.com`)
-- **Port** — `2398` (the default OwpenGram MTProto port)
-- **Type** — choose **single-server** for a self-hosted server (pick **Multi-DC (Telegram)** only for true multi-datacenter networks)
-- **Main data center** — leave as `2` (the default) for a self-hosted server
-- **RSA key** — leave **empty** unless your server uses a custom key
+The client then asks the server who it is (`/owpengram/server-info` on that same
+port) and fills in the rest by itself: RSA public key, data-centre id, and the
+name, description and icon the server's operator set. Rename it or swap the icon
+if you like — those are yours to edit. Save, pick the server, log in as usual.
 
-Then save, select the server, and log in as usual.
+Everything it fetched is still editable under **Advanced** — server type, DC id,
+RSA key — for a server that doesn't answer that endpoint, or when you want to
+pin the key yourself.
 
-> The default OwpenGram server key is already built in, so the RSA field stays
-> blank in almost all cases. Only paste a PEM public key if the server operator
-> replaced the server's key with their own.
+> Only `host:port` is ever taken from a link or typed in. The identity a server
+> claims is fetched from that address directly, so nobody can hand you a link
+> that misrepresents whose server you're about to trust.
+
+Operators can hand out a ready-made **`owpg://addserver?host=...&port=...`**
+link: opening it pops the Add server box pre-filled with the address. By design
+it carries nothing else — no key, name or DC.
+
+Server name, description and icon refresh on their own whenever a server list is
+shown, so a rebrand on the operator's side appears without you re-adding
+anything. Only those cosmetics — host, port, key and DC id are never touched
+after you've saved them.
 
 Don't have a server yet? Spin one up in one command:
 👉 [owpengram-server](https://github.com/owpengram/owpengram-server)
@@ -79,25 +128,50 @@ It guides you through API credentials, submodules, `prepare`, `configure` and th
 MSBuild step, and remembers your answers in `.owpengram-build.local.json`
 (gitignored).
 
-**Requirements:** Visual Studio 2022 (C++ x64), Python 3.10, Git. For manual
-steps and other platforms, see `docs/building-win-x64.md` and the upstream
+**Requirements:** Visual Studio 2022 (C++ x64), Python 3.10, Git. x64 builds
+against **Qt 5.15.19**, the same Qt the official Windows client uses — Qt 6 on
+Windows x64 silently breaks clicks in nested popup submenus (Mute forever, Add
+to folder), so the fork stays on 5.15. For manual steps and other platforms,
+see `docs/building-win.md` and the upstream
 [Telegram Desktop](https://github.com/telegramdesktop/tdesktop) build docs.
 
 ## 🐧 Build (Linux)
 
-Native build against system libraries (no Docker, no snap):
+Two modes, same script:
 
 ```bash
-scripts/build-linux.sh            # Release (default)
-scripts/build-linux.sh --debug    # Debug
+scripts/build-linux.sh            # native, Release (default)
+scripts/build-linux.sh --debug    # native, Debug
+scripts/build-linux.sh --docker   # portable, Release
 ```
 
-It installs missing system dependencies (pacman), builds and installs `tde2e`
-locally, initializes submodules, configures CMake in packaged mode, and builds
-with `mold` if available. The resulting binary is at `out/OwpenGram`.
+**Native** builds against this machine's system libraries (the same packaged
+mode Arch's own `telegram-desktop` uses). Fast, and fine for local work — but
+the binary is tied to this machine's exact Qt/glibc, so it is not what you
+distribute. It installs missing pacman dependencies, builds `tde2e` locally,
+initializes submodules, and uses `mold` when available. Output: `out/OwpenGram`.
 
-**Requirements:** Arch/Manjaro (pacman-based) or a distro with equivalent
-packages, CMake, Ninja, Git.
+**Portable** (`--docker`) builds inside the official Rocky Linux 8 image, so the
+result runs on essentially any Linux from the last ~6 years (Ubuntu 18.04+,
+Debian 10+). Slower — it compiles Qt and WebRTC from scratch once. Output:
+`out-docker/OwpenGram`. This is the binary the Releases tab ships, and the one
+the `.deb` is built from. From Windows, `build-linux.bat` runs the same thing
+through WSL2 + Docker Desktop.
+
+Then, optionally:
+
+```bash
+./install-linux.sh          # per-user install into ~/.local (no root)
+./package-deb-linux.sh      # -> owpengram-desktop_<version>_amd64.deb
+```
+
+`install-linux.sh` gives you the app-menu entry, icons, D-Bus service and a
+`~/.local/bin/OwpenGram` on `PATH` without touching system directories;
+`package-deb-linux.sh` produces the release `.deb` and needs only `dpkg-deb` —
+it runs fine on Arch.
+
+**Requirements:** native mode — Arch/Manjaro (pacman-based) or a distro with
+equivalent packages, CMake, Ninja, Git. Portable mode — Docker.
 
 ## 📦 Part of the OwpenGram project
 
