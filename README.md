@@ -51,6 +51,17 @@ Want that integration without a package — on Arch, Fedora, anything — run
 thing under `~/.local`, no root needed, and re-running it after an update
 refreshes the installed copy.
 
+## 🚀 Try it without setting up anything
+
+We run a **public OwpenGram server**, and it is already built into this client —
+no address to type, no key to paste, no Docker. Install the app, and on the
+server-selection screen at login pick **OwpenGram** instead of Telegram, then
+sign in as usual.
+
+That account sits alongside your Telegram one, so you can try the project
+without leaving anything behind. When you want your own server later, you add
+it in the same app and keep both.
+
 ## ✨ Why you'll like it
 
 - 🌐 **Multi-server** — add accounts on different servers and switch between them freely.
@@ -67,7 +78,7 @@ Every account is tied to a server, and you choose that server when you sign in.
 OwpenGram comes with ready-to-use options:
 
 - **Telegram** — the official network (use your normal Telegram account)
-- **OwpenGram** — the project's public server
+- **OwpenGram** — our public server, live and ready to use, already in the list
 - **Custom** — any server you or your community runs
 
 Add several accounts on different servers and they stay cleanly separated —
