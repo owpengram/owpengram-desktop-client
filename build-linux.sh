@@ -36,6 +36,29 @@ if [ -z "$CONFIGURATION" ]; then
     done
 fi
 
+# OWPENGRAM_BUILD is the release number this build ships under -- the N in
+# tag "ON", compared against GitHub release tags by the client's own updater
+# (see docs/updates.md) and shown in the About box next to the version. Skip
+# the prompt when it's already set in the environment, so
+# `OWPENGRAM_BUILD=8 ./build-linux.sh` still works untouched for scripted use.
+if [ -z "${OWPENGRAM_BUILD:-}" ]; then
+    while :; do
+        read -r -p "Release number for this build (the N in tag ON; blank = local dev build, no self-update) [0]: " answer
+        answer="${answer:-0}"
+        if [[ "$answer" =~ ^[0-9]+$ ]]; then
+            OWPENGRAM_BUILD="$answer"
+            break
+        fi
+        echo "  Enter a whole number, or leave blank for a local dev build."
+    done
+fi
+export OWPENGRAM_BUILD
+if [ "$OWPENGRAM_BUILD" = "0" ]; then
+    echo "Release number: 0 (local dev build - self-update stays off)"
+else
+    echo "Release number: $OWPENGRAM_BUILD (must match tag O$OWPENGRAM_BUILD once this is published)"
+fi
+
 ARGS=("--$(echo "$CONFIGURATION" | tr '[:upper:]' '[:lower:]')")
 if [ "$USE_DOCKER" -eq 1 ]; then ARGS+=(--docker); fi
 

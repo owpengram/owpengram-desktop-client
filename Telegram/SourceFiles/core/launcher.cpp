@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/main_queue_processor.h"
 #include "core/crash_reports.h"
 #include "core/update_checker.h"
+#include "owpengram/owpengram_updater.h"
 #include "core/sandbox.h"
 #include "core/version.h"
 #include "base/concurrent_timer.h"
@@ -421,14 +422,32 @@ int Launcher::exec() {
 	// Must be started before Sandbox is created.
 	Platform::start();
 	ThirdParty::start();
+
+	// The previous executable an applied update moved aside. Windows can
+	// still hold the image of the process that performed the swap, so this
+	// is the launch after next that finally removes it.
+	Owpengram::Updater::CleanupAfterUpdate();
+
 	auto result = executeApplication();
 
 	DEBUG_LOG(("Telegram finished, result: %1").arg(result));
 
 	if (!UpdaterDisabled() && cRestartingUpdate()) {
-		DEBUG_LOG(("Sandbox Info: executing updater to install update."));
-		if (!launchUpdater(UpdaterLaunch::PerformUpdate)) {
-			base::Platform::DeleteDirectory(cWorkingDir() + u"tupdates/temp"_q);
+		// The app is down but this process is still the old executable, which
+		// is exactly what lets it rename itself out of the way. Upstream's
+		// path spawns a separate Updater binary instead; OwpenGram ships a
+		// single file and has none.
+		if (Owpengram::Updater::HasStaged()) {
+			DEBUG_LOG(("Sandbox Info: installing the staged update."));
+			if (Owpengram::Updater::ApplyStaged()) {
+				launchUpdater(UpdaterLaunch::JustRelaunch);
+			}
+		} else {
+			DEBUG_LOG(("Sandbox Info: executing updater to install update."));
+			if (!launchUpdater(UpdaterLaunch::PerformUpdate)) {
+				base::Platform::DeleteDirectory(
+					cWorkingDir() + u"tupdates/temp"_q);
+			}
 		}
 	} else if (cRestarting()) {
 		DEBUG_LOG(("Sandbox Info: executing Telegram because of restart."));

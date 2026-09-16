@@ -57,6 +57,15 @@ if (DESKTOP_APP_DISABLE_SWIFT6)
     target_compile_definitions(Telegram PRIVATE TDESKTOP_DISABLE_SWIFT6)
 endif()
 
+# The N in the OwpenGram release tag "ON". The GitHub updater compares it
+# against the newest published tag, so every build that is meant to be
+# updatable must carry the number it ships under. Zero keeps the updater off,
+# which is what a local developer build wants.
+set(OWPENGRAM_BUILD "0" CACHE STRING "OwpenGram release number, the N in tag ON. 0 disables self-update.")
+if (NOT OWPENGRAM_BUILD MATCHES "^[0-9]+$")
+    message(FATAL_ERROR "OWPENGRAM_BUILD must be a non-negative integer, got '${OWPENGRAM_BUILD}'.")
+endif()
+
 set(TDESKTOP_UPDATE_CHANNEL "stable" CACHE STRING "Compile-time update channel (stable, beta, canary-public, canary-private).")
 set(TDESKTOP_CANARY_COUNTER "0" CACHE STRING "Per-channel canary build counter, required positive for canary channels.")
 set(TDESKTOP_CANARY_COMMIT "" CACHE STRING "Short commit hash shown in the canary version string.")
@@ -100,6 +109,7 @@ endif()
 
 target_compile_definitions(Telegram
 PRIVATE
+    OWPENGRAM_BUILD=${OWPENGRAM_BUILD}
     TDESKTOP_UPDATE_CHANNEL=${tdesktop_update_channel_value}
     TDESKTOP_CANARY_COUNTER=${TDESKTOP_CANARY_COUNTER}
     TDESKTOP_CANARY_PRIVATE_CHANNEL_ID=${TDESKTOP_CANARY_PRIVATE_CHANNEL_ID}

@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/update_channel.h"
 #include "core/update_checker.h"
 #include "core/version.h"
+#include "owpengram/owpengram_updater.h"
 #include "lang/lang_keys.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/painter.h"
@@ -155,8 +156,13 @@ namespace {
 
 [[nodiscard]] QString CurrentVersionText(bool withCommit) {
 	auto result = QString::fromLatin1(AppVersionStr);
-	//APP VERSION HERE
-	result += "_O7";
+	// The single source of truth for this is OWPENGRAM_BUILD, the -D passed
+	// at compile time (see owpengram/owpengram_updater.h): the same number
+	// the updater compares release tags against. A local dev build (0) shows
+	// nothing extra here, same as it disables update checks.
+	if (const auto build = Owpengram::Updater::RunningBuild()) {
+		result += u"_O%1"_q.arg(build);
+	}
 	if (Core::BuildIsCanary) {
 		result += Core::CanaryVersionSuffix();
 	} else if (cAlphaVersion()) {

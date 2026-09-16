@@ -49,7 +49,9 @@ public:
 	AbstractDedicatedLoader(const QString &filepath, int chunkSize);
 
 	static constexpr auto kChunkSize = 128 * 1024;
-	static constexpr auto kMaxFileSize = 256 * 1024 * 1024;
+	// Raised from upstream's 256 MB: an OwpenGram desktop build is a single
+	// self-contained binary, and the Linux one is already 255 MB.
+	static constexpr auto kMaxFileSize = 512 * 1024 * 1024;
 
 	struct Progress {
 		int64 already = 0;

@@ -24,6 +24,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_channel.h"
 #include "data/data_session.h"
 #include "mainwindow.h"
+#include "owpengram/owpengram_updater.h"
 #include "main/main_account.h"
 #include "main/main_session.h"
 #include "main/main_domain.h"
@@ -220,6 +221,27 @@ private:
 	QString _url;
 	QNetworkAccessManager _manager;
 	std::unique_ptr<QNetworkReply> _reply;
+
+};
+
+// Reads a GitHub release feed and hands the plain asset to an HttpLoader.
+// Nothing upstream understands this shape, so the staging step in finalize()
+// is branched instead of unpacking.
+class GithubChecker : public Checker {
+public:
+	GithubChecker(bool testing);
+
+	void start() override;
+
+	~GithubChecker();
+
+private:
+	void gotResponse();
+	void gotFailure(QNetworkReply::NetworkError e);
+	void clearSentRequest();
+
+	std::unique_ptr<QNetworkAccessManager> _manager;
+	QNetworkReply *_reply = nullptr;
 
 };
 
@@ -1136,6 +1158,96 @@ HttpChecker::~HttpChecker() {
 	clearSentRequest();
 }
 
+GithubChecker::GithubChecker(bool testing) : Checker(testing) {
+}
+
+void GithubChecker::start() {
+	if (!Owpengram::Updater::Enabled()) {
+		fail();
+		return;
+	}
+	const auto url = QUrl(Owpengram::Updater::FeedUrl());
+	if (!url.isValid()) {
+		LOG(("Update Error: bad feed url."));
+		fail();
+		return;
+	}
+	DEBUG_LOG(("Update Info: requesting release feed from '%1'."
+		).arg(url.toString()));
+
+	auto request = QNetworkRequest(url);
+	// GitHub rejects requests without a User-Agent, and pins the response
+	// shape to the Accept header.
+	request.setRawHeader("User-Agent", "OwpenGram-Updater");
+	request.setRawHeader("Accept", "application/vnd.github+json");
+	request.setAttribute(
+		QNetworkRequest::RedirectPolicyAttribute,
+		QNetworkRequest::NoLessSafeRedirectPolicy);
+
+	_manager = std::make_unique<QNetworkAccessManager>();
+	_reply = _manager->get(request);
+	_reply->connect(_reply, &QNetworkReply::finished, [=] {
+		gotResponse();
+	});
+	_reply->connect(_reply, &QNetworkReply::errorOccurred, [=](auto e) {
+		gotFailure(e);
+	});
+}
+
+void GithubChecker::gotResponse() {
+	if (!_reply) {
+		return;
+	}
+	cSetLastUpdateCheck(base::unixtime::now());
+	const auto response = _reply->readAll();
+	clearSentRequest();
+
+	auto error = QString();
+	const auto release = Owpengram::Updater::ParseFeed(response, &error);
+	if (!release) {
+		LOG(("Update Error: %1").arg(error));
+		fail();
+		return;
+	} else if (release->build <= Owpengram::Updater::RunningBuild()) {
+		DEBUG_LOG(("Update Info: %1 is not newer than build %2."
+			).arg(release->tag).arg(Owpengram::Updater::RunningBuild()));
+		done(nullptr);
+		return;
+	}
+	LOG(("Update Info: %1 available (running build %2), fetching %3."
+		).arg(release->tag
+		).arg(Owpengram::Updater::RunningBuild()
+		).arg(release->assetName));
+
+	const auto url = release->assetUrl;
+	Owpengram::Updater::SetPending(*release);
+	done(std::make_shared<HttpLoader>(url));
+}
+
+void GithubChecker::gotFailure(QNetworkReply::NetworkError e) {
+	LOG(("Update Error: could not get the release feed %1").arg(e));
+	if (const auto reply = base::take(_reply)) {
+		reply->deleteLater();
+	}
+	fail();
+}
+
+void GithubChecker::clearSentRequest() {
+	const auto reply = base::take(_reply);
+	if (!reply) {
+		return;
+	}
+	reply->disconnect(reply, &QNetworkReply::finished, nullptr, nullptr);
+	reply->disconnect(reply, &QNetworkReply::errorOccurred, nullptr, nullptr);
+	reply->abort();
+	reply->deleteLater();
+	_manager = nullptr;
+}
+
+GithubChecker::~GithubChecker() {
+	clearSentRequest();
+}
+
 HttpLoader::HttpLoader(const QString &url)
 : Loader(UpdatesFolder() + '/' + ExtractFilename(url), kChunkSize)
 , _url(url) {
@@ -1824,6 +1936,7 @@ private:
 	rpl::event_stream<Progress> _progress;
 	rpl::event_stream<> _failed;
 	rpl::event_stream<> _ready;
+	Implementation _githubImplementation;
 	Implementation _httpImplementation;
 	Implementation _mtpImplementation;
 	Implementation _flatpakImplementation;
@@ -1940,6 +2053,7 @@ bool Updater::percent() const {
 }
 
 void Updater::stop() {
+	_githubImplementation = Implementation();
 	_httpImplementation = Implementation();
 	_mtpImplementation = Implementation();
 	_flatpakImplementation = Implementation{
@@ -1951,6 +2065,11 @@ void Updater::stop() {
 
 void Updater::start(bool forceWait) {
 	if (cExeName().isEmpty()) {
+		return;
+	} else if (!Owpengram::Updater::Enabled() && !KSandbox::isFlatpak()) {
+		// A packaged install, or a build with no release number: there is no
+		// update path of its own, and falling back to upstream's is not an
+		// option -- see the note in the request branch below.
 		return;
 	}
 
@@ -1987,20 +2106,15 @@ void Updater::start(bool forceWait) {
 		}
 #endif // !Q_OS_WIN && !Q_OS_MAC
 	} else if (sendRequest) {
-		if (BuildIsCanary) {
-			// Canary builds discover updates only through their own MTP
-			// channels, the v1 HTTP feed serves other channels.
-			startImplementation(&_httpImplementation, nullptr);
-		} else {
-			startImplementation(
-				&_httpImplementation,
-				std::make_unique<HttpChecker>(_testing));
-		}
+		// OwpenGram updates come from its own GitHub releases and from
+		// nowhere else. Upstream's HTTP feed points at td.telegram.org and
+		// its MTP checker at Telegram's own channels: both serve genuine
+		// Telegram Desktop builds, which would be installed straight over
+		// this app -- updater_win.cpp even renames Telegram.exe to whatever
+		// the running executable is called. Neither is ever started here.
 		startImplementation(
-			&_mtpImplementation,
-			std::make_unique<MtpChecker>(
-				LookupCanaryPrivateSession(_session),
-				_testing));
+			&_githubImplementation,
+			std::make_unique<GithubChecker>(_testing));
 
 		_checking.fire({});
 	} else {
@@ -2086,7 +2200,9 @@ void Updater::handleTimeout() {
 }
 
 bool Updater::tryLoaders() {
-	if (_httpImplementation.checker || _mtpImplementation.checker) {
+	if (_githubImplementation.checker
+		|| _httpImplementation.checker
+		|| _mtpImplementation.checker) {
 		// Some checkers didn't finish yet.
 		return true;
 	}
@@ -2122,6 +2238,13 @@ bool Updater::tryLoaders() {
 		} else {
 			tryOne(_flatpakImplementation);
 		}
+	} else if (Owpengram::Updater::Enabled()) {
+		// The only implementation this fork starts outside flatpak.
+		if (_githubImplementation.failed) {
+			_failed.fire({});
+			return false;
+		}
+		tryOne(_githubImplementation);
 	} else if (_mtpImplementation.failed && _httpImplementation.failed) {
 		_failed.fire({});
 		return false;
@@ -2145,8 +2268,11 @@ void Updater::finalize(QString filepath) {
 	_retryTimer.cancel();
 	_activeLoader = nullptr;
 	_action = Action::Unpacking;
+	const auto owpengram = Owpengram::Updater::HasPending();
 	crl::async([=] {
-		const auto ready = UnpackUpdate(filepath);
+		const auto ready = owpengram
+			? Owpengram::Updater::StagePending(filepath)
+			: UnpackUpdate(filepath);
 		crl::on_main([=] {
 			GetUpdaterInstance()->unpackDone(ready);
 		});
@@ -2245,6 +2371,9 @@ bool UpdateChecker::percent() const {
 //}
 
 bool checkReadyUpdate() {
+	if (Owpengram::Updater::HasStaged()) {
+		return true;
+	}
 	QString readyFilePath = cWorkingDir() + u"tupdates/temp/ready"_q, readyPath = cWorkingDir() + u"tupdates/temp"_q;
 	if (!QFile(readyFilePath).exists() || cExeName().isEmpty()) {
 		if (QDir(cWorkingDir() + u"tupdates/ready"_q).exists() || QDir(cWorkingDir() + u"tupdates/temp"_q).exists()) {

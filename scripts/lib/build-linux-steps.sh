@@ -125,6 +125,13 @@ configure_project() {
         -DDESKTOP_APP_USE_PACKAGED=ON
         -DTDESKTOP_API_ID="$API_ID"
         -DTDESKTOP_API_HASH="$API_HASH"
+        # Compiles the update machinery in, which OwpenGram's own GitHub
+        # updater needs: UpdaterDisabled() gates the checker, the settings
+        # section and the apply step alike. Upstream's own checkers are
+        # never started -- see Updater::start() and docs/updates.md.
+        -DDESKTOP_APP_DISABLE_AUTOUPDATE=OFF
+        # The release number this build ships under, the N in tag "ON".
+        -DOWPENGRAM_BUILD="${OWPENGRAM_BUILD:-0}"
     )
     if [ "${MOLD_AVAILABLE:-0}" -eq 1 ]; then
         cmake_args+=(
@@ -266,6 +273,8 @@ build_via_docker() {
         /usr/src/tdesktop/Telegram/build/docker/centos_env/build.sh \
         -D TDESKTOP_API_ID="$API_ID" \
         -D TDESKTOP_API_HASH="$API_HASH" \
+        -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF \
+        -D OWPENGRAM_BUILD="${OWPENGRAM_BUILD:-0}" \
         -D CMAKE_EXE_LINKER_FLAGS="$linker_flags" \
         -D CMAKE_SHARED_LINKER_FLAGS="$linker_flags" \
         -D CMAKE_MODULE_LINKER_FLAGS="$linker_flags"

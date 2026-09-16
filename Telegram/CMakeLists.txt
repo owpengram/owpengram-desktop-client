@@ -1647,6 +1647,8 @@ PRIVATE
     mtproto/mtp_instance.h
     owpengram/owpengram_servers.cpp
     owpengram/owpengram_servers.h
+    owpengram/owpengram_updater.cpp
+    owpengram/owpengram_updater.h
     mtproto/proxy_check.cpp
     mtproto/proxy_check.h
     mtproto/sender.h
@@ -2528,6 +2530,13 @@ if (NOT DESKTOP_APP_DISABLE_AUTOUPDATE AND NOT build_macstore AND NOT build_wins
     add_executable(Updater WIN32)
     init_non_host_target(Updater)
 
+    # updater_win.cpp includes core/branding.h (added when the Updater binary
+    # itself became brandable); the Telegram target gets src_loc as an include
+    # dir but this one never did. Latent since this target only compiles with
+    # DESKTOP_APP_DISABLE_AUTOUPDATE=OFF, which no build ever used until this
+    # fork's own GitHub updater needed the update machinery compiled back in.
+    target_include_directories(Updater PRIVATE ${src_loc})
+
     add_dependencies(Telegram Updater)
 
     nice_target_sources(Updater ${src_loc}
@@ -2554,6 +2563,10 @@ if (NOT DESKTOP_APP_DISABLE_AUTOUPDATE AND NOT build_macstore AND NOT build_wins
             target_link_libraries(Updater
             PRIVATE
                 delayimp
+                # updater_win.cpp pulls in core/branding.h, which is
+                # base/const_string.h, which is QtCore/QString -- same reason
+                # the Packer target below links this.
+                desktop-app::external_qt
             )
             target_link_options(Updater
             PRIVATE

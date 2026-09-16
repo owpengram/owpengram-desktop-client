@@ -193,6 +193,31 @@ try {
     }
     Write-Ok "Build type: $Configuration"
 
+    # OWPENGRAM_BUILD is the release number this build ships under -- the N in
+    # tag "ON", compared against GitHub release tags by the client's own
+    # updater (see docs/updates.md) and shown in the About box next to the
+    # version. Skip the prompt when it's already set in the environment, so
+    # `$env:OWPENGRAM_BUILD = "8"; .uild-windows.bat` still works untouched
+    # for scripted use.
+    if ($env:OWPENGRAM_BUILD) {
+        $OwpengramBuild = $env:OWPENGRAM_BUILD
+    } else {
+        $OwpengramBuild = $null
+        do {
+            $answer = (Read-Line 'Release number for this build (the N in tag ON; blank = local dev build, no self-update)' '0').Trim()
+            if ($answer -match '^\d+$') {
+                $OwpengramBuild = $answer
+            } else {
+                Write-Host '  Enter a whole number, or leave blank for a local dev build.' -ForegroundColor Yellow
+            }
+        } while ($null -eq $OwpengramBuild)
+    }
+    if ($OwpengramBuild -eq '0') {
+        Write-Ok 'Release number: 0 (local dev build -- self-update stays off)'
+    } else {
+        Write-Ok "Release number: $OwpengramBuild (must match tag O$OwpengramBuild once this is published)"
+    }
+
     # Servers are now chosen at runtime, so no address/port input is needed.
     # Patching the owpengram default profile is optional: it only runs when both
     # -ServerHost and -ServerPort are passed explicitly.
@@ -244,7 +269,12 @@ try {
     # on this toolchain. -D overrides cmake_helpers' non-FORCE cache default.
     # .\ prefix so configure.bat resolves even when CWD isn't on the executable
     # search path in this invocation context.
-    $configure = ".\configure.bat x64 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash) -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded"
+    # DESKTOP_APP_DISABLE_AUTOUPDATE=OFF compiles the update machinery in,
+    # which OwpenGram's own GitHub updater needs: UpdaterDisabled() gates the
+    # checker, the settings section and the apply step alike. Upstream's own
+    # checkers are never started -- see Updater::start() and docs/updates.md.
+    # OWPENGRAM_BUILD was resolved above (env var or prompt).
+    $configure = ".\configure.bat x64 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash) -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF -D OWPENGRAM_BUILD=$OwpengramBuild"
     Invoke-Vs -Command $configure -WorkingDirectory $TelegramDir -Label 'configure'
 
     Write-Step "MSBuild $Configuration"
