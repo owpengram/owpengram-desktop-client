@@ -203,16 +203,27 @@ EOF
 
     # nproc/2 still OOM-killed on a Qt precompiled-header generation (PCH
     # compiles are unusually memory-hungry, more so than a typical TU). Size
-    # this off actual RAM instead of core count: ~4 GB/job covers the worst
+    # this off actual RAM instead of core count: ~6 GB/job covers the worst
     # PCH/template-heavy files we've hit so far, with headroom for the OS.
     local total_ram_gb build_jobs
     total_ram_gb=$(( $(awk '/MemTotal/{print $2}' /proc/meminfo) / 1024 / 1024 ))
-    build_jobs=$(( total_ram_gb / 4 ))
+    build_jobs=$(( total_ram_gb / 6 ))
     if [ "$build_jobs" -lt 1 ]; then build_jobs=1; fi
     if [ "$build_jobs" -gt "$(nproc)" ]; then build_jobs="$(nproc)"; fi
 
+    # DEBUG (gen_dockerfile.py's template var, distinct from our own
+    # --debug/--release CONFIGURATION) bakes -g/-gdwarf64/-gz into every
+    # stage's CFLAGS/CXXFLAGS when left at its own default (true) -- and
+    # since those are `ENV` in the generated Dockerfile, they're inherited by
+    # `docker run` too, so the *project's own* build_via_docker link below
+    # was compiling and linking with full DWARF64 debug info on every object
+    # file, not just the ~15 image stages. That's what turned the final link
+    # (thousands of debug-info-laden .o files, one single non-parallel ld
+    # invocation) into an OOM kill even with lld. Disabled unconditionally --
+    # Release already stripped the binary post-link (see build_via_docker),
+    # so the embedded debug info was doing nothing but costing memory.
     local dockerfile_dir="$REPO_ROOT/Telegram/build/docker/centos_env"
-    (cd "$dockerfile_dir" && JOBS="$build_jobs" LTO= python3 gen_dockerfile.py > /tmp/owpengram-centos_env.Dockerfile)
+    (cd "$dockerfile_dir" && JOBS="$build_jobs" LTO= DEBUG= python3 gen_dockerfile.py > /tmp/owpengram-centos_env.Dockerfile)
     docker buildx build --builder "$builder_name" --load \
         -t "$DOCKER_IMAGE_TAG" -f /tmp/owpengram-centos_env.Dockerfile "$dockerfile_dir"
     rm -f /tmp/owpengram-centos_env.Dockerfile
@@ -241,10 +252,10 @@ build_via_docker() {
     # normal workstation that's still enough concurrent heavy TUs (MTProto
     # scheme, style files, media viewer) to blow past RAM with no swap
     # cushion, and the kernel's OOM killer can take out dockerd itself
-    # instead of just the compiler. Same RAM/4 heuristic as the image build.
+    # instead of just the compiler. Same RAM/6 heuristic as the image build.
     local total_ram_gb build_jobs
     total_ram_gb=$(( $(awk '/MemTotal/{print $2}' /proc/meminfo) / 1024 / 1024 ))
-    build_jobs=$(( total_ram_gb / 4 ))
+    build_jobs=$(( total_ram_gb / 6 ))
     if [ "$build_jobs" -lt 1 ]; then build_jobs=1; fi
     if [ "$build_jobs" -gt "$(nproc)" ]; then build_jobs="$(nproc)"; fi
 
@@ -281,11 +292,14 @@ build_via_docker() {
 
     local binary_path="$docker_out_dir/$configuration/OwpenGram"
 
-    # The image bakes in -g/-gdwarf64 even for Release (so official builds can
-    # symbolicate crash reports) - that alone bloats an unstripped binary from
-    # ~250 MB to 14+ GB. Strip Release; keep Debug symbols for local debugging.
+    # ensure_docker_image now generates the image with DEBUG= (no -g/-gdwarf64
+    # baked into CFLAGS/CXXFLAGS at all), so there's normally nothing left to
+    # strip here. This stays as a defensive no-op for an image built before
+    # that change, or one regenerated with DEBUG=1 later for crash-report
+    # symbolication -- strip on an already-symbol-free binary is a harmless
+    # no-op either way.
     if [ "$configuration" = "Release" ] && [ -f "$binary_path" ]; then
-        step "Stripping debug symbols (Release only)"
+        step "Stripping debug symbols (Release only, if any remain)"
         strip "$binary_path"
     fi
 
