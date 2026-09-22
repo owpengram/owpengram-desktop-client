@@ -1300,6 +1300,12 @@ void HttpLoaderActor::sendRequest() {
 	request.setAttribute(
 		QNetworkRequest::HttpPipeliningAllowedAttribute,
 		true);
+	// GitHub's releases/download/<tag>/<name> asset URLs always 302 to a
+	// signed objects.githubusercontent.com link; upstream's own update
+	// servers never redirect, so this loader never had to follow one.
+	request.setAttribute(
+		QNetworkRequest::RedirectPolicyAttribute,
+		QNetworkRequest::NoLessSafeRedirectPolicy);
 	_reply.reset(_manager.get(request));
 	connect(
 		_reply.get(),

@@ -413,9 +413,9 @@ void InstallStagedPackage(InstallDoneCallback done) {
 	const auto dpkg = QStandardPaths::findExecutable(u"dpkg"_q);
 	auto args = QStringList();
 	if (!aptGet.isEmpty()) {
-		args = { aptGet, u"install"_q, u"-y"_q, u"--"_q, path };
+		args = QStringList{ aptGet, u"install"_q, u"-y"_q, u"--"_q, path };
 	} else if (!dpkg.isEmpty()) {
-		args = { dpkg, u"-i"_q, path };
+		args = QStringList{ dpkg, u"-i"_q, path };
 	} else {
 		done(false, u"Neither apt-get nor dpkg was found."_q);
 		return;
