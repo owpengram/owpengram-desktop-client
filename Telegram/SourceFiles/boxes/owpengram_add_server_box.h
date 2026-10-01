@@ -29,6 +29,18 @@ public:
 		QWidget*,
 		Fn<void(Owpengram::Server)> done,
 		Owpengram::Server existing = {});
+	~AddServerBox();
+
+	// Add/edit server and the owpg://addserver deep link each reach this
+	// box through a different show() -- a window-scoped one
+	// (Core::Application's deep-link handler) or the app-global one
+	// (ServerSelectWidget's own Add/Edit buttons), neither aware of the
+	// other's layer stack. Without this, an owpg://addserver link opened
+	// while the Add Server box from a button click is already showing (or
+	// a second click on that same button before the box finishes
+	// animating in) stacks a second instance on top instead of being a
+	// no-op. Every call site must check this before calling show().
+	[[nodiscard]] static bool IsOpen();
 
 protected:
 	void prepare() override;

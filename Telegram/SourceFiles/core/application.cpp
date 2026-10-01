@@ -1344,6 +1344,12 @@ bool Application::openLocalUrl(const QString &url, QVariant context) {
 				tr::lng_owpengram_server_link_invalid(tr::now)));
 			return true;
 		}
+		// Add Server is already showing (e.g. from ServerSelectWidget's own
+		// button) -- see AddServerBox::IsOpen's doc comment for why this
+		// must be a no-op instead of stacking a second instance.
+		if (AddServerBox::IsOpen()) {
+			return true;
+		}
 		_lastActivePrimaryWindow->activate();
 		_lastActivePrimaryWindow->show(Box<AddServerBox>(
 			[=](Owpengram::Server) {

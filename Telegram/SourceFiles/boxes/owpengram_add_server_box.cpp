@@ -213,6 +213,19 @@ int RadioTypeRow::resizeGetHeight(int newWidth) {
 
 // ── AddServerBox ──────────────────────────────────────────────────────────
 
+namespace {
+
+// Cleared in the destructor, so a box dismissed by any means (Save,
+// Cancel, Escape, closing the window it lives in) always releases the
+// guard -- never just on a successful save.
+bool AddServerBoxOpen = false;
+
+} // namespace
+
+bool AddServerBox::IsOpen() {
+	return AddServerBoxOpen;
+}
+
 AddServerBox::AddServerBox(
 	QWidget*,
 	Fn<void(Owpengram::Server)> done,
@@ -220,6 +233,7 @@ AddServerBox::AddServerBox(
 : _done(std::move(done))
 , _content(this)
 , _typeGroup(std::make_shared<Ui::RadiobuttonGroup>(0)) {
+	AddServerBoxOpen = true;
 
 	_content->add(object_ptr<Ui::FixedHeightWidget>(
 		_content,
@@ -402,6 +416,10 @@ AddServerBox::AddServerBox(
 			fetchPublicKeyForAddress();
 		}
 	}
+}
+
+AddServerBox::~AddServerBox() {
+	AddServerBoxOpen = false;
 }
 
 void AddServerBox::prepare() {

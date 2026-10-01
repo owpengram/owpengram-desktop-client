@@ -351,6 +351,12 @@ ServerSelectWidget::ServerSelectWidget(
 	_scroll->setAttribute(Qt::WA_OpaquePaintEvent, false);
 
 	_addServer->setClickedCallback([=] {
+		// A second click before the box from the first one finishes
+		// animating in (or an owpg://addserver link arriving in the same
+		// moment) must be a no-op -- see AddServerBox::IsOpen's doc comment.
+		if (AddServerBox::IsOpen()) {
+			return;
+		}
 		const auto weak = base::make_weak(this);
 		Ui::show(Box<AddServerBox>([=](Owpengram::Server server) {
 			Ui::PostponeCall(weak, [=] {
@@ -455,7 +461,7 @@ void ServerSelectWidget::rebuildList() {
 		const auto weak = base::make_weak(this);
 		const auto editFn = Owpengram::IsRemovableServer(server)
 			? Fn<void()>(crl::guard(weak, [=, s = server] {
-				if (weak) {
+				if (weak && !AddServerBox::IsOpen()) {
 					Ui::show(Box<AddServerBox>(
 						[=](Owpengram::Server) {
 							if (weak) rebuildList();
