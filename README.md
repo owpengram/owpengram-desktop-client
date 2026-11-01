@@ -13,7 +13,8 @@ to use, and free from lock-in.
 
 > 🪟🐧 **Available now for Windows and Linux** — grab a build from the
 > [Releases](https://github.com/owpengram/owpengram-desktop-client/releases)
-> tab. macOS is planned.
+> tab. The web client is live at [web.owpengram.org](https://web.owpengram.org);
+> macOS is planned.
 
 > 🔗 Built on **MTProto API layer 229**, on top of Telegram Desktop `v7.2.2`.
 
@@ -50,6 +51,15 @@ Want that integration without a package — on Arch, Fedora, anything — run
 [`install-linux.sh`](install-linux.sh) next to the binary. It does the same
 thing under `~/.local`, no root needed, and re-running it after an update
 refreshes the installed copy.
+
+## 🔄 Updates
+
+The client updates itself from the project's GitHub releases: it compares the
+release tag (`O7` → build 7) with the number it was built with, downloads the
+file for your platform, verifies its size and SHA-256, and offers the usual
+"Restart and update" button in Advanced settings. Details and the reasoning
+are in [docs/updates.md](docs/updates.md). A build made with release number
+`0` is a local dev build and never updates itself.
 
 ## 🚀 Try it without setting up anything
 
@@ -137,7 +147,9 @@ build-windows.bat
 
 It guides you through API credentials, submodules, `prepare`, `configure` and the
 MSBuild step, and remembers your answers in `.owpengram-build.local.json`
-(gitignored).
+(gitignored). It also asks for the build's **release number** (the N in the
+GitHub tag `ON`); blank means a local build without self-update, and the
+`OWPENGRAM_BUILD` environment variable skips the question.
 
 **Requirements:** Visual Studio 2022 (C++ x64), Python 3.10, Git. x64 builds
 against **Qt 5.15.19**, the same Qt the official Windows client uses — Qt 6 on
@@ -188,7 +200,9 @@ equivalent packages, CMake, Ninja, Git. Portable mode — Docker.
 
 - 🚀 [Server](https://github.com/owpengram/owpengram-server)
 - 🤖 [Android client](https://github.com/owpengram/owpengram-android-client)
-- 🌐 [GitHub organization](https://github.com/owpengram)
+- 🌐 [Web client](https://github.com/owpengram/owpengram-web-client)
+- 🎁 [Gift packs](https://github.com/owpengram/owpengram-giftpacks)
+- 🏢 [GitHub organization](https://github.com/owpengram)
 
 ## 💬 Community
 
