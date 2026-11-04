@@ -10,7 +10,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/image/image_prepare.h"
 #include "ui/painter.h"
 #include "core/application.h"
-#include "core/branding.h"
 #include "styles/style_window.h"
 #include "styles/style_media_view.h"
 #include "window/window_controller.h"
@@ -80,7 +79,15 @@ void PreviewWindowTitle(Painter &p, const style::palette &palette, QRect body, i
 	p.setPen(st::titleFgActive[palette]);
 	p.setFont(font);
 
-	p.drawText(titleRect, Branding::ShortAppName.utf16(), style::al_center);
+	if (WindowTitleAlignsLeft()) {
+		constexpr auto kTrafficLightsWidth = 8 + 3 * (12 + 8);
+		p.drawText(
+			titleRect.adjusted(kTrafficLightsWidth, 0, 0, 0),
+			u"Telegram"_q,
+			style::al_left);
+	} else {
+		p.drawText(titleRect, u"Telegram"_q, style::al_center);
+	}
 
 	auto isGraphite = ([NSColor currentControlTint] == NSGraphiteControlTint);
 	auto buttonSkip = 8;
@@ -118,7 +125,7 @@ void PreviewWindowTitle(Painter &p, const style::palette &palette, QRect body, i
 		maximize);
 }
 
-void PreviewWindowFramePaint(QImage &preview, const style::palette &palette, QRect body, int outerWidth) {
+void PreviewWindowFramePaint(QImage &preview, const style::palette &palette, QColor bg, QRect body, int outerWidth) {
 	auto retina = style::DevicePixelRatio();
 	auto titleHeight = PreviewTitleHeight();
 	{
@@ -152,7 +159,7 @@ void PreviewWindowFramePaint(QImage &preview, const style::palette &palette, QRe
 			inner.height() * retina),
 			corners);
 	rounded.setDevicePixelRatio(style::DevicePixelRatio());
-	preview.fill(st::themePreviewBg->c);
+	preview.fill(bg);
 
 	auto topLeft = st::macWindowShadowTopLeft.instance(QColor(0, 0, 0), 100);
 	auto topRight = topLeft.mirrored(true, false);

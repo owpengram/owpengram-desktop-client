@@ -16,7 +16,7 @@ to use, and free from lock-in.
 > tab. The web client is live at [web.owpengram.org](https://web.owpengram.org);
 > macOS is planned.
 
-> 🔗 Built on **MTProto API layer 229**, on top of Telegram Desktop `v7.2.2`.
+> 🔗 Built on **MTProto API layer 232**, on top of Telegram Desktop `v7.3.5`.
 
 <p align="center">
   <img src="media/readme/desktop_hero.png" alt="OwpenGram Desktop — chats" width="880">
@@ -239,6 +239,8 @@ Based on [Telegram Desktop](https://github.com/telegramdesktop/tdesktop) —
 * CMake ([New BSD License](https://github.com/Kitware/CMake/blob/master/Copyright.txt))
 * Hunspell ([LGPL](https://github.com/hunspell/hunspell/blob/master/COPYING.LESSER))
 * Ada ([Apache License 2.0](https://github.com/ada-url/ada/blob/main/LICENSE-APACHE))
+* zxcvbn-c ([MIT License](https://github.com/tsyrogit/zxcvbn-c/blob/master/LICENSE.txt))
+* FrequencyWords by Hermit Dave ([Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/))
 
 ---
 

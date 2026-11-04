@@ -521,17 +521,17 @@ function Start-Prepare {
 
     Write-Step 'Running Telegram\build\prepare\win.bat silent'
     Write-WarnMsg 'silent = auto-rebuild CHANGED libraries (no r/a/s prompts; required for this script).'
-    Write-WarnMsg 'Resume one stage: Telegram\build\prepare\win.bat silent <name>  (e.g. libvpx, ffmpeg)'
+    Write-WarnMsg 'Resume one stage: Telegram\build\prepare\win.bat silent qt5 <name>  (e.g. libvpx, ffmpeg)'
     Write-WarnMsg 'If MSBuild misses vpxmt.lib: delete Libraries\win64\cache_keys\libvpx and Libraries\win64\libvpx, then silent libvpx'
-    Invoke-InVsEnvironment -Command 'Telegram\build\prepare\win.bat silent' -WorkingDirectory $RepoRoot -Label 'prepare'
+    Invoke-InVsEnvironment -Command 'Telegram\build\prepare\win.bat silent qt5' -WorkingDirectory $RepoRoot -Label 'prepare'
     Write-Ok 'Prepare finished'
 }
 
 function Start-Configure {
     param([string]$ApiId, [string]$ApiHash)
 
-    Write-Step 'Running configure.bat x64'
-    $cmd = "configure.bat x64 -D TDESKTOP_API_ID=$ApiId -D TDESKTOP_API_HASH=$ApiHash"
+    Write-Step 'Running configure.bat x64 qt5'
+    $cmd = "configure.bat x64 qt5 -D TDESKTOP_API_ID=$ApiId -D TDESKTOP_API_HASH=$ApiHash"
     Invoke-InVsEnvironment -Command $cmd -WorkingDirectory $TelegramDir -Label 'configure'
 
     if (-not (Test-Path $SolutionPath)) {

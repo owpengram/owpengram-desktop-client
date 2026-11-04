@@ -71,6 +71,17 @@ struct MessageDraftSource {
 	Fn<MessageCursor()> cursor;
 };
 
+struct WalletEngineValue {
+	enum class State : uchar {
+		Read,
+		Absent,
+		Broken,
+	};
+
+	State state = State::Absent;
+	QByteArray bytes;
+};
+
 class Account final {
 public:
 	Account(not_null<Main::Account*> owner, const QString &dataName);
@@ -118,7 +129,6 @@ public:
 	void readDraftsWithCursors(not_null<History*> history);
 	void writeDraftCursors(not_null<History*> history);
 	[[nodiscard]] bool hasDraftCursors(PeerId peerId);
-	[[nodiscard]] bool hasDraft(PeerId peerId);
 
 	void writeFileLocation(
 		MediaKey location,
@@ -227,6 +237,20 @@ public:
 
 	void writeBotStorage(PeerId botId, const QByteArray &serialized);
 	[[nodiscard]] QByteArray readBotStorage(PeerId botId);
+
+	// Per-key encrypted records owned by the wallet engine bridge
+	// (protected secrets and the send journal). Broken reports a record
+	// that exists but cannot be read; it is kept on disk, never silently
+	// dropped, so corruption can't masquerade as absence. The write
+	// reports whether the record durably reached disk.
+	[[nodiscard]] WalletEngineValue readWalletEngineValue(
+		const QString &key);
+	[[nodiscard]] bool writeWalletEngineValue(
+		const QString &key,
+		const QByteArray &bytes);
+	bool removeWalletEngineValue(const QString &key);
+	[[nodiscard]] std::vector<QString> walletEngineStorageKeys(
+		const QString &prefix) const;
 
 	[[nodiscard]] bool encrypt(
 		const void *src,
@@ -379,6 +403,7 @@ private:
 	FileKey _roundPlaceholderKey = 0;
 	FileKey _inlineBotsDownloadsKey = 0;
 	FileKey _mediaLastPlaybackPositionsKey = 0;
+	base::flat_map<QString, FileKey> _walletEngineStoragesMap;
 
 	qint64 _cacheTotalSizeLimit = 0;
 	qint64 _cacheBigFileTotalSizeLimit = 0;

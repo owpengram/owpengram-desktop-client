@@ -252,10 +252,10 @@ try {
 
     if (-not (Test-Path $LibrariesMarker)) {
         Write-Step 'Prepare libraries (first time, long)'
-        # No 'qt6': x64 builds against Qt 5.15.19 like the official Windows
-        # binaries. Qt 6 on Windows is only exercised upstream for ARM, and
-        # there nested popup submenus stop receiving clicks.
-        Invoke-Vs -Command 'Telegram\build\prepare\win.bat silent' -WorkingDirectory $RepoRoot -Label 'prepare'
+        # 'qt5': x64 builds against Qt 5.15.19 like the official Windows
+        # binaries. Since tdesktop 7.3.5 Qt 6 is the default unless 'qt5' is
+        # passed, and on Qt 6 nested popup submenus stop receiving clicks.
+        Invoke-Vs -Command 'Telegram\build\prepare\win.bat silent qt5' -WorkingDirectory $RepoRoot -Label 'prepare'
     }
     else {
         Write-Ok 'Libraries present, skip prepare'
@@ -274,7 +274,7 @@ try {
     # checker, the settings section and the apply step alike. Upstream's own
     # checkers are never started -- see Updater::start() and docs/updates.md.
     # OWPENGRAM_BUILD was resolved above (env var or prompt).
-    $configure = ".\configure.bat x64 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash) -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF -D OWPENGRAM_BUILD=$OwpengramBuild"
+    $configure = ".\configure.bat x64 qt5 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash) -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF -D OWPENGRAM_BUILD=$OwpengramBuild"
     Invoke-Vs -Command $configure -WorkingDirectory $TelegramDir -Label 'configure'
 
     Write-Step "MSBuild $Configuration"
