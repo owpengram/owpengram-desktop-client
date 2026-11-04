@@ -1440,11 +1440,11 @@ mac:
     git checkout e1e7b0ad8e
     cd ../../..
     cd src/client/mac
-    xcodebuild -project Breakpad.xcodeproj -target Breakpad -configuration Debug build
+    xcodebuild -project Breakpad.xcodeproj -target Breakpad -configuration Debug build MACOSX_DEPLOYMENT_TARGET=12.0
 release:
-    xcodebuild -project Breakpad.xcodeproj -target Breakpad -configuration Release build
+    xcodebuild -project Breakpad.xcodeproj -target Breakpad -configuration Release build MACOSX_DEPLOYMENT_TARGET=12.0
     cd ../../tools/mac/dump_syms
-    xcodebuild -project dump_syms.xcodeproj -target dump_syms -configuration Release build
+    xcodebuild -project dump_syms.xcodeproj -target dump_syms -configuration Release build MACOSX_DEPLOYMENT_TARGET=12.0
 """)
 
 stage('crashpad', """

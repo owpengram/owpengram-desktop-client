@@ -77,4 +77,12 @@ set(desktop_app_skip_libs
 )
 
 add_subdirectory(cmake)
+
+if (APPLE)
+    target_compile_definitions(external_ranges
+    INTERFACE
+        META_NO_STD_FORWARD_DECLARATIONS
+    )
+endif()
+
 add_subdirectory(Telegram)
