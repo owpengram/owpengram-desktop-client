@@ -1624,6 +1624,7 @@ mac:
         -system-webp \
         -I "$USED_PREFIX/include" \
         -no-feature-futimens \
+        -no-feature-dup3 \
         -no-feature-brotli \
         -no-feature-cxx17_filesystem \
         -platform macx-clang -- \
