@@ -504,6 +504,15 @@ function Test-LibrariesPrepared {
     return Test-Path $LibrariesMarker
 }
 
+# ffmpeg's prepare script appends ":$PKG_CONFIG_PATH". When the variable is
+# empty the trailing ':' stops MSYS from converting the path for the native
+# ucrt64 pkg-config, and ffmpeg then fails with "dav1d not found".
+function Get-PrepareEnvPrefix {
+    $pc = Join-Path (Split-Path $RepoRoot -Parent) 'Libraries\win64\local\lib\pkgconfig'
+    $posix = '/' + $pc.Substring(0, 1).ToLower() + $pc.Substring(2).Replace('\', '/')
+    return "set `"PKG_CONFIG_PATH=$posix`" && "
+}
+
 function Start-Prepare {
     if ($script:Cfg.SkipPrepareIfLibrariesExist -and (Test-LibrariesPrepared)) {
         if (-not (Read-YesNo 'Libraries already exist. Run prepare anyway?' $false)) {
@@ -521,17 +530,17 @@ function Start-Prepare {
 
     Write-Step 'Running Telegram\build\prepare\win.bat silent'
     Write-WarnMsg 'silent = auto-rebuild CHANGED libraries (no r/a/s prompts; required for this script).'
-    Write-WarnMsg 'Resume one stage: Telegram\build\prepare\win.bat silent qt5 <name>  (e.g. libvpx, ffmpeg)'
+    Write-WarnMsg 'Resume one stage: Telegram\build\prepare\win.bat silent <name>  (e.g. libvpx, ffmpeg)'
     Write-WarnMsg 'If MSBuild misses vpxmt.lib: delete Libraries\win64\cache_keys\libvpx and Libraries\win64\libvpx, then silent libvpx'
-    Invoke-InVsEnvironment -Command 'Telegram\build\prepare\win.bat silent qt5' -WorkingDirectory $RepoRoot -Label 'prepare'
+    Invoke-InVsEnvironment -Command ((Get-PrepareEnvPrefix) + 'Telegram\build\prepare\win.bat silent') -WorkingDirectory $RepoRoot -Label 'prepare'
     Write-Ok 'Prepare finished'
 }
 
 function Start-Configure {
     param([string]$ApiId, [string]$ApiHash)
 
-    Write-Step 'Running configure.bat x64 qt5'
-    $cmd = "configure.bat x64 qt5 -D TDESKTOP_API_ID=$ApiId -D TDESKTOP_API_HASH=$ApiHash"
+    Write-Step 'Running configure.bat x64'
+    $cmd = "configure.bat x64 -D TDESKTOP_API_ID=$ApiId -D TDESKTOP_API_HASH=$ApiHash"
     Invoke-InVsEnvironment -Command $cmd -WorkingDirectory $TelegramDir -Label 'configure'
 
     if (-not (Test-Path $SolutionPath)) {

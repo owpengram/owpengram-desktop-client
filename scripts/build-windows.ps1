@@ -111,6 +111,15 @@ function Find-VcVars {
     return ($found | Sort-Object -Descending | Select-Object -First 1)
 }
 
+# ffmpeg's prepare script appends ":$PKG_CONFIG_PATH". When the variable is
+# empty the trailing ':' stops MSYS from converting the path for the native
+# ucrt64 pkg-config, and ffmpeg then fails with "dav1d not found".
+function Get-PrepareEnvPrefix {
+    $pc = Join-Path (Split-Path $RepoRoot -Parent) 'Libraries\win64\local\lib\pkgconfig'
+    $posix = '/' + $pc.Substring(0, 1).ToLower() + $pc.Substring(2).Replace('\', '/')
+    return "set `"PKG_CONFIG_PATH=$posix`" && "
+}
+
 function Invoke-Vs([string]$Command, [string]$WorkingDirectory, [string]$Label) {
     if (-not $script:VcVars) { throw 'vcvars64 not resolved' }
 
@@ -252,10 +261,8 @@ try {
 
     if (-not (Test-Path $LibrariesMarker)) {
         Write-Step 'Prepare libraries (first time, long)'
-        # 'qt5': x64 builds against Qt 5.15.19 like the official Windows
-        # binaries. Since tdesktop 7.3.5 Qt 6 is the default unless 'qt5' is
-        # passed, and on Qt 6 nested popup submenus stop receiving clicks.
-        Invoke-Vs -Command 'Telegram\build\prepare\win.bat silent qt5' -WorkingDirectory $RepoRoot -Label 'prepare'
+        # Qt 6, like upstream tdesktop (its Windows default since 7.3.5).
+        Invoke-Vs -Command ((Get-PrepareEnvPrefix) + 'Telegram\build\prepare\win.bat silent') -WorkingDirectory $RepoRoot -Label 'prepare'
     }
     else {
         Write-Ok 'Libraries present, skip prepare'
@@ -274,7 +281,7 @@ try {
     # checker, the settings section and the apply step alike. Upstream's own
     # checkers are never started -- see Updater::start() and docs/updates.md.
     # OWPENGRAM_BUILD was resolved above (env var or prompt).
-    $configure = ".\configure.bat x64 qt5 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash) -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF -D OWPENGRAM_BUILD=$OwpengramBuild"
+    $configure = ".\configure.bat x64 -D TDESKTOP_API_ID=$($api.Id) -D TDESKTOP_API_HASH=$($api.Hash) -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF -D OWPENGRAM_BUILD=$OwpengramBuild"
     Invoke-Vs -Command $configure -WorkingDirectory $TelegramDir -Label 'configure'
 
     Write-Step "MSBuild $Configuration"
