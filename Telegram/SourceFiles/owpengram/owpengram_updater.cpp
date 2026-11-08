@@ -92,7 +92,20 @@ std::optional<Release> PendingRelease;
 } // namespace
 
 int RunningBuild() {
+	// Already the release code: CMake turns "10.1" into 10001.
 	return int(OWPENGRAM_BUILD);
+}
+
+int BuildCode(int major, int minor) {
+	return major * 1000 + minor;
+}
+
+QString BuildLabel(int code) {
+	const auto major = code / 1000;
+	const auto minor = code % 1000;
+	return minor
+		? u"%1.%2"_q.arg(major).arg(minor)
+		: QString::number(major);
 }
 
 QString FeedUrl() {
@@ -178,16 +191,19 @@ std::optional<Release> ParseFeed(const QByteArray &json, QString *error) {
 	}
 
 	const auto tag = root.value(u"tag_name"_q).toString();
-	// Tags are O1, O2, ... -- the release number is the whole version story
-	// on this side, since AppVersion tracks upstream Telegram instead.
+	// Tags are O1, O2, ... and minor ones O10.1, O10.2 -- the release number
+	// is the whole version story on this side, since AppVersion tracks
+	// upstream Telegram instead.
 	const auto match = QRegularExpression(
-		u"^[Oo](\\d{1,6})$"_q).match(tag);
+		u"^[Oo](\\d{1,6})(?:\\.(\\d{1,3}))?$"_q).match(tag);
 	if (!match.hasMatch()) {
 		return fail(u"unexpected tag '%1'"_q.arg(tag));
 	}
 
 	auto result = Release();
-	result.build = match.captured(1).toInt();
+	result.build = BuildCode(
+		match.captured(1).toInt(),
+		match.captured(2).isEmpty() ? 0 : match.captured(2).toInt());
 	result.tag = tag;
 	result.notes = root.value(u"body"_q).toString();
 

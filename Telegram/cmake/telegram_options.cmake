@@ -62,10 +62,23 @@ endif()
 # against the newest published tag, so every build that is meant to be
 # updatable must carry the number it ships under. Zero keeps the updater off,
 # which is what a local developer build wants.
-set(OWPENGRAM_BUILD "0" CACHE STRING "OwpenGram release number, the N in tag ON. 0 disables self-update.")
-if (NOT OWPENGRAM_BUILD MATCHES "^[0-9]+$")
-    message(FATAL_ERROR "OWPENGRAM_BUILD must be a non-negative integer, got '${OWPENGRAM_BUILD}'.")
+#
+# A release can also be a minor one, "N.M" for tag "ON.M" (10.1 -> O10.1). The
+# code compares one number, N * 1000 + M, so O10 < O10.1 < O10.2 < O11.
+set(OWPENGRAM_BUILD "0" CACHE STRING "OwpenGram release, N or N.M as in tag ON / ON.M. 0 disables self-update.")
+if (NOT OWPENGRAM_BUILD MATCHES "^([0-9]+)(\\.([0-9]+))?$")
+    message(FATAL_ERROR "OWPENGRAM_BUILD must be N or N.M (for example 10 or 10.1), got '${OWPENGRAM_BUILD}'.")
 endif()
+set(owpengram_build_major ${CMAKE_MATCH_1})
+if (CMAKE_MATCH_3 STREQUAL "")
+    set(owpengram_build_minor 0)
+else()
+    set(owpengram_build_minor ${CMAKE_MATCH_3})
+endif()
+if (owpengram_build_minor GREATER 999)
+    message(FATAL_ERROR "OWPENGRAM_BUILD minor part must be below 1000, got '${OWPENGRAM_BUILD}'.")
+endif()
+math(EXPR owpengram_build_code "${owpengram_build_major} * 1000 + ${owpengram_build_minor}")
 
 set(TDESKTOP_UPDATE_CHANNEL "stable" CACHE STRING "Compile-time update channel (stable, beta, canary-public, canary-private).")
 set(TDESKTOP_CANARY_COUNTER "0" CACHE STRING "Per-channel canary build counter, required positive for canary channels.")
@@ -110,7 +123,7 @@ endif()
 
 target_compile_definitions(Telegram
 PRIVATE
-    OWPENGRAM_BUILD=${OWPENGRAM_BUILD}
+    OWPENGRAM_BUILD=${owpengram_build_code}
     TDESKTOP_UPDATE_CHANNEL=${tdesktop_update_channel_value}
     TDESKTOP_CANARY_COUNTER=${TDESKTOP_CANARY_COUNTER}
     TDESKTOP_CANARY_PRIVATE_CHANNEL_ID=${TDESKTOP_CANARY_PRIVATE_CHANNEL_ID}

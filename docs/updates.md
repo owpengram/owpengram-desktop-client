@@ -7,7 +7,7 @@ not used, and must not be: see [Why not upstream's](#why-not-upstreams).
 
 1. The client reads the release feed — by default
    `https://api.github.com/repos/owpengram/owpengram-desktop-client/releases/latest`.
-2. It parses the tag (`O7` → build `7`) and compares it with the
+2. It parses the tag (`O7` → build `7`, minor tags too: `O10.1` → `10.1`, compared as the code `10001` = 10 × 1000 + 1) and compares it with the
    `OWPENGRAM_BUILD` it was compiled with.
 3. If the release is newer, it downloads the asset for this platform:
    `OwpenGram.exe` on Windows, the bare `OwpenGram` binary on Linux.
@@ -30,7 +30,7 @@ Only the transport and the apply step are ours.
 `OWPENGRAM_BUILD` must carry the number of the release the build ships under:
 
 ```bash
-cmake -S . -B out -DOWPENGRAM_BUILD=8    # for tag O8
+cmake -S . -B out -DOWPENGRAM_BUILD=8    # for tag O8 (or 10.1 for tag O10.1)
 ```
 
 Both build scripts read it from the environment, so a release build is:

@@ -161,7 +161,7 @@ namespace {
 	// the updater compares release tags against. A local dev build (0) shows
 	// nothing extra here, same as it disables update checks.
 	if (const auto build = Owpengram::Updater::RunningBuild()) {
-		result += u"_O%1"_q.arg(build);
+		result += u"_O%1"_q.arg(Owpengram::Updater::BuildLabel(build));
 	}
 	if (Core::BuildIsCanary) {
 		result += Core::CanaryVersionSuffix();

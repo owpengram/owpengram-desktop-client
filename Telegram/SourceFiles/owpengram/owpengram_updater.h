@@ -32,7 +32,7 @@ namespace Owpengram::Updater {
 
 // One published release, as far as the updater cares about it.
 struct Release {
-	int build = 0; // The N in the "ON" tag.
+	int build = 0; // Release code of the tag: "ON" or "ON.M", see BuildCode().
 	QString tag;
 	QString assetName;
 	QString assetUrl;
@@ -49,7 +49,14 @@ struct Release {
 // means the build was made without one, and the updater stays off: without it
 // there is nothing to compare a tag against, since AppVersion tracks the
 // upstream Telegram version (7.2.2), not ours.
+//
+// Releases can be minor ones too, tag "ON.M". A release is compared as one
+// number, the release code N * 1000 + M: O10 = 10000, O10.1 = 10001, O11 =
+// 11000. RunningBuild() and Release::build are codes; BuildLabel() turns one
+// back into "10" or "10.1" for people.
 [[nodiscard]] int RunningBuild();
+[[nodiscard]] int BuildCode(int major, int minor);
+[[nodiscard]] QString BuildLabel(int code);
 
 // Where the release feed is read from. Defaults to the GitHub API for the
 // desktop client repository; OWPENGRAM_UPDATE_URL replaces it, which is how

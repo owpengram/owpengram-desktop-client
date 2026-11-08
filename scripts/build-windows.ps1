@@ -213,11 +213,11 @@ try {
     } else {
         $OwpengramBuild = $null
         do {
-            $answer = (Read-Line 'Release number for this build (the N in tag ON; blank = local dev build, no self-update)' '0').Trim()
-            if ($answer -match '^\d+$') {
+            $answer = (Read-Line 'Release for this build (N or N.M as in tag ON / ON.M, e.g. 10 or 10.1; blank = local dev build, no self-update)' '0').Trim()
+            if ($answer -match '^\d+(\.\d+)?$') {
                 $OwpengramBuild = $answer
             } else {
-                Write-Host '  Enter a whole number, or leave blank for a local dev build.' -ForegroundColor Yellow
+                Write-Host '  Enter N or N.M (for example 10 or 10.1), or leave blank for a local dev build.' -ForegroundColor Yellow
             }
         } while ($null -eq $OwpengramBuild)
     }
