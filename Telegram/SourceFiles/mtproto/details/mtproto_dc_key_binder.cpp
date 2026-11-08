@@ -81,12 +81,12 @@ DcKeyBinder::DcKeyBinder(AuthKeyPtr &&persistentKey)
 
 SerializedRequest DcKeyBinder::prepareRequest(
 		const AuthKeyPtr &temporaryKey,
-		uint64 sessionId) {
+		uint64 sessionId,
+		mtpMsgId msgId) {
 	Expects(temporaryKey != nullptr);
 	Expects(temporaryKey->expiresAt() != 0);
 
 	const auto nonce = base::RandomValue<uint64>();
-	const auto msgId = base::unixtime::mtproto_msg_id();
 	auto result = SerializedRequest::Serialize(MTPauth_BindTempAuthKey(
 		MTP_long(_persistentKey->keyId()),
 		MTP_long(nonce),

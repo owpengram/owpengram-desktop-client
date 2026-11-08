@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mtproto/details/mtproto_dcenter.h"
 #include "mtproto/details/mtproto_dump_to_text.h"
 #include "mtproto/details/mtproto_rsa_public_key.h"
+#include "mtproto/details/mtproto_server_time.h"
 #include "mtproto/session.h"
 #include "mtproto/mtproto_response.h"
 #include "mtproto/mtproto_dc_options.h"
@@ -494,7 +495,7 @@ mtpMsgId SessionPrivate::replaceMsgId(SerializedRequest &request, mtpMsgId newId
 	while (_resendingIds.contains(newId)
 		|| _ackedIds.contains(newId)
 		|| haveSent.contains(newId)) {
-		newId = base::unixtime::mtproto_msg_id();
+		newId = NextMsgId(_instance);
 	}
 
 	MTP_LOG(_shiftedDcId, ("[r%1] msg_id %2 -> %3"
@@ -541,7 +542,7 @@ mtpMsgId SessionPrivate::placeToContainer(
 		SerializedRequest &req) {
 	const auto msgId = prepareToSend(req, bigMsgId, forceNewMsgId);
 	if (msgId >= bigMsgId) {
-		bigMsgId = base::unixtime::mtproto_msg_id();
+		bigMsgId = NextMsgId(_instance);
 	}
 
 	uint32 from = toSendRequest->size(), len = req.messageSize();
@@ -663,7 +664,8 @@ void SessionPrivate::tryToSend() {
 		if (!_bindMsgId && _keyCreator && _keyCreator->readyToBind()) {
 			bindDcKeyRequest = _keyCreator->prepareBindRequest(
 				_encryptionKey,
-				_sessionId);
+				_sessionId,
+				NextMsgId(_instance));
 
 			// This is a special request with msgId used inside the message
 			// body, so it is prepared already with a msgId and we place
@@ -781,7 +783,7 @@ void SessionPrivate::tryToSend() {
 
 			const auto msgId = prepareToSend(
 				toSendRequest,
-				base::unixtime::mtproto_msg_id(),
+				NextMsgId(_instance),
 				forceNewMsgId && !bindDcKeyRequest);
 			if (bindDcKeyRequest) {
 				_bindMsgId = msgId;
@@ -866,7 +868,7 @@ void SessionPrivate::tryToSend() {
 			toSendRequest->push_back(totalSending);
 
 			// check for a valid container
-			auto bigMsgId = base::unixtime::mtproto_msg_id();
+			auto bigMsgId = NextMsgId(_instance);
 
 			// the fact of this lock is used in replaceMsgId()
 			QWriteLocker locker2(_sessionData->haveSentMutex());
@@ -903,7 +905,7 @@ void SessionPrivate::tryToSend() {
 					bigMsgId,
 					forceNewMsgId);
 				if (msgId >= bigMsgId) {
-					bigMsgId = base::unixtime::mtproto_msg_id();
+					bigMsgId = NextMsgId(_instance);
 				}
 				bool added = false;
 				if (request->requestId) {
@@ -1369,7 +1371,7 @@ void SessionPrivate::handleReceived() {
 			return restart();
 		}
 
-		const auto clientTime = base::unixtime::now();
+		const auto clientTime = ServerNow(_instance);
 		const auto badTime = (serverTime > clientTime + 60)
 			|| (serverTime + 300 < clientTime);
 		if (badTime) {
@@ -1710,7 +1712,7 @@ SessionPrivate::HandleResult SessionPrivate::handleOneReceived(
 		_sessionSalt = data.vnew_server_salt().v;
 
 		// Don't force time update here.
-		base::unixtime::update(info.serverTime);
+		ReportServerTime(_instance, info.serverTime);
 
 		if (_bindMsgId) {
 			LOG(("Message Info: bad_server_salt received while binding temp key, restarting."));
@@ -2169,14 +2171,14 @@ void SessionPrivate::correctUnixtimeByFastRequest(
 		locker.unlock();
 
 		SyncTimeRequestDuration = duration;
-		base::unixtime::update(serverTime);
+		ReportServerTime(_instance, serverTime);
 		return;
 	}
 }
 
 void SessionPrivate::correctUnixtimeWithBadLocal(TimeId serverTime) {
 	SyncTimeRequestDuration = kFastRequestDuration;
-	base::unixtime::update(serverTime, true);
+	ReportServerTime(_instance, serverTime, true);
 }
 
 void SessionPrivate::requestsAcked(const QVector<MTPlong> &ids, bool byResponse) {
@@ -2608,7 +2610,8 @@ DcType SessionPrivate::tryAcquireKeyCreation() {
 			).arg(result->persistentServerSalt));
 
 		_sessionSalt = result->temporaryServerSalt;
-		result->temporaryKey->setExpiresAt(base::unixtime::now()
+		ReportServerTime(_instance, result->serverTime);
+		result->temporaryKey->setExpiresAt(ServerNow(_instance)
 			+ kTemporaryExpiresIn
 			+ kBindKeyAdditionalExpiresTimeout);
 		if (_realDcType != DcType::Cdn) {

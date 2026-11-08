@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "mtproto/details/mtproto_dcenter.h"
 #include "mtproto/details/mtproto_rsa_public_key.h"
+#include "mtproto/details/mtproto_server_time.h"
 #include "mtproto/special_config_request.h"
 #include "mtproto/session.h"
 #include "mtproto/mtproto_config.h"
@@ -2218,6 +2219,7 @@ rpl::lifetime &Instance::lifetime() {
 
 Instance::~Instance() {
 	_private->prepareToDestroy();
+	details::ForgetServerTime(this);
 }
 
 } // namespace MTP

@@ -34,6 +34,7 @@ struct DcKeyResult {
 	AuthKeyPtr temporaryKey;
 	uint64 temporaryServerSalt = 0;
 	uint64 persistentServerSalt = 0;
+	TimeId serverTime = 0; // server_time from the DH exchange
 };
 
 class DcKeyCreator final {
@@ -131,6 +132,7 @@ private:
 	const DcKeyRequest _request;
 	Delegate _delegate;
 
+	TimeId _serverTime = 0;
 	Attempt _temporary;
 	Attempt _persistent;
 

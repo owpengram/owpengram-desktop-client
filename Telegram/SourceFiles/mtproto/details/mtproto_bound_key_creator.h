@@ -36,7 +36,8 @@ public:
 	[[nodiscard]] bool readyToBind() const;
 	[[nodiscard]] SerializedRequest prepareBindRequest(
 		const AuthKeyPtr &temporaryKey,
-		uint64 sessionId);
+		uint64 sessionId,
+		mtpMsgId msgId);
 	[[nodiscard]] DcKeyBindState handleBindResponse(
 		const mtpBuffer &response);
 	[[nodiscard]] AuthKeyPtr bindPersistentKey() const;

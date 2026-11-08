@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mtproto/facade.h"
 #include "mtproto/mtproto_config.h"
 #include "mtproto/details/mtproto_rsa_public_key.h"
+#include "mtproto/details/mtproto_server_time.h"
 #include "mtproto/mtproto_dc_options.h"
 #include "mtproto/facade.h"
 #include "mtproto/mtp_instance.h"
@@ -805,6 +806,7 @@ void RestoreServerToAccount(not_null<Main::Account*> account) {
 	if (!selection) {
 		// No saved server: ensure the live MTP instance isn't locked either.
 		auto &mtp = account->mtp();
+		MTP::details::SetServerTimeTrusted(&mtp, false);
 		if (mtp.dcOptions().optionsLocked()) {
 			mtp.dcOptions().setOptionsLocked(false);
 		}
@@ -815,6 +817,9 @@ void RestoreServerToAccount(not_null<Main::Account*> account) {
 		return;
 	}
 	auto &mtp = account->mtp();
+	// Only Telegram's clock may set the time the whole app shows; any other
+	// server keeps its own clock to itself (see mtproto_server_time.h).
+	MTP::details::SetServerTimeTrusted(&mtp, server.isTelegram);
 	if (server.isTelegram) {
 		// Same reasoning as RestoreServerToConfig above: a locked instance is
 		// coming from a single-server backend, so DC1/3/4/5 may be poisoned

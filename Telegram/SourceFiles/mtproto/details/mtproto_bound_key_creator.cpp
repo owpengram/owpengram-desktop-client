@@ -58,10 +58,11 @@ bool BoundKeyCreator::readyToBind() const {
 
 SerializedRequest BoundKeyCreator::prepareBindRequest(
 		const AuthKeyPtr &temporaryKey,
-		uint64 sessionId) {
+		uint64 sessionId,
+		mtpMsgId msgId) {
 	Expects(_binder.has_value());
 
-	return _binder->prepareRequest(temporaryKey, sessionId);
+	return _binder->prepareRequest(temporaryKey, sessionId, msgId);
 }
 
 DcKeyBindState BoundKeyCreator::handleBindResponse(

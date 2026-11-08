@@ -28,9 +28,12 @@ class DcKeyBinder final {
 public:
 	explicit DcKeyBinder(AuthKeyPtr &&persistentKey);
 
+	// msgId is in the server's own time: it goes inside the encrypted
+	// body too, so it cannot be replaced after this.
 	[[nodiscard]] SerializedRequest prepareRequest(
 		const AuthKeyPtr &temporaryKey,
-		uint64 sessionId);
+		uint64 sessionId,
+		mtpMsgId msgId);
 	[[nodiscard]] DcKeyBindState handleResponse(const mtpBuffer &response);
 	[[nodiscard]] AuthKeyPtr persistentKey() const;
 

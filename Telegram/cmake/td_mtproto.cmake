@@ -19,6 +19,8 @@ PRIVATE
     mtproto/details/mtproto_dc_key_binder.h
     mtproto/details/mtproto_dc_key_creator.cpp
     mtproto/details/mtproto_dc_key_creator.h
+    mtproto/details/mtproto_server_time.cpp
+    mtproto/details/mtproto_server_time.h
     mtproto/details/mtproto_dcenter.cpp
     mtproto/details/mtproto_dcenter.h
     mtproto/details/mtproto_domain_resolver.cpp
