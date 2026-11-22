@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "owpengram/claude/claude_access_store.h"
 
 #include <QtCore/QDateTime>
+#include <QtCore/QTimeZone>
 
 #include <algorithm>
 #include <memory>
@@ -236,7 +237,7 @@ QString LevelString(Level level) {
 }
 
 QString IsoDate(TimeId date) {
-	return QDateTime::fromSecsSinceEpoch(date, Qt::UTC).toString(Qt::ISODate);
+	return QDateTime::fromSecsSinceEpoch(date, QTimeZone::utc()).toString(Qt::ISODate);
 }
 
 QString ArgString(const QJsonObject &args, const QString &key) {

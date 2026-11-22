@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/timer.h"
 #include "owpengram/claude/claude_http_request.h"
 
+#include <rpl/event_stream.h>
 #include <rpl/lifetime.h>
 #include <rpl/producer.h>
 #include <rpl/variable.h>
@@ -37,6 +38,10 @@ public:
 	// Names (clientInfo.name) of clients that sent a request in the last
 	// 5 minutes, sorted and unique.
 	[[nodiscard]] rpl::producer<std::vector<QString>> clientsValue() const;
+
+	// Listening on the configured port (false when enabled but the port is
+	// busy or invalid).
+	[[nodiscard]] bool isListening() const;
 
 private:
 	struct Connection;
@@ -73,6 +78,9 @@ private:
 	std::map<QTcpSocket*, std::unique_ptr<Connection>> _connections;
 	std::map<QString, Session> _sessions;
 	rpl::variable<std::vector<QString>> _clients;
+	// Fired when the server stops or the token is regenerated: pending
+	// confirmations of calls received before that are denied.
+	rpl::event_stream<> _cancelled;
 	base::Timer _sessionsTimer;
 	rpl::lifetime _lifetime;
 

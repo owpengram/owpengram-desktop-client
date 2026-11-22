@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "owpengram/claude/claude_access_store.h"
+#include "owpengram/claude/claude_mcp_server.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/widgets/popup_menu.h"
 #include "window/window_session_controller.h"
@@ -80,9 +81,11 @@ void FillClaudeSettingsMenu(
 
 	const auto enabled = Access().mcpEnabled();
 	menu->addAction(
-		(enabled
+		(!enabled
+			? tr::lng_owpengram_claude_menu_mcp_off(tr::now)
+			: Mcp().isListening()
 			? tr::lng_owpengram_claude_menu_mcp_on(tr::now)
-			: tr::lng_owpengram_claude_menu_mcp_off(tr::now)),
+			: tr::lng_owpengram_claude_menu_mcp_error(tr::now)),
 		[=] { Access().setMcpEnabled(!enabled); },
 		enabled ? &st::menuIconSelect : nullptr);
 	menu->addAction(

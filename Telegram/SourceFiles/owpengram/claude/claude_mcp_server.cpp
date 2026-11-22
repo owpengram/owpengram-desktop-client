@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <algorithm>
 #include <optional>
+#include <utility>
 
 namespace Owpengram::Claude {
 namespace {
@@ -34,6 +35,8 @@ constexpr auto kLatestProtocol = "2025-06-18";
 constexpr auto kOldProtocol = "2025-03-26";
 constexpr auto kReadTimeout = 30 * crl::time(1000);
 constexpr auto kDrainTimeout = 2 * crl::time(1000);
+// Longer than the 2 minutes a confirmation may take.
+constexpr auto kCallTimeout = 3 * 60 * crl::time(1000);
 constexpr auto kClientsWindow = 5 * 60 * crl::time(1000);
 constexpr auto kSessionLifetime = 60 * 60 * crl::time(1000);
 constexpr auto kSessionsTick = 30 * crl::time(1000);
@@ -196,6 +199,10 @@ McpServer::~McpServer() {
 	stop();
 }
 
+bool McpServer::isListening() const {
+	return _server && _server->isListening();
+}
+
 rpl::producer<std::vector<QString>> McpServer::clientsValue() const {
 	return _clients.value();
 }
@@ -214,6 +221,7 @@ void McpServer::applyAccessState() {
 		// Token regenerated: nothing accepted under the old one lives on.
 		_token = Access().mcpToken();
 		dropConnections();
+		_cancelled.fire({});
 		_sessions.clear();
 		pushClients();
 	}
@@ -239,6 +247,7 @@ void McpServer::start(int port) {
 
 void McpServer::stop() {
 	dropConnections();
+	_cancelled.fire({});
 	if (_server) {
 		_server->close();
 		_server.reset();
@@ -530,11 +539,18 @@ void McpServer::handleRequest(
 			.clientName = (i != _sessions.end())
 				? i->second.clientName
 				: QString(),
+			.cancelled = _cancelled.events(),
 		};
 		// The connection stays open until the handler is done (a
 		// confirmation may take minutes). If the socket is gone by then
 		// `finish` drops the result; `once` guards a second call.
 		const auto once = std::make_shared<bool>(false);
+		QTimer::singleShot(int(kCallTimeout), socket.get(), [=] {
+			if (!std::exchange(*once, true)) {
+				reply(ResultObject(id, ToolResultToJson(
+					ErrorResult(u"timeout"_q))));
+			}
+		});
 		Tools().call(std::move(call), [=](ToolResult result) {
 			if (std::exchange(*once, true)) {
 				return;

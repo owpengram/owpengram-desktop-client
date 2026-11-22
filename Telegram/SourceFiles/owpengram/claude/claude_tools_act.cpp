@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_common.h"
 #include "apiwrap.h"
+#include "core/application.h"
 #include "data/data_chat_participant_status.h"
 #include "data/data_forum_topic.h"
 #include "data/data_message_reaction_id.h"
@@ -33,6 +34,8 @@ using Done = Fn<void(ToolResult)>;
 
 constexpr auto kPreviewLimit = 300;
 constexpr auto kMaxForwardCount = 100;
+const auto kInvisibleText = QString::fromLatin1(
+	"text contains invisible or direction-control characters");
 
 // What a tool call is going to do, computed WITHOUT doing it.
 struct Plan {
@@ -62,18 +65,40 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 	return Failed(ErrorResult(std::move(text)));
 }
 
-// Everything Claude (or other chat participants) controls is shown to the
-// user only after this: invisible / direction-changing characters removed.
+// Invisible and direction-changing characters: zero-width, bidi marks and
+// overrides / isolates, line / paragraph separators, word joiner and
+// invisible operators, Mongolian vowel separator, BOM.
+[[nodiscard]] bool IsInvisibleOrDirection(QChar ch) {
+	const auto code = ch.unicode();
+	return (code >= 0x200B && code <= 0x200F)
+		|| (code >= 0x202A && code <= 0x202E)
+		|| (code >= 0x2060 && code <= 0x2064)
+		|| (code >= 0x2066 && code <= 0x2069)
+		|| code == 0x061C
+		|| code == 0x180E
+		|| code == 0x2028
+		|| code == 0x2029
+		|| code == 0xFEFF;
+}
+
+[[nodiscard]] bool HasInvisibleOrDirection(const QString &text) {
+	return std::any_of(text.begin(), text.end(), IsInvisibleOrDirection);
+}
+
+// Text Claude wants to SEND: it is sent exactly as it is shown to the user
+// (line breaks normalized to \n first), so anything that could look
+// different to the recipient is refused instead of cleaned.
+[[nodiscard]] QString NormalizedNewlines(QString text) {
+	return text.replace(u"\r\n"_q, u"\n"_q).replace(QChar('\r'), QChar('\n'));
+}
+
+// Everything else Claude (or other chat participants) controls is shown to
+// the user only after this: invisible / direction-changing characters removed.
 [[nodiscard]] QString Sanitized(const QString &text) {
 	auto result = QString();
 	result.reserve(text.size());
 	for (const auto ch : text) {
-		const auto code = ch.unicode();
-		if ((code >= 0x200B && code <= 0x200F)
-			|| (code >= 0x202A && code <= 0x202E)
-			|| (code >= 0x2066 && code <= 0x2069)
-			|| code == 0xFEFF
-			|| code == '\r') {
+		if (IsInvisibleOrDirection(ch) || ch == QChar('\r')) {
 			continue;
 		}
 		result += ch;
@@ -97,6 +122,16 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 // inside it can not be mistaken for the application's own lines.
 [[nodiscard]] QString Quoted(const QString &text) {
 	auto lines = Sanitized(text).split(QChar('\n'));
+	for (auto &line : lines) {
+		line = QChar(0x2502) + u" "_q + line;
+	}
+	return lines.join(QChar('\n'));
+}
+
+// Exact text (already checked by HasInvisibleOrDirection), as an indented
+// block, nothing removed or collapsed.
+[[nodiscard]] QString QuotedExact(const QString &text) {
+	auto lines = text.split(QChar('\n'));
 	for (auto &line : lines) {
 		line = QChar(0x2502) + u" "_q + line;
 	}
@@ -158,9 +193,11 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 
 [[nodiscard]] Prepared PrepareSend(const ToolCall &call) {
 	const auto &args = call.arguments;
-	const auto text = ArgString(args, u"text"_q);
+	const auto text = NormalizedNewlines(ArgString(args, u"text"_q));
 	if (text.trimmed().isEmpty()) {
 		return Failed(u"invalid arguments: text is required"_q);
+	} else if (HasInvisibleOrDirection(text)) {
+		return Failed(kInvisibleText);
 	}
 	const auto peer = FindAllowedPeer(
 		ArgString(args, u"account"_q),
@@ -181,7 +218,7 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 	return Prepared{ .plan = Plan{
 		.session = session,
 		.level = EffectiveLevel(peer),
-		.summary = header + u"\n"_q + Quoted(text),
+		.summary = header + u"\n"_q + QuotedExact(text),
 		.perform = [=] {
 			auto message = Api::MessageToSend(
 				Api::SendAction(session->data().history(peer)));
@@ -200,10 +237,12 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 
 [[nodiscard]] Prepared PrepareReply(const ToolCall &call) {
 	const auto &args = call.arguments;
-	const auto text = ArgString(args, u"text"_q);
+	const auto text = NormalizedNewlines(ArgString(args, u"text"_q));
 	const auto msgId = ArgMsgId(args.value(u"msg_id"_q));
 	if (text.trimmed().isEmpty() || !msgId) {
 		return Failed(u"invalid arguments: msg_id and text are required"_q);
+	} else if (HasInvisibleOrDirection(text)) {
+		return Failed(kInvisibleText);
 	}
 	const auto peer = FindAllowedPeer(
 		ArgString(args, u"account"_q),
@@ -228,7 +267,7 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 		.session = session,
 		.level = EffectiveLevel(peer),
 		.summary = header
-			+ u"\n"_q + Quoted(text)
+			+ u"\n"_q + QuotedExact(text)
 			+ u"\n"_q + quoted
 			+ u"\n"_q + Quoted(Preview(item)),
 		.perform = [=] {
@@ -419,6 +458,10 @@ void Run(ToolCall call, Done done, PrepareFn prepare) {
 		[=](ConfirmResult result) {
 			switch (result) {
 			case ConfirmResult::Approved: {
+				if (Core::App().passcodeLocked()) {
+					guarded(ErrorResult(u"locked"_q));
+					break;
+				}
 				// The level (or the chat) could have changed while the box
 				// was open: everything is checked again from the raw
 				// arguments, nothing from before the box is reused.
@@ -442,11 +485,15 @@ void Run(ToolCall call, Done done, PrepareFn prepare) {
 			case ConfirmResult::SessionClosed:
 				guarded(ErrorResult(u"denied: account session closed"_q));
 				break;
+			case ConfirmResult::Cancelled:
+				guarded(ErrorResult(u"denied: client disconnected"_q));
+				break;
 			case ConfirmResult::Denied:
 				guarded(ErrorResult(u"denied by user"_q));
 				break;
 			}
-		});
+		},
+		call.cancelled);
 }
 
 [[nodiscard]] QJsonObject Prop(const QString &type, const QString &text) {
@@ -494,7 +541,8 @@ void RegisterActTools(ToolRegistry &registry) {
 		registry,
 		u"send_message"_q,
 		u"Send a text message as the user. A message that is just one dice "
-		"emoji is sent as an animated dice."_q + note,
+		"emoji is sent as an animated dice. Forum chats are not supported "
+		"yet."_q + note,
 		Schema({
 			{ u"account"_q, account },
 			{ u"chat"_q, chat },
@@ -528,8 +576,9 @@ void RegisterActTools(ToolRegistry &registry) {
 		u"forward"_q,
 		u"Forward messages from one chat to another, as the user. The "
 		"source chat needs Read, the target Act. Only forwarding within "
-		"one account is supported. status \"forwarded\" means the request "
-		"was sent, not that delivery is confirmed."_q + note,
+		"one account is supported. Forum chats are not supported "
+		"yet. status \"forwarded\" means the request was sent, not that "
+		"delivery is confirmed."_q + note,
 		Schema({
 			{ u"from_account"_q, account },
 			{ u"from_chat"_q, chat },

@@ -7,7 +7,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include <rpl/producer.h>
+
 #include <QtCore/QString>
+
+#include <optional>
 
 namespace Main {
 class Session;
@@ -21,6 +25,7 @@ enum class ConfirmResult {
 	TimedOut, // No answer for 2 minutes.
 	Unavailable, // No window for this account and none could be opened.
 	SessionClosed, // The account session was destroyed.
+	Cancelled, // `cancelled` fired (the requester is gone).
 };
 
 // Asks the user (a Yes / No box in a window of this account) to allow an
@@ -38,11 +43,13 @@ void RequestConfirmation(
 	Fn<void(bool approved)> done);
 
 // Same, but tells why the action was not approved. `done` is called exactly
-// once, and never synchronously with Approved.
+// once, and never synchronously with Approved. If `cancelled` fires while
+// the box is open, the box is closed and the result is Cancelled.
 void RequestConfirmationWithReason(
 	not_null<Main::Session*> session,
 	QString clientName,
 	QString summary,
-	Fn<void(ConfirmResult result)> done);
+	Fn<void(ConfirmResult result)> done,
+	std::optional<rpl::producer<>> cancelled = std::nullopt);
 
 } // namespace Owpengram::Claude

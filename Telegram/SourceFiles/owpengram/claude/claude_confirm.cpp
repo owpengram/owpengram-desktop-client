@@ -79,7 +79,8 @@ void RequestConfirmationWithReason(
 		not_null<Main::Session*> session,
 		QString clientName,
 		QString summary,
-		Fn<void(ConfirmResult result)> done) {
+		Fn<void(ConfirmResult result)> done,
+		std::optional<rpl::producer<>> cancelled) {
 	// The window of this account; if it has none (e.g. closed to tray, or
 	// the main window shows another account) open one for it. That does not
 	// switch the account shown in other windows: a Primary SeparateId with
@@ -125,6 +126,12 @@ void RequestConfirmationWithReason(
 	}) | rpl::on_next([=](Main::Session*) {
 		Finish(state, ConfirmResult::SessionClosed);
 	}, state->lifetime);
+
+	if (cancelled) {
+		std::move(*cancelled) | rpl::on_next([=] {
+			Finish(state, ConfirmResult::Cancelled);
+		}, state->lifetime);
+	}
 
 	auto box = Ui::MakeConfirmBox({
 		.text = std::move(summary),

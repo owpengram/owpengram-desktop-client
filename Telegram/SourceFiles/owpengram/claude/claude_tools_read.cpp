@@ -176,7 +176,7 @@ void ListChats(ToolCall call, Done done) {
 				{ u"type"_q, PeerTypeName(peer) },
 				{ u"members_count"_q, MembersCount(peer) },
 				{ u"unread"_q, peer->owner().history(peer)->unreadCount() },
-				{ u"level"_q, LevelString(Access().effective(peer)) },
+				{ u"level"_q, LevelString(EffectiveLevel(peer)) },
 			});
 		}
 	}

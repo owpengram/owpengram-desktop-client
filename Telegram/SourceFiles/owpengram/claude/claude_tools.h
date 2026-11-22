@@ -14,6 +14,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QJsonValue>
 #include <QtCore/QString>
 
+#include <rpl/producer.h>
+
+#include <optional>
 #include <vector>
 
 class PeerData;
@@ -35,6 +38,9 @@ struct ToolCall {
 	QString name;
 	QJsonObject arguments;
 	QString clientName;
+	// Fires when the caller is gone for good (MCP server stopped, token
+	// regenerated): a pending confirmation must end as denied.
+	std::optional<rpl::producer<>> cancelled;
 };
 
 struct ToolDef {

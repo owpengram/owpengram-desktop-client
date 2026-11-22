@@ -8825,6 +8825,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_claude_menu_account" = "Access for this account";
 "lng_owpengram_claude_menu_mcp_on" = "MCP server: enabled";
 "lng_owpengram_claude_menu_mcp_off" = "MCP server: disabled";
+"lng_owpengram_claude_menu_mcp_error" = "MCP server: error (port busy?)";
 "lng_owpengram_claude_menu_copy_command" = "Copy command for Claude Code";
 "lng_owpengram_claude_menu_command_copied" = "Command copied. Paste it in a terminal.";
 "lng_owpengram_claude_menu_regenerate" = "Regenerate token";

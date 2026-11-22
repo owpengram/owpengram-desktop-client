@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "owpengram/claude/claude_access_rules.h"
 
+#undef NDEBUG
 #include <cassert>
 
 using namespace Owpengram::Claude;
