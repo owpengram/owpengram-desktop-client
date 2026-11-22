@@ -90,7 +90,8 @@ constexpr auto kSummaryLimit = 300;
 	return QString();
 }
 
-// Canonical path of `path` if the session may use it with the file tool.
+// Whether the session may use `path` with the file tool (the path is
+// resolved to its canonical form first).
 [[nodiscard]] bool FileAccessAllowed(
 		const QString &root,
 		const QString &path,
@@ -160,15 +161,14 @@ constexpr auto kSummaryLimit = 300;
 		}
 		return Allow(input);
 	}
-	// Glob / Grep: the optional `path` defaults to the working folder and
-	// follows the read rules; patterns are relative to it.
+	// Glob / Grep: `path` is required (never the ai/ root), follows the
+	// read rules; patterns are relative to it.
 	auto path = QString();
-	if (!stringField(u"path"_q, path)
-		|| !FileAccessAllowed(
-			root,
-			path.isEmpty() ? root : path,
-			false,
-			session)) {
+	if (!stringField(u"path"_q, path)) {
+		return denied;
+	} else if (path.isEmpty()) {
+		return Deny(u"specify path: memory/ or your session folder"_q);
+	} else if (!FileAccessAllowed(root, path, false, session)) {
 		return denied;
 	}
 	auto pattern = QString();

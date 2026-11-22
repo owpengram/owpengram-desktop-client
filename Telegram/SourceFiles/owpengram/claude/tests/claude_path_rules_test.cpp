@@ -71,7 +71,7 @@ int main() {
 	assert(AiPathAllowed(R, "/w/ai/readme.md", false, chat, none));
 	// Sessions by scope.
 	assert(AiPathAllowed(R, "/w/ai/sessions/other/t.md", false, all, none));
-	assert(AiPathAllowed(R, "/w/ai/sessions", false, all, none));
+	assert(!AiPathAllowed(R, "/w/ai/sessions", false, all, none));
 	assert(!AiPathAllowed(R, "/w/ai/sessions", false, acc, only));
 	assert(!AiPathAllowed(R, "/w/ai/sessions", false, chat, only));
 	assert(AiPathAllowed(R, "/w/ai/sessions/mine/t.md", false, chat, only));
@@ -80,7 +80,7 @@ int main() {
 	assert(!AiPathAllowed(R, "/w/ai/sessions/other/t.md", false, acc, only));
 	assert(!AiPathAllowed(R, "/w/ai/sessions/mine/t.md", false, tmp, none));
 	// Root listing only with All.
-	assert(AiPathAllowed(R, "/w/ai", false, all, none));
+	assert(!AiPathAllowed(R, "/w/ai", false, all, none));
 	assert(!AiPathAllowed(R, "/w/ai", false, acc, only));
 	// Dot paths and CLAUDE.md anywhere.
 	assert(!AiPathAllowed(R, "/w/ai/.claude/settings.json", false, all, only));
@@ -90,6 +90,24 @@ int main() {
 	assert(!AiPathAllowed(R, "/w/ai/memory/claude.LOCAL.md", true, all, only));
 	assert(!AiPathAllowed(R, "/w/ai/sessions/mine/CLAUDE.md", false, all, only));
 	assert(AiPathAllowed(R, "/w/ai/memory/claude.md.txt", true, all, only));
+	// Deny by default: deeper paths outside memory/ and sessions/.
+	assert(!AiPathAllowed(R, "/w/ai/other/x.md", false, all, only));
+	assert(!AiPathAllowed(R, "/w/ai/sub/dir/x.md", false, all, only));
+	assert(AiPathAllowed(R, "/w/ai/readme.md", false, all, only));
+	// Name tricks.
+	assert(!AiPathAllowed(R, "/w/ai/CLAUDE.md.", false, all, only));
+	assert(!AiPathAllowed(R, "/w/ai/CLAUDE.md ", false, all, only));
+	assert(!AiPathAllowed(R, "/w/ai/CLAUDE.md::$DATA", false, all, only));
+	assert(!AiPathAllowed(R, "/w/ai/memory/a.md:stream", true, all, only));
+	assert(!AiPathAllowed(R, "/w/ai/memory/note.", true, all, only));
+	assert(!AiPathAllowed(R, "/w/ai/memory/note ", true, all, only));
+	assert(!AiPathAllowed(R, "/w/ai/memory/claude.local.md.", true, all, only));
+	assert(!AiPathAllowed(R, "/w/ai/memory/CLAUDE.LOCAL.MD", true, all, only));
+	assert(!PatternIsSafe("[.]claude/*"));
+	assert(!PatternIsSafe("?claude"));
+	assert(!PatternIsSafe("*/[.]x"));
+	assert(!PatternIsSafe("**/ClAuDe*"));
+	assert(!PatternIsSafe("*.m?"));
 	// Outside / traps.
 	assert(!AiPathAllowed(R, "/w/ai2/memory/a", false, all, only));
 	assert(!AiPathAllowed(R, "/w/tdata/k", false, all, only));

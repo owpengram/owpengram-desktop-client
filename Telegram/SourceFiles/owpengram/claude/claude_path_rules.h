@@ -115,6 +115,44 @@ namespace details {
 	return false;
 }
 
+namespace details {
+
+[[nodiscard]] inline std::string Lower(std::string_view value) {
+	auto result = std::string(value);
+	for (auto &c : result) {
+		if (c >= 'A' && c <= 'Z') {
+			c = char(c + 32);
+		}
+	}
+	return result;
+}
+
+[[nodiscard]] inline bool ContainsClaude(std::string_view value) {
+	return Lower(value).find("claude") != std::string::npos;
+}
+
+// Trailing dots and spaces are ignored by Windows; compare without them.
+[[nodiscard]] inline bool IsClaudeMd(std::string_view name) {
+	while (!name.empty() && (name.back() == '.' || name.back() == ' ')) {
+		name.remove_suffix(1);
+	}
+	const auto value = Lower(name);
+	return (value == "claude.md") || (value == "claude.local.md");
+}
+
+// A component that can not be trusted to name what it looks like: hidden,
+// an NTFS stream (":"), or with trailing dot / space.
+[[nodiscard]] inline bool IsBadComponent(std::string_view name) {
+	return name.empty()
+		|| name[0] == '.'
+		|| name.find(':') != std::string_view::npos
+		|| name.back() == '.'
+		|| name.back() == ' '
+		|| IsClaudeMd(name);
+}
+
+} // namespace details
+
 // Glob pattern (Glob `pattern`, Grep `glob`): always relative to the
 // checked search folder. No absolute patterns, "..", "~", braces, and no
 // component starting with ".".
@@ -127,7 +165,8 @@ namespace details {
 		|| (pattern.size() >= 2 && pattern[1] == ':')) {
 		return false;
 	}
-	if (pattern.find_first_of("~{}") != std::string_view::npos) {
+	if (pattern.find_first_of("~{}[]?") != std::string_view::npos
+		|| details::ContainsClaude(pattern)) {
 		return false;
 	}
 	auto i = size_t(0);
@@ -144,30 +183,13 @@ namespace details {
 	return true;
 }
 
-namespace details {
-
-[[nodiscard]] inline bool IsClaudeMd(std::string_view name) {
-	const auto lower = [](std::string_view value) {
-		auto result = std::string(value);
-		for (auto &c : result) {
-			if (c >= 'A' && c <= 'Z') {
-				c = char(c + 32);
-			}
-		}
-		return result;
-	};
-	const auto value = lower(name);
-	return (value == "claude.md") || (value == "claude.local.md");
-}
-
-} // namespace details
-
 // Layout inside the ai/ folder (`root`, canonical). `path` is canonical and
-// absolute. Write access: only memory/**. Read access: memory/**, root files,
-// and sessions/<folder>/** where `folderAllowed(folder)` says so (the
-// sessions folder itself and the root folder are listable only with the All
-// scope). Any component starting with "." and any CLAUDE.md /
-// CLAUDE.local.md is denied everywhere.
+// absolute. Write access: only memory/**. Read access: memory/**, files
+// directly in the root of ai/, and sessions/<folder>/** where the scope
+// (All) or `folderAllowed(folder)` says so. The root folder and sessions/
+// themselves are never allowed (no traversal). Any component starting with
+// ".", with ":" or a trailing dot / space, and any CLAUDE.md /
+// CLAUDE.local.md is denied everywhere. Deny by default.
 [[nodiscard]] inline bool AiPathAllowed(
 		std::string_view root,
 		std::string_view path,
@@ -188,25 +210,24 @@ namespace details {
 	}
 	const auto rel = std::vector<std::string>(b.begin() + a.size(), b.end());
 	for (const auto &part : rel) {
-		if (part[0] == '.' || details::IsClaudeMd(part)) {
+		if (details::IsBadComponent(part)) {
 			return false;
 		}
 	}
 	if (rel.empty()) {
-		return !write && (scope == SessionScope::All);
+		return false;
 	} else if (rel[0] == "memory") {
 		return true;
 	} else if (write) {
 		return false;
 	} else if (rel[0] == "sessions") {
-		if (scope == SessionScope::All) {
-			return true;
-		} else if (rel.size() == 1) {
+		if (rel.size() == 1) {
 			return false;
 		}
-		return folderAllowed && folderAllowed(rel[1]);
+		return (scope == SessionScope::All)
+			|| (folderAllowed && folderAllowed(rel[1]));
 	}
-	return true; // Other files in the root of ai/.
+	return rel.size() == 1; // Files directly in the root of ai/.
 }
 
 } // namespace Owpengram::Claude

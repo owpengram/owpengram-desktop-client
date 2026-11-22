@@ -605,7 +605,15 @@ void RegisterActTools(ToolRegistry &registry) {
 }
 
 QString SanitizeForDisplay(QString text) {
-	return SingleLine(std::move(text));
+	text = SingleLine(std::move(text));
+	for (auto &ch : text) {
+		if (ch.unicode() < 0x20
+			|| ch.unicode() == 0x7F
+			|| ch.unicode() == 0x85) {
+			ch = u' ';
+		}
+	}
+	return text;
 }
 
 } // namespace Owpengram::Claude
