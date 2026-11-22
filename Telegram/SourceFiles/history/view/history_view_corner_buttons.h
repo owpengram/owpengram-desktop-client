@@ -11,11 +11,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/rp_widget.h"
 #include "base/object_ptr.h"
 #include "base/unique_qptr.h"
-#include "owpengram/claude/claude_access_badge.h"
 
 class History;
 class HistoryItem;
 class PeerData;
+
+namespace Owpengram::Claude {
+class AccessBadge;
+} // namespace Owpengram::Claude
 struct FullMsgId;
 
 namespace Ui {
@@ -59,6 +62,10 @@ public:
 	[[nodiscard]] virtual std::optional<bool> cornerButtonsDownShown() = 0;
 	[[nodiscard]] virtual bool cornerButtonsUnreadMayBeShown() = 0;
 	[[nodiscard]] virtual bool cornerButtonsHas(CornerButtonType type) = 0;
+	// Only real chat views show the Claude access level badge.
+	[[nodiscard]] virtual bool cornerButtonsShowAccessBadge() {
+		return false;
+	}
 };
 
 class CornerButtons final : private QObject {
@@ -71,6 +78,8 @@ public:
 		not_null<Ui::ElasticScroll*> parent,
 		not_null<const Ui::ChatStyle*> st,
 		not_null<CornerButtonsDelegate*> delegate);
+
+	~CornerButtons();
 
 	using Type = CornerButtonType;
 

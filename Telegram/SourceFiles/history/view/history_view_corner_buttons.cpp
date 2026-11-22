@@ -24,6 +24,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "data/data_forum_topic.h"
 #include "lang/lang_keys.h"
+#include "owpengram/claude/claude_access_badge.h"
 #include "owpengram/claude/claude_access_store.h"
 #include "ui/toast/toast.h"
 #include "styles/style_chat_helpers.h"
@@ -124,6 +125,8 @@ CornerButtons::CornerButtons(
 		return _delegate->cornerButtonsThread();
 	});
 }
+
+CornerButtons::~CornerButtons() = default;
 
 void CornerButtons::updateAccessibleDescription(CornerButton &button) {
 	const auto count = button.widget->unreadCount();
@@ -289,7 +292,9 @@ void CornerButtons::showAt(MsgId id) {
 void CornerButtons::updateAccessBadge() {
 	const auto thread = _delegate->cornerButtonsThread();
 	// For forum topics the level is the one of the parent peer.
-	const auto peer = thread ? thread->peer().get() : nullptr;
+	const auto peer = (thread && _delegate->cornerButtonsShowAccessBadge())
+		? thread->peer().get()
+		: nullptr;
 	if (_accessBadgePeer == peer) {
 		return;
 	}

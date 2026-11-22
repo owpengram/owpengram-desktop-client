@@ -398,6 +398,9 @@ private:
 	std::optional<bool> cornerButtonsDownShown() override;
 	bool cornerButtonsUnreadMayBeShown() override;
 	bool cornerButtonsHas(HistoryView::CornerButtonType type) override;
+	bool cornerButtonsShowAccessBadge() override {
+		return true;
+	}
 
 	[[nodiscard]] bool checkSendPayment(
 		int messagesCount,

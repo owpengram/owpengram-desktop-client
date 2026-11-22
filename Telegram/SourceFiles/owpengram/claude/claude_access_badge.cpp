@@ -71,7 +71,12 @@ AccessBadge::AccessBadge(QWidget *parent, not_null<PeerData*> peer)
 	setClickedCallback([=] { showMenu(); });
 	hide();
 
+	const auto updateName = [=] {
+		setAccessibleName(LevelText(Access().effective(_peer)));
+	};
+	updateName();
 	Access().changes() | rpl::on_next([=] {
+		updateName();
 		update();
 	}, lifetime());
 }
