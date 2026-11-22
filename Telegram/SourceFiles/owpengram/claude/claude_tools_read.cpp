@@ -287,7 +287,7 @@ void ReadHistory(ToolCall call, Done done) {
 		done(NotAllowedResult());
 		return;
 	}
-	const auto limit = ArgInt(call.arguments, u"limit"_q, 50, 1, 200);
+	const auto limit = ArgInt(call.arguments, u"limit"_q, 50, 1, 100);
 	const auto before = ArgInt(
 		call.arguments,
 		u"before_msg_id"_q,
@@ -539,7 +539,7 @@ void RegisterReadTools(ToolRegistry &registry) {
 			{ u"account"_q, AccountProp() },
 			{ u"chat"_q, ChatProp() },
 			{ u"before_msg_id"_q, Prop(u"integer"_q, u"Page offset"_q) },
-			{ u"limit"_q, Prop(u"integer"_q, u"Default 50, max 200"_q) },
+			{ u"limit"_q, Prop(u"integer"_q, u"Default 50, max 100 per call (server limit)"_q) },
 		}, { u"account"_q, u"chat"_q }),
 		.handler = ReadHistory,
 	});

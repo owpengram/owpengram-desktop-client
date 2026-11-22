@@ -153,7 +153,15 @@ Main::Session *FindSession(const QString &accountKey) {
 }
 
 bool PeerAllows(not_null<PeerData*> peer, Capability capability) {
-	return Allows(Access().effective(peer), capability);
+	if (!Allows(Access().effective(peer), capability)) {
+		return false;
+	}
+	// A basic group migrated to a supergroup keeps old messages: the
+	// supergroup's (possibly stricter) level applies as well.
+	if (const auto channel = peer->migrateTo()) {
+		return Allows(Access().effective(channel), capability);
+	}
+	return true;
 }
 
 PeerData *FindAllowedPeer(
@@ -201,7 +209,7 @@ bool AccountVisible(not_null<Main::Session*> session) {
 	if (Allows(Access().accountDefault(key), Capability::SeeChat)) {
 		return true;
 	}
-	return !VisibleChats(session).empty();
+	return Access().hasOverrideAtLeast(key, Level::Visible);
 }
 
 QString ChatIdString(not_null<PeerData*> peer) {
@@ -246,7 +254,7 @@ int ArgInt(
 		int max) {
 	const auto value = args.value(key);
 	const auto result = value.isDouble()
-		? int(value.toDouble())
+		? int(std::clamp(value.toDouble(), double(min), double(max)))
 		: value.isString()
 		? value.toString().toInt()
 		: fallback;
@@ -275,12 +283,14 @@ Fn<void(ToolResult)> GuardedBySession(
 		Fn<void(ToolResult)> done) {
 	struct State {
 		Fn<void(ToolResult)> done;
+		rpl::lifetime lifetime; // Session-destroyed subscription.
 	};
 	const auto state = std::make_shared<State>();
 	state->done = std::move(done);
 	const auto finish = [](
 			const std::shared_ptr<State> &state,
 			ToolResult result) {
+		state->lifetime.destroy();
 		if (!state->done) {
 			return;
 		}
@@ -288,11 +298,17 @@ Fn<void(ToolResult)> GuardedBySession(
 		state->done = nullptr;
 		callback(std::move(result));
 	};
-	session->lifetime().add([weak = std::weak_ptr<State>(state), finish] {
+	// Per-call subscription, released in finish (no growth on the
+	// long-lived session lifetime).
+	session->account().sessionChanges(
+	) | rpl::filter([](Main::Session *value) {
+		return !value;
+	}) | rpl::on_next([weak = std::weak_ptr<State>(state), finish](
+			Main::Session*) {
 		if (const auto strong = weak.lock()) {
 			finish(strong, ErrorResult(u"account session closed"_q));
 		}
-	});
+	}, state->lifetime);
 	return [=](ToolResult result) {
 		finish(state, std::move(result));
 	};

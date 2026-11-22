@@ -93,6 +93,21 @@ std::optional<Level> AccessStore::chatOverride(
 		: std::nullopt;
 }
 
+bool AccessStore::hasOverrideAtLeast(
+		const QString &accountKey,
+		Level level) const {
+	const auto i = _accounts.find(accountKey);
+	if (i == _accounts.end()) {
+		return false;
+	}
+	for (const auto &[peer, value] : i->second.chats) {
+		if (value >= level) {
+			return true;
+		}
+	}
+	return false;
+}
+
 Level AccessStore::effective(not_null<PeerData*> peer) const {
 	const auto key = AccountKey(&peer->session().account());
 	if (key.isEmpty()) {

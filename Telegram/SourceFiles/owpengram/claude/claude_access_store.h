@@ -41,6 +41,10 @@ public:
 	[[nodiscard]] std::optional<Level> chatOverride(
 		const QString &accountKey,
 		PeerId peer) const;
+	// Some chat override of this account is >= level.
+	[[nodiscard]] bool hasOverrideAtLeast(
+		const QString &accountKey,
+		Level level) const;
 	[[nodiscard]] Level effective(not_null<PeerData*> peer) const;
 
 	void setAccountDefault(const QString &accountKey, Level level);
