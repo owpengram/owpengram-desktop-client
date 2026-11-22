@@ -42,6 +42,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_session_controller.h"
 #include "window/window_peer_menu.h"
 #include "calls/calls_instance.h"
+#include "owpengram/claude/claude_settings_menu.h"
 #include "data/stickers/data_custom_emoji.h"
 #include "data/data_peer_values.h"
 #include "data/data_group_call.h" // GroupCall::input.
@@ -68,6 +69,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_dialogs.h"
 #include "styles/style_chat.h"
 #include "styles/style_info.h"
+#include "styles/style_claude.h"
+#include "styles/style_menu_icons.h"
 
 #include <QtGui/QWindow>
 
@@ -124,6 +127,7 @@ TopBarWidget::TopBarWidget(
 , _cancelChoose(this, st::topBarCloseChoose)
 , _call(this, st::topBarCall)
 , _groupCall(this, st::topBarGroupCall)
+, _claude(this, st::owpengramClaudeTopBar)
 , _search(this, st::topBarSearch)
 , _infoToggle(this, st::topBarInfo)
 , _menuToggle(this, st::topBarMenuToggle)
@@ -157,6 +161,16 @@ TopBarWidget::TopBarWidget(
 	});
 	_groupCall->setClickedCallback([=] { groupCall(); });
 	_menuToggle->addClickHandler([=](auto) { showPeerMenu(); });
+	_claude->addClickHandler([=] {
+		_menu = base::make_unique_q<Ui::PopupMenu>(
+			this,
+			st::popupMenuWithIcons);
+		Owpengram::Claude::FillClaudeSettingsMenu(_menu.get(), _controller);
+		_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
+		_menu->popup(mapToGlobal(QPoint(
+			_claude->x() + _claude->width(),
+			_claude->y() + _claude->height())));
+	});
 	_menuToggle->setAcceptBoth(true, true);
 	_infoToggle->setClickedCallback([=] { toggleInfoSection(); });
 	_back->setAcceptBoth();
@@ -259,6 +273,7 @@ TopBarWidget::TopBarWidget(
 	setCursor(style::cur_pointer);
 	_call->setAccessibleName(tr::lng_profile_action_short_call(tr::now));
 	_groupCall->setAccessibleName(tr::lng_group_call_title(tr::now));
+	_claude->setAccessibleName(tr::lng_owpengram_claude_button(tr::now));
 	_search->setAccessibleName(tr::lng_shortcuts_search(tr::now));
 	_infoToggle->setAccessibleName(tr::lng_settings_section_info(tr::now));
 	_menuToggle->setAccessibleName(tr::lng_chat_menu(tr::now));
@@ -1096,6 +1111,7 @@ void TopBarWidget::updateSearchVisibility() {
 		|| (_activeChat.section == Section::SavedSublist
 			&& _activeChat.key.sublist());
 	_search->setVisible(searchAllowedMode && !_chooseForReportReason);
+	_claude->setVisible(searchAllowedMode && !_chooseForReportReason);
 }
 
 void TopBarWidget::updateInfoButtonVisibility() {
@@ -1265,6 +1281,10 @@ void TopBarWidget::updateControlsGeometry() {
 	_search->moveToRight(_rightTaken, otherButtonsTop);
 	if (!_search->isHidden()) {
 		_rightTaken += _search->width() + st::topBarCallSkip;
+	}
+	_claude->moveToRight(_rightTaken, otherButtonsTop);
+	if (!_claude->isHidden()) {
+		_rightTaken += _claude->width() + st::topBarCallSkip;
 	}
 
 	updateMembersShowArea();

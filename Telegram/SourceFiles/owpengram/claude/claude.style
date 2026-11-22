@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 using "ui/basic.style";
 using "ui/widgets/widgets.style";
 using "chat_helpers/chat_helpers.style";
+using "info/info.style";
 
 // Same size and ripple as the "jump down" button, the circle is painted
 // in code with the color of the access level.
@@ -30,3 +31,9 @@ owpengramClaudeList: icon {{ "owpengram/claude_list-24x24", owpengramClaudeBadge
 owpengramClaudeHand: icon {{ "owpengram/claude_hand-24x24", owpengramClaudeBadgeFg }};
 owpengramClaudeBolt: icon {{ "owpengram/claude_bolt-24x24", owpengramClaudeBadgeFg }};
 owpengramClaudeSpark: icon {{ "owpengram/claude_spark-24x24", owpengramClaudeBadgeFg }};
+
+// Top bar button before the search button.
+owpengramClaudeTopBar: IconButton(topBarSearch) {
+	icon: icon {{ "owpengram/claude_spark-24x24", menuIconFg }};
+	iconOver: icon {{ "owpengram/claude_spark-24x24", menuIconFgOver }};
+}
