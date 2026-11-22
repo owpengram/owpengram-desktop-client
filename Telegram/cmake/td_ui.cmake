@@ -52,6 +52,7 @@ set(style_files
     dialogs/dialogs_widget.style
     dialogs/ui/dialogs_layout.style
     chat_helpers/chat_helpers.style
+    owpengram/claude/claude.style
     chat_helpers/emoji_picker_overlay.style
     history/view/controls/history_view_voice_record_bar.style
     ui/controls/location_picker.style

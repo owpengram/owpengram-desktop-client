@@ -1,0 +1,32 @@
+/*
+This file is part of Telegram Desktop,
+the official desktop application for the Telegram messaging service.
+
+For license and copyright information please follow this link:
+https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+*/
+using "ui/basic.style";
+using "ui/widgets/widgets.style";
+using "chat_helpers/chat_helpers.style";
+
+// Same size and ripple as the "jump down" button, the circle is painted
+// in code with the color of the access level.
+owpengramClaudeBadge: TwoIconButton(historyToDown) {
+}
+owpengramClaudeBadgeShadow: icon {{ "history_down_shadow", historyToDownShadow }};
+
+// Style files can only alias palette colors, so the level colors are
+// borrowed from the theme: muted gray, muted blue, accent blue, teal, orange.
+owpengramClaudeBadgeFg: windowFgActive;
+owpengramClaudeBadgeForbiddenBg: dialogsUnreadBgMuted;
+owpengramClaudeBadgeVisibleBg: msgFile1BgDark;
+owpengramClaudeBadgeReadBg: windowBgActive;
+owpengramClaudeBadgeActBg: msgFile2BgSelected;
+owpengramClaudeBadgeAutoBg: historyPeer8UserpicBg;
+
+owpengramClaudeEye: icon {{ "owpengram/claude_eye-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeEyeOff: icon {{ "owpengram/claude_eye_off-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeList: icon {{ "owpengram/claude_list-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeHand: icon {{ "owpengram/claude_hand-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeBolt: icon {{ "owpengram/claude_bolt-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeSpark: icon {{ "owpengram/claude_spark-24x24", owpengramClaudeBadgeFg }};

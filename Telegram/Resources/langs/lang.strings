@@ -8804,4 +8804,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_rich_paste_toast_undo" = "Undo";
 "lng_rich_paste_toast_apply" = "Apply";
 
+"lng_owpengram_claude_level_forbidden" = "Forbidden";
+"lng_owpengram_claude_level_visible" = "Visible";
+"lng_owpengram_claude_level_read" = "Read only";
+"lng_owpengram_claude_level_act_confirm" = "Actions with confirmation";
+"lng_owpengram_claude_level_auto" = "Automatic";
+"lng_owpengram_claude_level_as_account" = "Same as account ({level})";
+
 // Keys finished

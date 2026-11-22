@@ -10,9 +10,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/effects/animations.h"
 #include "ui/rp_widget.h"
 #include "base/object_ptr.h"
+#include "base/unique_qptr.h"
+#include "owpengram/claude/claude_access_badge.h"
 
 class History;
 class HistoryItem;
+class PeerData;
 struct FullMsgId;
 
 namespace Ui {
@@ -113,6 +116,9 @@ private:
 	[[nodiscard]] History *lookupHistory() const;
 	void showAt(MsgId id);
 
+	// The Claude access badge lives next to the "jump down" button.
+	void updateAccessBadge();
+
 	// The unread counter is painted as a badge, so a screen reader should
 	// have it too - as the description, next to the unchanging name.
 	void updateAccessibleDescription(CornerButton &button);
@@ -134,6 +140,9 @@ private:
 	CornerButton _mentions;
 	CornerButton _reactions;
 	CornerButton _pollVotes;
+
+	base::unique_qptr<Owpengram::Claude::AccessBadge> _accessBadge;
+	PeerData *_accessBadgePeer = nullptr;
 
 	HistoryItem *_replyReturn = nullptr;
 	QVector<FullMsgId> _replyReturns;
