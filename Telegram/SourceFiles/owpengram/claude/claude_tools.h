@@ -61,12 +61,13 @@ private:
 
 };
 
-// Lazily created; fills itself via RegisterReadTools (and, later,
-// RegisterActTools).
+// Lazily created; fills itself via RegisterReadTools and RegisterActTools.
 [[nodiscard]] ToolRegistry &Tools();
 
 // Defined in claude_tools_read.cpp.
 void RegisterReadTools(ToolRegistry &registry);
+// Defined in claude_tools_act.cpp.
+void RegisterActTools(ToolRegistry &registry);
 
 // ---- Shared helpers (used by read and action tools). ----
 
@@ -91,6 +92,9 @@ void RegisterReadTools(ToolRegistry &registry);
 [[nodiscard]] bool PeerAllows(
 	not_null<PeerData*> peer,
 	Capability capability);
+// The level PeerAllows works with: the peer's effective level, and for a
+// migrated basic group also the supergroup's one (the stricter of the two).
+[[nodiscard]] Level EffectiveLevel(not_null<PeerData*> peer);
 
 // Chats from the main chats list that the account's level lets Claude see.
 [[nodiscard]] std::vector<not_null<PeerData*>> VisibleChats(

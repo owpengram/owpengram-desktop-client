@@ -27,6 +27,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtCore/QDateTime>
 
+#include <algorithm>
 #include <memory>
 
 namespace Owpengram::Claude {
@@ -98,7 +99,7 @@ ToolRegistry &Tools() {
 	static auto result = [] {
 		auto registry = std::make_unique<ToolRegistry>();
 		RegisterReadTools(*registry);
-		// Task 5: RegisterActTools(*registry);
+		RegisterActTools(*registry);
 		return registry;
 	}();
 	return *result;
@@ -152,16 +153,18 @@ Main::Session *FindSession(const QString &accountKey) {
 	return nullptr;
 }
 
-bool PeerAllows(not_null<PeerData*> peer, Capability capability) {
-	if (!Allows(Access().effective(peer), capability)) {
-		return false;
-	}
+Level EffectiveLevel(not_null<PeerData*> peer) {
+	auto result = Access().effective(peer);
 	// A basic group migrated to a supergroup keeps old messages: the
 	// supergroup's (possibly stricter) level applies as well.
 	if (const auto channel = peer->migrateTo()) {
-		return Allows(Access().effective(channel), capability);
+		result = std::min(result, Access().effective(channel));
 	}
-	return true;
+	return result;
+}
+
+bool PeerAllows(not_null<PeerData*> peer, Capability capability) {
+	return Allows(EffectiveLevel(peer), capability);
 }
 
 PeerData *FindAllowedPeer(
