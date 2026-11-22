@@ -1654,6 +1654,14 @@ PRIVATE
     owpengram/claude/claude_http_request.h
     owpengram/claude/claude_mcp_server.cpp
     owpengram/claude/claude_mcp_server.h
+    owpengram/claude/claude_panel.cpp
+    owpengram/claude/claude_panel.h
+    owpengram/claude/claude_panel_connectors.cpp
+    owpengram/claude/claude_panel_connectors.h
+    owpengram/claude/claude_panel_messages.cpp
+    owpengram/claude/claude_panel_messages.h
+    owpengram/claude/claude_panel_model.cpp
+    owpengram/claude/claude_panel_model.h
     owpengram/claude/claude_path_rules.h
     owpengram/claude/claude_process.cpp
     owpengram/claude/claude_process.h

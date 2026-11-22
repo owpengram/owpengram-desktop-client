@@ -8834,4 +8834,32 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_claude_regenerate_confirm" = "Regenerate";
 "lng_owpengram_claude_token_regenerated" = "Token regenerated.";
 
+"lng_owpengram_claude_panel_title" = "Claude";
+"lng_owpengram_claude_panel_scope_temporary" = "Temporary";
+"lng_owpengram_claude_panel_scope_chat" = "This chat";
+"lng_owpengram_claude_panel_scope_account" = "This account";
+"lng_owpengram_claude_panel_scope_all" = "Everything";
+"lng_owpengram_claude_panel_history" = "Session history";
+"lng_owpengram_claude_panel_pin" = "Pin panel";
+"lng_owpengram_claude_panel_unpin" = "Unpin panel";
+"lng_owpengram_claude_panel_close" = "Close";
+"lng_owpengram_claude_panel_new_session" = "New session";
+"lng_owpengram_claude_panel_open_folder" = "Open ai folder";
+"lng_owpengram_claude_panel_copy_folder" = "Copy ai folder path";
+"lng_owpengram_claude_panel_folder_copied" = "Folder path copied.";
+"lng_owpengram_claude_panel_history_soon" = "Session history is not available yet.";
+"lng_owpengram_claude_panel_empty" = "Ask Claude about this chat.";
+"lng_owpengram_claude_panel_placeholder" = "Reply to Claude";
+"lng_owpengram_claude_panel_thinking" = "Thinking…";
+"lng_owpengram_claude_panel_mcp_disabled" = "Claude works through the OwpenGram MCP server, which is disabled.";
+"lng_owpengram_claude_panel_enable_mcp" = "Enable MCP";
+"lng_owpengram_claude_panel_not_installed" = "Claude Code is not installed. Install it with {command} or see {link}, then send the message again.";
+"lng_owpengram_claude_panel_failed" = "Claude Code stopped with an error:";
+"lng_owpengram_claude_panel_reconnect" = "Reconnect";
+"lng_owpengram_claude_panel_reconnect_temporary" = "A temporary session starts anew after reconnecting.";
+"lng_owpengram_claude_panel_connectors" = "Connectors";
+"lng_owpengram_claude_panel_connectors_none" = "No connectors yet, they appear after the first message.";
+"lng_owpengram_claude_panel_clients" = "Connected clients: {clients}";
+"lng_owpengram_claude_panel_clients_none" = "Connected clients: none";
+
 // Keys finished
