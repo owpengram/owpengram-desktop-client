@@ -348,7 +348,6 @@ void ClaudeProcess::launch() {
 		u"--permission-prompts"_q, u"host"_q,
 		u"--tools"_q, u"Read,Write,Edit,Glob,Grep"_q,
 		u"--mcp-config"_q, _configPath,
-		u"--strict-mcp-config"_q,
 		u"--permission-prompt-tool"_q, u"mcp__owpengram__approve"_q,
 		u"--append-system-prompt"_q, BuildContext(_session.get()),
 	};
