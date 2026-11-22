@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "owpengram/claude/claude_access_rules.h"
+
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -112,31 +115,98 @@ namespace details {
 	return false;
 }
 
-// Glob pattern for the Glob tool: no ".." component, no "~", and if it is
-// absolute, its literal prefix (before the first glob char) must be inside
-// `root`. Relative patterns are resolved against the process cwd (ai/).
-[[nodiscard]] inline bool PatternIsSafe(
-		std::string_view pattern,
-		std::string_view root = {}) {
+// Glob pattern (Glob `pattern`, Grep `glob`): always relative to the
+// checked search folder. No absolute patterns, "..", "~", braces, and no
+// component starting with ".".
+[[nodiscard]] inline bool PatternIsSafe(std::string_view pattern) {
 	if (pattern.empty() || PathHasDotDot(pattern)) {
 		return false;
 	}
-	if (pattern[0] == '~') {
+	if (details::IsSeparator(pattern[0])
+		|| pattern[0] == '~'
+		|| (pattern.size() >= 2 && pattern[1] == ':')) {
 		return false;
 	}
-	const auto absolute = details::IsSeparator(pattern[0])
-		|| (pattern.size() >= 2 && pattern[1] == ':');
-	if (!absolute) {
+	if (pattern.find_first_of("~{}") != std::string_view::npos) {
+		return false;
+	}
+	auto i = size_t(0);
+	while (i <= pattern.size()) {
+		auto j = i;
+		while (j < pattern.size() && !details::IsSeparator(pattern[j])) {
+			++j;
+		}
+		if (j > i && pattern[i] == '.') {
+			return false;
+		}
+		i = j + 1;
+	}
+	return true;
+}
+
+namespace details {
+
+[[nodiscard]] inline bool IsClaudeMd(std::string_view name) {
+	const auto lower = [](std::string_view value) {
+		auto result = std::string(value);
+		for (auto &c : result) {
+			if (c >= 'A' && c <= 'Z') {
+				c = char(c + 32);
+			}
+		}
+		return result;
+	};
+	const auto value = lower(name);
+	return (value == "claude.md") || (value == "claude.local.md");
+}
+
+} // namespace details
+
+// Layout inside the ai/ folder (`root`, canonical). `path` is canonical and
+// absolute. Write access: only memory/**. Read access: memory/**, root files,
+// and sessions/<folder>/** where `folderAllowed(folder)` says so (the
+// sessions folder itself and the root folder are listable only with the All
+// scope). Any component starting with "." and any CLAUDE.md /
+// CLAUDE.local.md is denied everywhere.
+[[nodiscard]] inline bool AiPathAllowed(
+		std::string_view root,
+		std::string_view path,
+		bool write,
+		SessionScope scope,
+		const std::function<bool(std::string_view)> &folderAllowed) {
+	auto a = std::vector<std::string>();
+	auto b = std::vector<std::string>();
+	if (!details::NormalizeAbsolute(root, a)
+		|| !details::NormalizeAbsolute(path, b)
+		|| b.size() < a.size()) {
+		return false;
+	}
+	for (auto i = size_t(0); i != a.size(); ++i) {
+		if (a[i] != b[i]) {
+			return false;
+		}
+	}
+	const auto rel = std::vector<std::string>(b.begin() + a.size(), b.end());
+	for (const auto &part : rel) {
+		if (part[0] == '.' || details::IsClaudeMd(part)) {
+			return false;
+		}
+	}
+	if (rel.empty()) {
+		return !write && (scope == SessionScope::All);
+	} else if (rel[0] == "memory") {
 		return true;
-	}
-	if (root.empty()) {
+	} else if (write) {
 		return false;
+	} else if (rel[0] == "sessions") {
+		if (scope == SessionScope::All) {
+			return true;
+		} else if (rel.size() == 1) {
+			return false;
+		}
+		return folderAllowed && folderAllowed(rel[1]);
 	}
-	const auto glob = pattern.find_first_of("*?[{");
-	const auto literal = (glob == std::string_view::npos)
-		? pattern
-		: pattern.substr(0, glob);
-	return PathInside(root, literal);
+	return true; // Other files in the root of ai/.
 }
 
 } // namespace Owpengram::Claude

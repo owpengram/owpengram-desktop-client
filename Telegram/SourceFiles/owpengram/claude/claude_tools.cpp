@@ -187,10 +187,16 @@ bool CallAllowsAccount(const ToolCall &call, const QString &accountKey) {
 }
 
 bool CallAllowsPeer(const ToolCall &call, not_null<PeerData*> peer) {
-	if (!call.session) {
+	return SessionAllowsPeer(call.session, peer);
+}
+
+bool SessionAllowsPeer(
+		const std::optional<SessionInfo> &session,
+		not_null<PeerData*> peer) {
+	if (!session) {
 		return true;
 	}
-	const auto &info = call.session.value();
+	const auto &info = session.value();
 	return ScopeAllows(
 		info.scope,
 		info.accountKey.toStdString(),

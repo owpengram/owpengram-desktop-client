@@ -90,21 +90,56 @@ constexpr auto kSummaryLimit = 300;
 	return QString();
 }
 
-[[nodiscard]] bool InsideAi(const QString &root, const QString &path) {
+// Canonical path of `path` if the session may use it with the file tool.
+[[nodiscard]] bool FileAccessAllowed(
+		const QString &root,
+		const QString &path,
+		bool write,
+		const SessionInfo &session) {
 	const auto canonical = CanonicalPath(root, path);
-	return !canonical.isEmpty()
-		&& PathInside(root.toStdString(), canonical.toStdString());
+	if (canonical.isEmpty()) {
+		return false;
+	}
+	const auto ownFolder = session.folder.isEmpty()
+		? QString()
+		: QFileInfo(session.folder).fileName();
+	const auto folderAllowed = [&](std::string_view name) {
+		const auto folder = QString::fromUtf8(name.data(), int(name.size()));
+		switch (session.scope) {
+		case SessionScope::Temporary:
+			return false;
+		case SessionScope::Chat:
+			return !ownFolder.isEmpty() && (folder == ownFolder);
+		case SessionScope::Account:
+			for (const auto &info : AllSessions().history()) {
+				if (!info.folder.isEmpty()
+					&& QFileInfo(info.folder).fileName() == folder) {
+					return info.accountKey == session.accountKey;
+				}
+			}
+			return false;
+		case SessionScope::All:
+			return true;
+		}
+		return false;
+	};
+	return AiPathAllowed(
+		root.toStdString(),
+		canonical.toStdString(),
+		write,
+		session.scope,
+		folderAllowed);
 }
 
 [[nodiscard]] ToolResult ApproveFileTool(
 		const QString &tool,
-		const QJsonObject &input) {
-	const auto aiPath = AllSessions().aiPath();
-	const auto root = QFileInfo(aiPath).canonicalFilePath();
-	if (root.isEmpty()) {
-		return Deny(OutsideText());
-	}
+		const QJsonObject &input,
+		const SessionInfo &session) {
+	const auto root = QFileInfo(AllSessions().aiPath()).canonicalFilePath();
 	const auto denied = Deny(OutsideText());
+	if (root.isEmpty()) {
+		return denied;
+	}
 	const auto stringField = [&](const QString &key, QString &out) {
 		const auto value = input.value(key);
 		if (value.isUndefined() || value.isNull()) {
@@ -117,32 +152,36 @@ constexpr auto kSummaryLimit = 300;
 	};
 	if (tool == u"Read"_q || tool == u"Write"_q || tool == u"Edit"_q) {
 		auto path = QString();
+		const auto write = (tool != u"Read"_q);
 		if (!stringField(u"file_path"_q, path)
 			|| path.isEmpty()
-			|| !InsideAi(root, path)) {
+			|| !FileAccessAllowed(root, path, write, session)) {
 			return denied;
 		}
 		return Allow(input);
 	}
-	// Glob / Grep: the optional `path` defaults to the working folder.
+	// Glob / Grep: the optional `path` defaults to the working folder and
+	// follows the read rules; patterns are relative to it.
 	auto path = QString();
-	if (!stringField(u"path"_q, path)) {
-		return denied;
-	} else if (!path.isEmpty() && !InsideAi(root, path)) {
+	if (!stringField(u"path"_q, path)
+		|| !FileAccessAllowed(
+			root,
+			path.isEmpty() ? root : path,
+			false,
+			session)) {
 		return denied;
 	}
+	auto pattern = QString();
 	if (tool == u"Glob"_q) {
-		auto pattern = QString();
 		if (!stringField(u"pattern"_q, pattern)
-			|| !PatternIsSafe(pattern.toStdString(), root.toStdString())) {
+			|| !PatternIsSafe(pattern.toStdString())) {
 			return denied;
 		}
 	} else {
 		// Grep: `pattern` is a regex, `glob` is a file filter.
-		auto glob = QString();
-		if (!stringField(u"glob"_q, glob)
-			|| (!glob.isEmpty()
-				&& !PatternIsSafe(glob.toStdString(), root.toStdString()))) {
+		if (!stringField(u"glob"_q, pattern)
+			|| (!pattern.isEmpty()
+				&& !PatternIsSafe(pattern.toStdString()))) {
 			return denied;
 		}
 	}
@@ -152,24 +191,32 @@ constexpr auto kSummaryLimit = 300;
 [[nodiscard]] QString ConnectorSummary(
 		const QString &tool,
 		const QJsonObject &input) {
-	auto text = QString::fromUtf8(QJsonDocument(input).toJson(
-		QJsonDocument::Compact));
-	for (auto &ch : text) {
-		if (ch.unicode() < 0x20) {
-			ch = u' ';
-		}
-	}
+	auto text = SanitizeForDisplay(QString::fromUtf8(
+		QJsonDocument(input).toJson(QJsonDocument::Compact)));
 	if (text.size() > kSummaryLimit) {
 		text = text.left(kSummaryLimit) + QChar(0x2026);
 	}
-	auto name = tool.left(120);
-	for (auto &ch : name) {
-		if (ch.unicode() < 0x20) {
-			ch = u' ';
-		}
-	}
+	const auto name = SanitizeForDisplay(tool.left(120));
 	return u"Claude wants to use the connector tool "_q + name
 		+ u"\n\n"_q + text;
+}
+
+// Exactly "mcp__owpengram__" + a registered tool (not `approve`).
+[[nodiscard]] bool IsOwnTool(const QString &tool) {
+	const auto prefix = QString::fromLatin1(kOwnPrefix);
+	if (!tool.startsWith(prefix)) {
+		return false;
+	}
+	const auto name = tool.mid(prefix.size());
+	if (name == u"approve"_q) {
+		return false;
+	}
+	for (const auto &def : Tools().list()) {
+		if (def.name == name) {
+			return true;
+		}
+	}
+	return false;
 }
 
 void Approve(ToolCall call, Done done) {
@@ -180,9 +227,7 @@ void Approve(ToolCall call, Done done) {
 	}
 	const auto tool = toolValue.toString();
 	const auto inputValue = call.arguments.value(u"input"_q);
-	if (!inputValue.isUndefined()
-		&& !inputValue.isNull()
-		&& !inputValue.isObject()) {
+	if (!inputValue.isObject()) {
 		done(Deny(u"input must be an object"_q));
 		return;
 	}
@@ -193,9 +238,12 @@ void Approve(ToolCall call, Done done) {
 		|| tool == u"Edit"_q
 		|| tool == u"Glob"_q
 		|| tool == u"Grep"_q) {
-		done(ApproveFileTool(tool, input));
+		// Only reachable with a panel session (see ToolRegistry::call).
+		done(call.session
+			? ApproveFileTool(tool, input, *call.session)
+			: Deny(OutsideText()));
 		return;
-	} else if (tool.startsWith(QString::fromLatin1(kOwnPrefix))) {
+	} else if (IsOwnTool(tool)) {
 		// OwpenGram's own tools are limited by access levels and scope.
 		done(Allow(input));
 		return;

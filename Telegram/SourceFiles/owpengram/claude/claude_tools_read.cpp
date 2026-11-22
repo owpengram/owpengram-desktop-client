@@ -503,15 +503,7 @@ void SearchMessages(ToolCall call, Done done) {
 	for (const auto session : sessions) {
 		const auto inScope = [info = call.session](
 				not_null<PeerData*> peer) {
-			if (!info) {
-				return true;
-			}
-			return ScopeAllows(
-				info->scope,
-				info->accountKey.toStdString(),
-				uint64_t(info->peer.value),
-				SessionKey(&peer->session()).toStdString(),
-				uint64_t(peer->id.value));
+			return SessionAllowsPeer(info, peer);
 		};
 		SearchAccount(session, query, limit, inScope, [=](ToolResult result) {
 			SearchFinishOne(

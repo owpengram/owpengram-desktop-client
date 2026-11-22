@@ -604,4 +604,8 @@ void RegisterActTools(ToolRegistry &registry) {
 		PrepareForward);
 }
 
+QString SanitizeForDisplay(QString text) {
+	return SingleLine(std::move(text));
+}
+
 } // namespace Owpengram::Claude

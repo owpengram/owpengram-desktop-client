@@ -63,8 +63,8 @@ public:
 	[[nodiscard]] const std::vector<ToolDef> &list() const {
 		return _tools;
 	}
-	// Tools for tools/list and tools/call: the panel-only ones are
-	// included only when `panelSession` is true.
+	// Panel-only tools are listed and callable only when the request
+	// carries an open panel session (ToolCall::session).
 	[[nodiscard]] bool panelOnly(const QString &name) const;
 	// Unknown name -> isError result.
 	void call(ToolCall call, Fn<void(ToolResult)> done);
@@ -106,6 +106,12 @@ void RegisterApproveTool(ToolRegistry &registry);
 [[nodiscard]] bool CallAllowsPeer(
 	const ToolCall &call,
 	not_null<PeerData*> peer);
+[[nodiscard]] bool SessionAllowsPeer(
+	const std::optional<SessionInfo> &session,
+	not_null<PeerData*> peer);
+// Untrusted text for a confirmation box: invisible and direction-changing
+// characters removed, line breaks become spaces.
+[[nodiscard]] QString SanitizeForDisplay(QString text);
 
 // Peer for (account, chat) if the session scope and the effective level
 // allow `capability`, otherwise nullptr (indistinguishable from "unknown").
