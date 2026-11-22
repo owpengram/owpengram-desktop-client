@@ -215,7 +215,22 @@ void AccessStore::load() {
 	}
 }
 
+void AccessStore::hookQuit() {
+	if (_quitHooked) {
+		return;
+	}
+	const auto app = QCoreApplication::instance();
+	if (!app) {
+		return;
+	}
+	_quitHooked = true;
+	QObject::connect(app, &QCoreApplication::aboutToQuit, [=] {
+		flush();
+	});
+}
+
 void AccessStore::scheduleSave() {
+	hookQuit();
 	_dirty = true;
 	_saveTimer.callOnce(kSaveDelay);
 }
@@ -256,7 +271,9 @@ void AccessStore::save() {
 	const auto path = FilePath();
 	QDir().mkpath(QFileInfo(path).absolutePath());
 	QSaveFile file(path);
+	// The file holds the MCP bearer token: owner-only access.
 	if (!file.open(QIODevice::WriteOnly)
+		|| !file.setPermissions(QFile::ReadOwner | QFile::WriteOwner)
 		|| file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0
 		|| !file.commit()) {
 		LOG(("Claude: could not write access file."));
@@ -265,16 +282,9 @@ void AccessStore::save() {
 
 AccessStore &Access() {
 	// Never destroyed: avoids static-destruction-order issues with the
-	// QObject-based timer. Pending changes are written on aboutToQuit.
-	static auto instance = [] {
-		const auto result = new AccessStore();
-		if (const auto app = QCoreApplication::instance()) {
-			QObject::connect(app, &QCoreApplication::aboutToQuit, [=] {
-				result->flush();
-			});
-		}
-		return result;
-	}();
+	// QObject-based timer. The aboutToQuit flush is connected lazily
+	// (see AccessStore::hookQuit), as QCoreApplication may not exist yet.
+	static auto instance = new AccessStore();
 	return *instance;
 }
 

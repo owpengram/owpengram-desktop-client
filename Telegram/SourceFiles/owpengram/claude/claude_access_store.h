@@ -32,6 +32,7 @@ inline constexpr auto kDefaultMcpPort = 47800;
 // "<server scope or 'telegram'>:<userId>", empty if the account has no session.
 [[nodiscard]] QString AccountKey(not_null<Main::Account*> account);
 
+// Main thread only (not thread-safe).
 class AccessStore final {
 public:
 	AccessStore();
@@ -66,6 +67,7 @@ private:
 	};
 
 	void load();
+	void hookQuit();
 	void scheduleSave();
 	void save();
 
@@ -76,6 +78,7 @@ private:
 
 	base::Timer _saveTimer;
 	bool _dirty = false;
+	bool _quitHooked = false;
 	rpl::event_stream<> _changes;
 
 };
