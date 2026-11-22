@@ -87,6 +87,10 @@ public:
 	void enableMcpAndRetry();
 	// Ends an idle process, the next send() resumes the conversation.
 	void stopProcess();
+	// The panel was closed: stop now, or after the reply in flight.
+	void stopWhenIdle();
+	// The panel shows this model again: keep the process.
+	void cancelStopWhenIdle();
 
 private:
 	struct PrivateTag {
@@ -113,7 +117,10 @@ private:
 	std::vector<QString> _undelivered;
 	// Sent messages without a result yet ("Thinking…" while > 0).
 	int _pending = 0;
+	// Incremented on Failed / NotInstalled (they clear the queue).
+	int _failures = 0;
 	bool _mcpNoticeShown = false;
+	bool _stopWhenIdle = false;
 	rpl::event_stream<int> _appended;
 	rpl::variable<bool> _thinking = false;
 	std::vector<Connector> _connectors;

@@ -184,6 +184,7 @@ bool PanelModel::deliver(const QString &text) {
 	if (!_process || !_process->running()) {
 		return false;
 	}
+	_mcpNoticeShown = false;
 	setPending(_pending + 1);
 	return true;
 }
@@ -198,7 +199,8 @@ void PanelModel::send(const QString &text) {
 		return;
 	}
 	add(FeedEntryType::User, text);
-	if (!deliver(text)) {
+	const auto failures = _failures;
+	if (!deliver(text) && failures == _failures) {
 		_undelivered.push_back(text);
 	}
 }
@@ -210,10 +212,23 @@ void PanelModel::reconnect() {
 }
 
 void PanelModel::stopProcess() {
+	_stopWhenIdle = false;
 	if (_process) {
 		_process->stop();
 	}
 	setPending(0);
+}
+
+void PanelModel::stopWhenIdle() {
+	if (_pending > 0) {
+		_stopWhenIdle = true;
+	} else {
+		stopProcess();
+	}
+}
+
+void PanelModel::cancelStopWhenIdle() {
+	_stopWhenIdle = false;
 }
 
 void PanelModel::enableMcpAndRetry() {
@@ -221,7 +236,11 @@ void PanelModel::enableMcpAndRetry() {
 	_mcpNoticeShown = false;
 	// The texts are already in the feed, send them again without adding.
 	for (const auto &text : base::take(_undelivered)) {
+		const auto failures = _failures;
 		if (!deliver(text)) {
+			if (failures != _failures) {
+				break; // The queue was dropped with a failure notice.
+			}
 			_undelivered.push_back(text);
 		}
 	}
@@ -240,6 +259,16 @@ void PanelModel::handle(const ProcessEvent &event) {
 				: (name + QString::fromUtf8(" \xC2\xB7 ") + data.summary));
 	}, [&](const Result &data) {
 		setPending(_pending - 1);
+		if (!_pending && _stopWhenIdle) {
+			// Not from inside the process event handler. The panel may be
+			// reopened (cancelStopWhenIdle) before this runs.
+			crl::on_main([weak = weak_from_this()] {
+				const auto strong = weak.lock();
+				if (strong && strong->_stopWhenIdle && !strong->_pending) {
+					strong->stopProcess();
+				}
+			});
+		}
 		if (data.isError) {
 			add(FeedEntryType::Error, data.text);
 		}
@@ -248,10 +277,12 @@ void PanelModel::handle(const ProcessEvent &event) {
 		_connectorsChanges.fire({});
 	}, [&](const Failed &data) {
 		setPending(0);
+		++_failures;
 		_undelivered.clear();
 		add(FeedEntryType::Failed, data.message);
 	}, [&](const NotInstalled &) {
 		setPending(0);
+		++_failures;
 		_undelivered.clear();
 		add(FeedEntryType::NotInstalled, QString());
 	}, [&](const McpDisabled &) {
@@ -357,7 +388,7 @@ void HandlePanelClosed(not_null<Window::SessionController*> controller) {
 	} else if (current->scope() == SessionScope::Temporary) {
 		state.current = nullptr;
 	} else if (!state.pinned.current()) {
-		current->stopProcess();
+		current->stopWhenIdle();
 	}
 }
 

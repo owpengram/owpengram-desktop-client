@@ -223,6 +223,7 @@ void PanelWidget::setModel(std::shared_ptr<PanelModel> model) {
 		return;
 	}
 	_model = std::move(model);
+	_model->cancelStopWhenIdle();
 	_chip->setText(rpl::single(ScopeText(_model->scope())));
 
 	const auto messages = _scroll->setOwnedWidget(
