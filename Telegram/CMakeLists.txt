@@ -1645,6 +1645,8 @@ PRIVATE
     mtproto/facade.h
     mtproto/mtp_instance.cpp
     mtproto/mtp_instance.h
+    owpengram/claude/claude_access_store.cpp
+    owpengram/claude/claude_access_store.h
     owpengram/owpengram_servers.cpp
     owpengram/owpengram_servers.h
     owpengram/owpengram_updater.cpp
