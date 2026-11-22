@@ -1654,6 +1654,7 @@ PRIVATE
     owpengram/claude/claude_http_request.h
     owpengram/claude/claude_mcp_server.cpp
     owpengram/claude/claude_mcp_server.h
+    owpengram/claude/claude_path_rules.h
     owpengram/claude/claude_session_format.h
     owpengram/claude/claude_sessions.cpp
     owpengram/claude/claude_sessions.h
@@ -1662,6 +1663,7 @@ PRIVATE
     owpengram/claude/claude_tools.cpp
     owpengram/claude/claude_tools.h
     owpengram/claude/claude_tools_act.cpp
+    owpengram/claude/claude_tools_approve.cpp
     owpengram/claude/claude_tools_read.cpp
     owpengram/owpengram_servers.cpp
     owpengram/owpengram_servers.h

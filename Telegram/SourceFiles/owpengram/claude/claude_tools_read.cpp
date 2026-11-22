@@ -104,7 +104,8 @@ using Done = Fn<void(ToolResult)>;
 void ListAccounts(ToolCall call, Done done) {
 	auto list = QJsonArray();
 	for (const auto session : AuthorizedSessions()) {
-		if (!AccountVisible(session)) {
+		if (!AccountVisible(session)
+			|| !CallAllowsAccount(call, SessionKey(session))) {
 			continue;
 		}
 		list.push_back(QJsonObject{
@@ -122,7 +123,9 @@ void CurrentChat(ToolCall call, Done done) {
 	const auto peer = controller
 		? controller->activeChatCurrent().peer()
 		: nullptr;
-	if (!peer || !PeerAllows(peer, Capability::SeeChat)) {
+	if (!peer
+		|| !CallAllowsPeer(call, peer)
+		|| !PeerAllows(peer, Capability::SeeChat)) {
 		done(OkResult(QJsonValue(QJsonValue::Null)));
 		return;
 	}
@@ -153,7 +156,9 @@ void ListChats(ToolCall call, Done done) {
 		sessions = AuthorizedSessions();
 	} else {
 		const auto session = FindSession(filter);
-		if (!session || !AccountVisible(session)) {
+		if (!session
+			|| !AccountVisible(session)
+			|| !CallAllowsAccount(call, SessionKey(session))) {
 			done(NotAllowedResult());
 			return;
 		}
@@ -163,7 +168,13 @@ void ListChats(ToolCall call, Done done) {
 	auto index = 0;
 	for (const auto session : sessions) {
 		const auto key = SessionKey(session);
+		if (!CallAllowsAccount(call, key)) {
+			continue;
+		}
 		for (const auto peer : VisibleChats(session)) {
+			if (!CallAllowsPeer(call, peer)) {
+				continue;
+			}
 			if (index++ < offset) {
 				continue;
 			} else if (list.size() >= limit) {
@@ -185,6 +196,7 @@ void ListChats(ToolCall call, Done done) {
 
 void ChatInfo(ToolCall call, Done done) {
 	const auto peer = FindAllowedPeer(
+		call,
 		ArgString(call.arguments, u"account"_q),
 		ArgString(call.arguments, u"chat"_q),
 		Capability::SeeChat);
@@ -214,6 +226,7 @@ void ChatInfo(ToolCall call, Done done) {
 
 void ChatMembers(ToolCall call, Done done) {
 	const auto peer = FindAllowedPeer(
+		call,
 		ArgString(call.arguments, u"account"_q),
 		ArgString(call.arguments, u"chat"_q),
 		Capability::ReadMessages);
@@ -280,6 +293,7 @@ void ChatMembers(ToolCall call, Done done) {
 
 void ReadHistory(ToolCall call, Done done) {
 	const auto peer = FindAllowedPeer(
+		call,
 		ArgString(call.arguments, u"account"_q),
 		ArgString(call.arguments, u"chat"_q),
 		Capability::ReadMessages);
@@ -367,6 +381,7 @@ void SearchAccount(
 		not_null<Main::Session*> session,
 		const QString &query,
 		int limit,
+		Fn<bool(not_null<PeerData*>)> inScope,
 		Fn<void(ToolResult)> finished) {
 	const auto guarded = GuardedBySession(session, std::move(finished));
 	const auto key = SessionKey(session);
@@ -385,7 +400,9 @@ void SearchAccount(
 	)).done([=](const MTPmessages_Messages &result) {
 		auto list = QJsonArray();
 		for (const auto item : ItemsFromReply(session, result)) {
-			if (PeerAllows(item->history()->peer, Capability::ReadMessages)) {
+			const auto peer = item->history()->peer;
+			if (inScope(peer)
+				&& PeerAllows(peer, Capability::ReadMessages)) {
 				list.push_back(WithChat(item, key));
 			}
 		}
@@ -442,6 +459,7 @@ void SearchMessages(ToolCall call, Done done) {
 	}
 	if (scope == u"chat"_q) {
 		const auto peer = FindAllowedPeer(
+			call,
 			ArgString(call.arguments, u"account"_q),
 			ArgString(call.arguments, u"chat"_q),
 			Capability::ReadMessages);
@@ -456,14 +474,17 @@ void SearchMessages(ToolCall call, Done done) {
 	if (scope == u"account"_q) {
 		const auto session = FindSession(
 			ArgString(call.arguments, u"account"_q));
-		if (!session || !AccountVisible(session)) {
+		if (!session
+			|| !AccountVisible(session)
+			|| !CallAllowsAccount(call, SessionKey(session))) {
 			done(NotAllowedResult());
 			return;
 		}
 		sessions.push_back(session);
 	} else if (scope == u"all"_q) {
 		for (const auto session : AuthorizedSessions()) {
-			if (AccountVisible(session)) {
+			if (AccountVisible(session)
+				&& CallAllowsAccount(call, SessionKey(session))) {
 				sessions.push_back(session);
 			}
 		}
@@ -480,7 +501,19 @@ void SearchMessages(ToolCall call, Done done) {
 	state->limit = limit;
 	state->done = std::move(done);
 	for (const auto session : sessions) {
-		SearchAccount(session, query, limit, [=](ToolResult result) {
+		const auto inScope = [info = call.session](
+				not_null<PeerData*> peer) {
+			if (!info) {
+				return true;
+			}
+			return ScopeAllows(
+				info->scope,
+				info->accountKey.toStdString(),
+				uint64_t(info->peer.value),
+				SessionKey(&peer->session()).toStdString(),
+				uint64_t(peer->id.value));
+		};
+		SearchAccount(session, query, limit, inScope, [=](ToolResult result) {
 			SearchFinishOne(
 				state,
 				result.isError ? QJsonValue(QJsonArray()) : result.content);

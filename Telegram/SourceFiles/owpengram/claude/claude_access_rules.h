@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include <cstdint>
 #include <initializer_list>
 #include <optional>
 #include <string_view>
@@ -33,6 +34,25 @@ enum class SessionScope {
 	Account,
 	All,
 };
+
+// A session scope only narrows access (levels still apply on top).
+[[nodiscard]] constexpr bool ScopeAllows(
+		SessionScope scope,
+		std::string_view sessionAccount,
+		uint64_t sessionPeer,
+		std::string_view account,
+		uint64_t peer) {
+	switch (scope) {
+	case SessionScope::All:
+		return true;
+	case SessionScope::Account:
+		return account == sessionAccount;
+	case SessionScope::Chat:
+	case SessionScope::Temporary:
+		return account == sessionAccount && peer == sessionPeer;
+	}
+	return false;
+}
 
 [[nodiscard]] constexpr Level Effective(
 		Level accountDefault,

@@ -86,9 +86,17 @@ void ToolRegistry::add(ToolDef def) {
 	_tools.push_back(std::move(def));
 }
 
+bool ToolRegistry::panelOnly(const QString &name) const {
+	return name == u"approve"_q;
+}
+
 void ToolRegistry::call(ToolCall call, Fn<void(ToolResult)> done) {
 	for (const auto &tool : _tools) {
 		if (tool.name == call.name) {
+			if (panelOnly(tool.name) && !call.session) {
+				// Indistinguishable from an unknown tool.
+				break;
+			}
 			tool.handler(std::move(call), std::move(done));
 			return;
 		}
@@ -101,6 +109,7 @@ ToolRegistry &Tools() {
 		auto registry = std::make_unique<ToolRegistry>();
 		RegisterReadTools(*registry);
 		RegisterActTools(*registry);
+		RegisterApproveTool(*registry);
 		return registry;
 	}();
 	return *result;
@@ -168,7 +177,30 @@ bool PeerAllows(not_null<PeerData*> peer, Capability capability) {
 	return Allows(EffectiveLevel(peer), capability);
 }
 
+bool CallAllowsAccount(const ToolCall &call, const QString &accountKey) {
+	if (!call.session) {
+		return true;
+	}
+	const auto &info = call.session.value();
+	return (info.scope == SessionScope::All)
+		|| (accountKey == info.accountKey);
+}
+
+bool CallAllowsPeer(const ToolCall &call, not_null<PeerData*> peer) {
+	if (!call.session) {
+		return true;
+	}
+	const auto &info = call.session.value();
+	return ScopeAllows(
+		info.scope,
+		info.accountKey.toStdString(),
+		uint64_t(info.peer.value),
+		SessionKey(&peer->session()).toStdString(),
+		uint64_t(peer->id.value));
+}
+
 PeerData *FindAllowedPeer(
+		const ToolCall &call,
 		const QString &accountKey,
 		const QString &chatId,
 		Capability capability) {
@@ -182,7 +214,9 @@ PeerData *FindAllowedPeer(
 		return nullptr;
 	}
 	const auto peer = session->data().peerLoaded(PeerId(value));
-	if (!peer || !PeerAllows(peer, capability)) {
+	if (!peer
+		|| !CallAllowsPeer(call, peer)
+		|| !PeerAllows(peer, capability)) {
 		return nullptr;
 	}
 	return peer;

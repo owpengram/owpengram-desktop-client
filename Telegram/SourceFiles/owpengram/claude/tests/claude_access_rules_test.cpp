@@ -42,5 +42,17 @@ int main() {
 	}
 	assert(!ParseLevel("bogus"));
 
+	// scope_chat_blocks_other_chat
+	assert(ScopeAllows(SessionScope::Chat, "a", 1, "a", 1));
+	assert(!ScopeAllows(SessionScope::Chat, "a", 1, "a", 2));
+	assert(!ScopeAllows(SessionScope::Chat, "a", 1, "b", 1));
+	assert(!ScopeAllows(SessionScope::Temporary, "a", 1, "a", 2));
+	assert(ScopeAllows(SessionScope::Temporary, "a", 1, "a", 1));
+	// scope_account_blocks_other_account
+	assert(ScopeAllows(SessionScope::Account, "a", 1, "a", 99));
+	assert(!ScopeAllows(SessionScope::Account, "a", 1, "b", 1));
+	// scope_all_allows
+	assert(ScopeAllows(SessionScope::All, "a", 1, "b", 7));
+
 	return 0;
 }

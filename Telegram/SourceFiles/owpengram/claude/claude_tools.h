@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #pragma once
 
 #include "owpengram/claude/claude_access_rules.h"
+#include "owpengram/claude/claude_sessions.h"
 
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
@@ -38,6 +39,9 @@ struct ToolCall {
 	QString name;
 	QJsonObject arguments;
 	QString clientName;
+	// Set when the request carries the header of an open panel session:
+	// the session's scope only narrows what the tools may touch.
+	std::optional<SessionInfo> session;
 	// Fires when the caller is gone for good (MCP server stopped, token
 	// regenerated): a pending confirmation must end as denied.
 	std::optional<rpl::producer<>> cancelled;
@@ -59,6 +63,9 @@ public:
 	[[nodiscard]] const std::vector<ToolDef> &list() const {
 		return _tools;
 	}
+	// Tools for tools/list and tools/call: the panel-only ones are
+	// included only when `panelSession` is true.
+	[[nodiscard]] bool panelOnly(const QString &name) const;
 	// Unknown name -> isError result.
 	void call(ToolCall call, Fn<void(ToolResult)> done);
 
@@ -74,6 +81,9 @@ private:
 void RegisterReadTools(ToolRegistry &registry);
 // Defined in claude_tools_act.cpp.
 void RegisterActTools(ToolRegistry &registry);
+// Defined in claude_tools_approve.cpp. Registered like the others, but
+// listed and callable only for panel sessions.
+void RegisterApproveTool(ToolRegistry &registry);
 
 // ---- Shared helpers (used by read and action tools). ----
 
@@ -89,9 +99,18 @@ void RegisterActTools(ToolRegistry &registry);
 [[nodiscard]] std::vector<not_null<Main::Session*>> AuthorizedSessions();
 [[nodiscard]] QString SessionKey(not_null<Main::Session*> session);
 
-// Peer for (account, chat) if the effective level allows `capability`,
-// otherwise nullptr (indistinguishable from "unknown").
+// The call's session scope (if any) allows this account / chat.
+[[nodiscard]] bool CallAllowsAccount(
+	const ToolCall &call,
+	const QString &accountKey);
+[[nodiscard]] bool CallAllowsPeer(
+	const ToolCall &call,
+	not_null<PeerData*> peer);
+
+// Peer for (account, chat) if the session scope and the effective level
+// allow `capability`, otherwise nullptr (indistinguishable from "unknown").
 [[nodiscard]] PeerData *FindAllowedPeer(
+	const ToolCall &call,
 	const QString &accountKey,
 	const QString &chatId,
 	Capability capability);

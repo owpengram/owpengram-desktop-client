@@ -200,6 +200,7 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 		return Failed(kInvisibleText);
 	}
 	const auto peer = FindAllowedPeer(
+		call,
 		ArgString(args, u"account"_q),
 		ArgString(args, u"chat"_q),
 		Capability::Act);
@@ -245,6 +246,7 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 		return Failed(kInvisibleText);
 	}
 	const auto peer = FindAllowedPeer(
+		call,
 		ArgString(args, u"account"_q),
 		ArgString(args, u"chat"_q),
 		Capability::Act);
@@ -296,6 +298,7 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 		return Failed(u"invalid arguments: msg_id and emoji are required"_q);
 	}
 	const auto peer = FindAllowedPeer(
+		call,
 		ArgString(args, u"account"_q),
 		ArgString(args, u"chat"_q),
 		Capability::Act);
@@ -366,10 +369,12 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 
 	// Both ends are checked on their own level; neither gives hints.
 	const auto source = FindAllowedPeer(
+		call,
 		ArgString(args, u"from_account"_q),
 		ArgString(args, u"from_chat"_q),
 		Capability::ReadMessages);
 	const auto target = FindAllowedPeer(
+		call,
 		ArgString(args, u"to_account"_q),
 		ArgString(args, u"to_chat"_q),
 		Capability::Act);

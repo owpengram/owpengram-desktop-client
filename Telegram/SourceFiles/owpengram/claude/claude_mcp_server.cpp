@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/version.h"
 #include "logs.h"
 #include "owpengram/claude/claude_access_store.h"
+#include "owpengram/claude/claude_sessions.h"
 #include "owpengram/claude/claude_tools.h"
 
 #include <QtCore/QJsonArray>
@@ -459,6 +460,19 @@ void McpServer::handleRequest(
 	const auto params = paramsValue.toObject();
 	const auto sessionId = HeaderValue(request, "mcp-session-id");
 
+	// A panel session narrows what the tools may touch. An id that is not
+	// an open session is treated like an unknown MCP session.
+	auto panel = std::optional<SessionInfo>();
+	const auto panelId = HeaderValue(request, "x-owpengram-session");
+	if (!panelId.isEmpty()) {
+		const auto open = AllSessions().find(panelId);
+		if (!open) {
+			finish(404, "Not Found");
+			return;
+		}
+		panel = open->info();
+	}
+
 	if (!hasId) {
 		// Notification (notifications/initialized and friends).
 		if (!sessionId.isEmpty()
@@ -510,6 +524,9 @@ void McpServer::handleRequest(
 	} else if (name == u"tools/list"_q) {
 		auto list = QJsonArray();
 		for (const auto &tool : Tools().list()) {
+			if (!panel && Tools().panelOnly(tool.name)) {
+				continue;
+			}
 			list.push_back(QJsonObject{
 				{ u"name"_q, tool.name },
 				{ u"description"_q, tool.description },
@@ -539,6 +556,7 @@ void McpServer::handleRequest(
 			.clientName = (i != _sessions.end())
 				? i->second.clientName
 				: QString(),
+			.session = panel,
 			.cancelled = _cancelled.events(),
 		};
 		// The connection stays open until the handler is done (a
