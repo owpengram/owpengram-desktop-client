@@ -1649,6 +1649,9 @@ PRIVATE
     owpengram/claude/claude_access_badge.h
     owpengram/claude/claude_access_store.cpp
     owpengram/claude/claude_access_store.h
+    owpengram/claude/claude_tools.cpp
+    owpengram/claude/claude_tools.h
+    owpengram/claude/claude_tools_read.cpp
     owpengram/owpengram_servers.cpp
     owpengram/owpengram_servers.h
     owpengram/owpengram_updater.cpp
