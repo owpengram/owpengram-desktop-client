@@ -26,7 +26,9 @@ struct SessionInfo {
 	PeerId peer;
 	QString title;
 	QDateTime created;
-	QString folder; // Absolute path, empty for Temporary.
+	// Absolute path. Empty for Temporary and until the first transcript
+	// message of a persistent session (the folder is created lazily).
+	QString folder;
 };
 
 // Main thread only. Created by Sessions.
@@ -34,8 +36,11 @@ class Session final {
 public:
 	[[nodiscard]] const SessionInfo &info() const;
 
-	// Temporary sessions write nothing.
+	// Temporary sessions write nothing. For others the first call creates
+	// the folder + session.json (an empty title becomes the first words of
+	// the first user message) and, if the folder vanished, restores it.
 	void appendTranscript(QString role, QString text);
+	// Updates only the title in session.json, the folder is never renamed.
 	void rename(QString title);
 
 	[[nodiscard]] QString claudeSessionId() const;
@@ -49,6 +54,7 @@ private:
 	explicit Session(SessionInfo info, QString claudeSessionId);
 
 	[[nodiscard]] bool persistent() const;
+	void ensureFolder(const QString &firstUserText);
 	void writeMeta() const;
 
 	SessionInfo _info;
@@ -56,7 +62,9 @@ private:
 
 };
 
-// Main thread only.
+// Main thread only. Sessions keeps only weak references to open sessions:
+// the owner (panel / claude process) must hold the shared_ptr for the
+// session to stay findable by MCP via find().
 class Sessions final {
 public:
 	std::shared_ptr<Session> create(
@@ -76,12 +84,14 @@ public:
 	// Newest Chat-scope session of this chat: open ones first, then saved.
 	[[nodiscard]] std::shared_ptr<Session> lastForChat(
 		const QString &accountKey,
-		PeerId peer) const;
+		PeerId peer);
 
 	// cWorkingDir() + "ai/"
 	[[nodiscard]] QString aiPath() const;
 
 private:
+	void pruneOpen() const;
+
 	mutable base::flat_map<QString, std::weak_ptr<Session>> _open;
 
 };

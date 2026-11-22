@@ -43,7 +43,9 @@ namespace {
 	return u"temporary"_q;
 }
 
-[[nodiscard]] SessionScope ScopeFromString(const QString &value) {
+// Only persistent scopes can be read from disk.
+[[nodiscard]] std::optional<SessionScope> ScopeFromString(
+		const QString &value) {
 	if (value == u"chat"_q) {
 		return SessionScope::Chat;
 	} else if (value == u"account"_q) {
@@ -51,7 +53,19 @@ namespace {
 	} else if (value == u"all"_q) {
 		return SessionScope::All;
 	}
-	return SessionScope::Temporary;
+	return std::nullopt;
+}
+
+// First words of the message, at most kSessionSlugMaxLength code points.
+[[nodiscard]] QString TitleFromText(const QString &text) {
+	const auto simple = text.simplified();
+	const auto codes = simple.toUcs4();
+	if (codes.size() <= kSessionSlugMaxLength) {
+		return simple;
+	}
+	return QString::fromUcs4(
+		codes.constData(),
+		kSessionSlugMaxLength).trimmed();
 }
 
 [[nodiscard]] bool WriteJson(const QString &path, const QJsonObject &object) {
@@ -82,10 +96,14 @@ struct Loaded {
 	const auto object = document.object();
 	auto result = Loaded();
 	result.info.id = object.value(u"id"_q).toString();
-	if (result.info.id.isEmpty()) {
+	if (QUuid::fromString(result.info.id).isNull()) {
 		return std::nullopt;
 	}
-	result.info.scope = ScopeFromString(object.value(u"scope"_q).toString());
+	const auto scope = ScopeFromString(object.value(u"scope"_q).toString());
+	if (!scope) {
+		return std::nullopt;
+	}
+	result.info.scope = *scope;
 	result.info.accountKey = object.value(u"account"_q).toString();
 	const auto peer = object.value(u"peer"_q).toString().toULongLong();
 	result.info.peer = peer ? PeerId(PeerIdHelper(peer)) : PeerId();
@@ -111,8 +129,33 @@ const SessionInfo &Session::info() const {
 }
 
 bool Session::persistent() const {
-	return (_info.scope != SessionScope::Temporary)
-		&& !_info.folder.isEmpty();
+	return _info.scope != SessionScope::Temporary;
+}
+
+void Session::ensureFolder(const QString &firstUserText) {
+	if (!_info.folder.isEmpty()) {
+		return;
+	}
+	if (_info.title.isEmpty()) {
+		_info.title = TitleFromText(firstUserText);
+	}
+	const auto date = _info.created.date();
+	const auto time = _info.created.time();
+	const auto name = QString::fromStdString(SessionFolderName(
+		date.year(),
+		date.month(),
+		date.day(),
+		time.hour(),
+		time.minute(),
+		_info.title.toStdString()));
+	auto folder = SessionsPath() + name;
+	for (auto n = 2; QFileInfo::exists(folder); ++n) {
+		folder = SessionsPath() + name + '-' + QString::number(n);
+	}
+	_info.folder = folder;
+	QDir().mkpath(AiPath() + u"memory"_q);
+	QDir().mkpath(_info.folder);
+	writeMeta();
 }
 
 QString Session::claudeSessionId() const {
@@ -128,12 +171,22 @@ void Session::setClaudeSessionId(QString id) {
 }
 
 QString Session::transcriptPath() const {
-	return persistent() ? (_info.folder + u"/transcript.md"_q) : QString();
+	return _info.folder.isEmpty()
+		? QString()
+		: (_info.folder + u"/transcript.md"_q);
 }
 
 void Session::appendTranscript(QString role, QString text) {
 	if (!persistent()) {
 		return;
+	}
+	if (_info.folder.isEmpty()) {
+		// The folder is created lazily, at the first message.
+		ensureFolder((role == u"user"_q) ? text : QString());
+	} else if (!QFileInfo::exists(_info.folder)) {
+		// Removed externally: restore it.
+		QDir().mkpath(_info.folder);
+		writeMeta();
 	}
 	const auto now = QDateTime::currentDateTime();
 	const auto date = now.date();
@@ -146,7 +199,6 @@ void Session::appendTranscript(QString role, QString text) {
 		time.hour(),
 		time.minute(),
 		text.toStdString());
-	QDir().mkpath(_info.folder);
 	QFile file(transcriptPath());
 	if (!file.open(QIODevice::WriteOnly | QIODevice::Append)
 		|| file.write(entry.data(), qint64(entry.size())) < 0) {
@@ -163,7 +215,7 @@ void Session::rename(QString title) {
 }
 
 void Session::writeMeta() const {
-	if (!persistent()) {
+	if (!persistent() || _info.folder.isEmpty()) {
 		return;
 	}
 	auto object = QJsonObject();
@@ -195,27 +247,10 @@ std::shared_ptr<Session> Sessions::create(
 		.peer = peer,
 		.created = QDateTime::currentDateTime(),
 	};
-	if (scope != SessionScope::Temporary) {
-		const auto date = info.created.date();
-		const auto time = info.created.time();
-		const auto name = QString::fromStdString(SessionFolderName(
-			date.year(),
-			date.month(),
-			date.day(),
-			time.hour(),
-			time.minute(),
-			info.title.toStdString()));
-		auto folder = SessionsPath() + name;
-		for (auto n = 2; QFileInfo::exists(folder); ++n) {
-			folder = SessionsPath() + name + '-' + QString::number(n);
-		}
-		info.folder = folder;
-		// ai/ and ai/memory/ appear at the first write.
-		QDir().mkpath(AiPath() + u"memory"_q);
-	}
+	// Nothing is written until the first transcript message.
+	pruneOpen();
 	const auto id = info.id;
 	auto result = std::shared_ptr<Session>(new Session(std::move(info), id));
-	result->writeMeta();
 	_open[id] = result;
 	return result;
 }
@@ -237,7 +272,18 @@ std::vector<SessionInfo> Sessions::history() const {
 	return result;
 }
 
+void Sessions::pruneOpen() const {
+	for (auto i = _open.begin(); i != _open.end();) {
+		if (i->second.expired()) {
+			i = _open.erase(i);
+		} else {
+			++i;
+		}
+	}
+}
+
 std::shared_ptr<Session> Sessions::open(const QString &id) {
+	pruneOpen();
 	if (const auto already = find(id)) {
 		return already;
 	}
@@ -257,13 +303,15 @@ std::shared_ptr<Session> Sessions::open(const QString &id) {
 }
 
 std::shared_ptr<Session> Sessions::find(const QString &id) const {
+	pruneOpen();
 	const auto i = _open.find(id);
 	return (i != _open.end()) ? i->second.lock() : nullptr;
 }
 
 std::shared_ptr<Session> Sessions::lastForChat(
 		const QString &accountKey,
-		PeerId peer) const {
+		PeerId peer) {
+	pruneOpen();
 	auto best = std::shared_ptr<Session>();
 	for (const auto &[id, weak] : _open) {
 		const auto session = weak.lock();
@@ -285,7 +333,7 @@ std::shared_ptr<Session> Sessions::lastForChat(
 		if (info.scope == SessionScope::Chat
 			&& info.accountKey == accountKey
 			&& info.peer == peer) {
-			return const_cast<Sessions*>(this)->open(info.id);
+			return open(info.id);
 		}
 	}
 	return nullptr;
