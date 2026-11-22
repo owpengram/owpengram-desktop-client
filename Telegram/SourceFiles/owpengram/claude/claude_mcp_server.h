@@ -51,6 +51,10 @@ private:
 	void dropConnections();
 
 	void accept();
+	void rejectEarly(
+		not_null<QTcpSocket*> socket,
+		int code,
+		const char *reason);
 	void readyRead(not_null<QTcpSocket*> socket);
 	void handleRequest(
 		not_null<QTcpSocket*> socket,
@@ -64,6 +68,7 @@ private:
 
 	std::unique_ptr<QTcpServer> _server;
 	int _port = 0;
+	uint64 _serial = 0;
 	QString _token; // Token the current connections were accepted under.
 	std::map<QTcpSocket*, std::unique_ptr<Connection>> _connections;
 	std::map<QString, Session> _sessions;

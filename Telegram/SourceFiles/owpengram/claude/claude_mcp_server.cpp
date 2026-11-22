@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "owpengram/claude/claude_mcp_server.h"
 
+#include "core/application.h"
 #include "core/version.h"
 #include "logs.h"
 #include "owpengram/claude/claude_access_store.h"
@@ -173,6 +174,7 @@ void Respond(
 } // namespace
 
 struct McpServer::Connection {
+	uint64 serial = 0; // Unique per connection, never reused.
 	std::string buffer;
 	QTimer *timer = nullptr; // Child of the socket.
 	bool dispatched = false; // Request parsed, waiting for the handler.
@@ -266,6 +268,23 @@ void McpServer::closeConnection(not_null<QTcpSocket*> socket) {
 	socket->deleteLater();
 }
 
+void McpServer::rejectEarly(
+		not_null<QTcpSocket*> socket,
+		int code,
+		const char *reason) {
+	// Deleted once the response is flushed and the peer is gone, with a
+	// safety timeout.
+	Respond(socket, code, reason);
+	QObject::connect(socket, &QTcpSocket::disconnected, socket, [=] {
+		socket->deleteLater();
+	});
+	QTimer::singleShot(int(kDrainTimeout), socket, [=] {
+		socket->abort();
+		socket->deleteLater();
+	});
+	socket->disconnectFromHost();
+}
+
 void McpServer::accept() {
 	while (_server && _server->hasPendingConnections()) {
 		const auto socket = _server->nextPendingConnection();
@@ -273,17 +292,14 @@ void McpServer::accept() {
 			break;
 		}
 		if (!socket->peerAddress().isLoopback()) {
-			Respond(socket, 403, "Forbidden");
-			socket->disconnectFromHost();
-			socket->deleteLater();
+			rejectEarly(socket, 403, "Forbidden");
 			continue;
 		} else if (_connections.size() >= kMaxConnections) {
-			Respond(socket, 503, "Service Unavailable");
-			socket->disconnectFromHost();
-			socket->deleteLater();
+			rejectEarly(socket, 503, "Service Unavailable");
 			continue;
 		}
 		auto connection = std::make_unique<Connection>();
+		connection->serial = ++_serial;
 		connection->timer = new QTimer(socket);
 		connection->timer->setSingleShot(true);
 		connection->timer->setInterval(int(kReadTimeout));
@@ -326,8 +342,11 @@ void McpServer::readyRead(not_null<QTcpSocket*> socket) {
 
 	// Error replies leave unread input behind: keep draining for a moment so
 	// that closing does not reset the connection before the client reads.
-	const auto reject = [&](int code, const char *reason) {
-		Respond(socket, code, reason);
+	const auto reject = [&](
+			int code,
+			const char *reason,
+			const QByteArray &extra = {}) {
+		Respond(socket, code, reason, {}, extra);
 		connection.draining = true;
 		connection.timer->start(int(kDrainTimeout));
 	};
@@ -342,13 +361,7 @@ void McpServer::readyRead(not_null<QTcpSocket*> socket) {
 		reject(403, "Forbidden");
 		return;
 	} else if (!TokenMatches(request)) {
-		Respond(
-			socket,
-			401,
-			"Unauthorized",
-			{},
-			"WWW-Authenticate: Bearer\r\n");
-		socket->disconnectFromHost();
+		reject(401, "Unauthorized", "WWW-Authenticate: Bearer\r\n");
 		return;
 	}
 	connection.dispatched = true;
@@ -358,16 +371,21 @@ void McpServer::readyRead(not_null<QTcpSocket*> socket) {
 void McpServer::handleRequest(
 		not_null<QTcpSocket*> socket,
 		const HttpRequest &request) {
+	const auto alive = QPointer<QTcpSocket>(socket.get());
+	const auto serial = _connections.at(socket)->serial;
 	const auto finish = [=](
 			int code,
 			const char *reason,
 			const QByteArray &body = {},
 			const QByteArray &extra = {}) {
-		if (!_connections.contains(socket)) {
+		// The address of a freed socket can be reused by a new connection,
+		// so check the pointer and the connection serial both.
+		const auto i = alive ? _connections.find(alive.data()) : _connections.end();
+		if (i == _connections.end() || i->second->serial != serial) {
 			return; // Client is gone, drop the result.
 		}
-		Respond(socket, code, reason, body, extra);
-		socket->disconnectFromHost();
+		Respond(alive.data(), code, reason, body, extra);
+		alive->disconnectFromHost();
 	};
 	if (request.path != "/mcp") {
 		finish(404, "Not Found");
@@ -434,6 +452,12 @@ void McpServer::handleRequest(
 
 	if (!hasId) {
 		// Notification (notifications/initialized and friends).
+		if (!sessionId.isEmpty()
+			&& name != u"initialize"_q
+			&& !_sessions.contains(sessionId)) {
+			finish(404, "Not Found");
+			return;
+		}
 		touchSession(sessionId);
 		finish(202, "Accepted");
 		return;
@@ -466,6 +490,11 @@ void McpServer::handleRequest(
 		return;
 	}
 
+	if (!sessionId.isEmpty() && !_sessions.contains(sessionId)) {
+		// Unknown or expired session: the client has to re-initialize.
+		finish(404, "Not Found");
+		return;
+	}
 	touchSession(sessionId);
 	if (name == u"ping"_q) {
 		reply(ResultObject(id, QJsonObject()));
@@ -487,6 +516,11 @@ void McpServer::handleRequest(
 				&& !arguments.isNull()
 				&& !arguments.isObject())) {
 			reply(ErrorObject(id, kInvalidParams, u"Invalid params"_q));
+			return;
+		}
+		if (Core::App().passcodeLocked()) {
+			reply(ResultObject(id, ToolResultToJson(ErrorResult(
+				u"locked"_q))));
 			return;
 		}
 		const auto i = _sessions.find(sessionId);
