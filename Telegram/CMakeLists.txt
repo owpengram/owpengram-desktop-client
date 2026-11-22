@@ -1651,6 +1651,9 @@ PRIVATE
     owpengram/claude/claude_access_store.h
     owpengram/claude/claude_confirm.cpp
     owpengram/claude/claude_confirm.h
+    owpengram/claude/claude_http_request.h
+    owpengram/claude/claude_mcp_server.cpp
+    owpengram/claude/claude_mcp_server.h
     owpengram/claude/claude_tools.cpp
     owpengram/claude/claude_tools.h
     owpengram/claude/claude_tools_act.cpp

@@ -103,6 +103,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/boxes/confirm_box.h"
 #include "core/cached_webview_availability.h"
 #include "styles/style_window.h"
+#include "owpengram/claude/claude_mcp_server.h"
 #include "owpengram/owpengram_servers.h"
 #include "test/test_agent.h"
 
@@ -461,6 +462,9 @@ void Application::run() {
 	}
 
 	_lastActivePrimaryWindow->updateIsActiveFocus();
+
+	// Starts the local MCP server if it is enabled in Claude settings.
+	Owpengram::Claude::Mcp();
 
 	for (const auto &error : Shortcuts::Errors()) {
 		LOG(("Shortcuts Error: %1").arg(error));
