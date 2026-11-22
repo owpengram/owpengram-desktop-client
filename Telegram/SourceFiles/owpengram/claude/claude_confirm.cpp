@@ -10,11 +10,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/timer.h"
 #include "base/weak_qptr.h"
 #include "lang/lang_keys.h"
+#include "core/application.h"
 #include "main/main_account.h"
 #include "main/main_session.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/layers/generic_box.h"
 #include "window/window_controller.h"
+#include "window/window_separate_id.h"
 #include "window/window_session_controller.h"
 
 #include <memory>
@@ -23,17 +25,25 @@ namespace Owpengram::Claude {
 namespace {
 
 constexpr auto kConfirmationTimeout = 2 * 60 * crl::time(1000);
+// ConfirmBox maps Enter/Return to the confirm button (lib_ui-side
+// ui/boxes/confirm_box.cpp:82-91) and the box takes focus when shown, so a
+// key press that was meant for something else could approve. Allow is
+// ignored for this long after the box is shown.
+constexpr auto kIgnoreAllowFor = crl::time(1000);
 
 struct State {
 	Fn<void(ConfirmResult)> done;
 	base::Timer timer;
 	base::weak_qptr<Ui::GenericBox> box;
+	crl::time shownAt = 0;
 	rpl::lifetime lifetime;
 };
 
 // Calls `done` exactly once. The state is kept alive by the timer callback
 // (a deliberate cycle) until the first finish() breaks it.
-void Finish(const std::shared_ptr<State> &state, ConfirmResult result) {
+void Finish(std::shared_ptr<State> state, ConfirmResult result) {
+	// By value: destroying state->lifetime below may free a lambda that
+	// holds the last other reference to the state.
 	if (!state->done) {
 		return;
 	}
@@ -70,21 +80,29 @@ void RequestConfirmationWithReason(
 		QString clientName,
 		QString summary,
 		Fn<void(ConfirmResult result)> done) {
-	// No window of this account (e.g. closed to tray) -> nobody to ask,
-	// deny. We deliberately do not use Session::tryResolveWindow(), which
-	// would switch the active account when there are no windows.
+	// The window of this account; if it has none (e.g. closed to tray, or
+	// the main window shows another account) open one for it. That does not
+	// switch the account shown in other windows: a Primary SeparateId with
+	// an account is a new window bound to that account
+	// (Application::ensureSeparateWindowFor, core/application.cpp:1764).
+	// We deliberately do not use Session::tryResolveWindow(), which
+	// activates the account in the domain when there are no windows.
 	const auto &windows = session->windows();
-	auto controller = (Window::SessionController*)nullptr;
-	for (const auto window : windows) {
-		if (window->isPrimary()) {
-			controller = window;
+	auto window = (Window::Controller*)nullptr;
+	for (const auto controller : windows) {
+		if (controller->isPrimary()) {
+			window = &controller->window();
 			break;
 		}
 	}
-	if (!controller && !windows.empty()) {
-		controller = windows.front();
+	if (!window && !windows.empty()) {
+		window = &windows.front()->window();
 	}
-	if (!controller) {
+	if (!window) {
+		window = Core::App().ensureSeparateWindowFor(
+			Window::SeparateId(&session->account()));
+	}
+	if (!window) {
 		done(ConfirmResult::Unavailable);
 		return;
 	}
@@ -92,7 +110,12 @@ void RequestConfirmationWithReason(
 	const auto state = std::make_shared<State>();
 	state->done = std::move(done);
 	state->timer.setCallback([=] {
-		Finish(state, ConfirmResult::TimedOut);
+		// Finish outside of the timer's own timerEvent.
+		crl::on_main([weak = std::weak_ptr<State>(state)] {
+			if (const auto strong = weak.lock()) {
+				Finish(strong, ConfirmResult::TimedOut);
+			}
+		});
 	});
 	state->timer.callOnce(kConfirmationTimeout);
 
@@ -100,12 +123,17 @@ void RequestConfirmationWithReason(
 	) | rpl::filter([](Main::Session *value) {
 		return !value;
 	}) | rpl::on_next([=](Main::Session*) {
-		Finish(state, ConfirmResult::Unavailable);
+		Finish(state, ConfirmResult::SessionClosed);
 	}, state->lifetime);
 
 	auto box = Ui::MakeConfirmBox({
 		.text = std::move(summary),
-		.confirmed = Fn<void()>([=] { Finish(state, ConfirmResult::Approved); }),
+		.confirmed = Fn<void()>([=] {
+			if (crl::now() - state->shownAt < kIgnoreAllowFor) {
+				return; // Too early: keep the box open, do nothing.
+			}
+			Finish(state, ConfirmResult::Approved);
+		}),
 		.confirmText = tr::lng_owpengram_claude_confirm_allow(),
 		.cancelText = tr::lng_owpengram_claude_confirm_deny(),
 		.title = tr::lng_owpengram_claude_confirm_title(
@@ -113,7 +141,8 @@ void RequestConfirmationWithReason(
 			lt_client,
 			clientName),
 	});
-	state->box = controller->window().show(std::move(box));
+	state->shownAt = crl::now();
+	state->box = window->show(std::move(box));
 	if (const auto raw = state->box.get()) {
 		// Cancel button, Esc, outside click, window closed: all deny.
 		raw->boxClosing() | rpl::on_next([=] {
@@ -122,7 +151,7 @@ void RequestConfirmationWithReason(
 			Finish(state, ConfirmResult::Denied);
 		}, raw->lifetime());
 	}
-	controller->window().activate();
+	window->activate();
 }
 
 } // namespace Owpengram::Claude

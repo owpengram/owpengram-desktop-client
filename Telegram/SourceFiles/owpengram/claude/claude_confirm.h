@@ -19,15 +19,17 @@ enum class ConfirmResult {
 	Approved,
 	Denied, // "Deny" pressed or the box closed in any other way.
 	TimedOut, // No answer for 2 minutes.
-	Unavailable, // No window for this account / session destroyed.
+	Unavailable, // No window for this account and none could be opened.
+	SessionClosed, // The account session was destroyed.
 };
 
 // Asks the user (a Yes / No box in a window of this account) to allow an
 // action that Claude wants to perform. Main thread only.
 //
 // `done(true)` only if the user pressed "Allow". `done(false)` if the user
-// denied, closed the box, 2 minutes passed, the account has no window or the
-// account session was destroyed. `done` is called exactly once, and never
+// denied, closed the box, 2 minutes passed, no window could be opened for the
+// account or the account session was destroyed. Allow is ignored during the
+// first second after the box is shown (no accidental Enter / click). `done` is called exactly once, and never
 // synchronously with true.
 void RequestConfirmation(
 	not_null<Main::Session*> session,

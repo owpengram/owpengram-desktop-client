@@ -62,18 +62,55 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 	return Failed(ErrorResult(std::move(text)));
 }
 
-[[nodiscard]] QString Truncated(QString text) {
-	if (text.size() > kPreviewLimit) {
-		text.truncate(kPreviewLimit);
+// Everything Claude (or other chat participants) controls is shown to the
+// user only after this: invisible / direction-changing characters removed.
+[[nodiscard]] QString Sanitized(const QString &text) {
+	auto result = QString();
+	result.reserve(text.size());
+	for (const auto ch : text) {
+		const auto code = ch.unicode();
+		if ((code >= 0x200B && code <= 0x200F)
+			|| (code >= 0x202A && code <= 0x202E)
+			|| (code >= 0x2066 && code <= 0x2069)
+			|| code == 0xFEFF
+			|| code == '\r') {
+			continue;
+		}
+		result += ch;
+	}
+	// No more than two consecutive blank lines (three newlines).
+	while (result.contains(u"\n\n\n"_q)) {
+		result.replace(u"\n\n\n"_q, u"\n\n"_q);
+	}
+	return result;
+}
+
+[[nodiscard]] QString Truncated(QString text, int limit) {
+	if (text.size() > limit) {
+		text.truncate(limit);
 		text += QChar(0x2026);
 	}
 	return text;
 }
 
+// Untrusted text as an indented block, so that a line like "In reply to:"
+// inside it can not be mistaken for the application's own lines.
+[[nodiscard]] QString Quoted(const QString &text) {
+	auto lines = Sanitized(text).split(QChar('\n'));
+	for (auto &line : lines) {
+		line = QChar(0x2502) + u" "_q + line;
+	}
+	return lines.join(QChar('\n'));
+}
+
+[[nodiscard]] QString SingleLine(QString text) {
+	return Sanitized(text).replace(QChar('\n'), QChar(' '));
+}
+
 [[nodiscard]] QString Preview(not_null<HistoryItem*> item) {
 	const auto text = item->originalText().text;
 	if (!text.isEmpty()) {
-		return Truncated(text);
+		return Truncated(SingleLine(text), kPreviewLimit);
 	}
 	const auto media = MessageToJson(item).value(u"media"_q).toObject();
 	const auto type = media.value(u"type"_q).toString();
@@ -140,11 +177,11 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 		lt_client,
 		call.clientName,
 		lt_chat,
-		peer->name());
+		SingleLine(peer->name()));
 	return Prepared{ .plan = Plan{
 		.session = session,
 		.level = EffectiveLevel(peer),
-		.summary = header + u"\n\n"_q + text,
+		.summary = header + u"\n"_q + Quoted(text),
 		.perform = [=] {
 			auto message = Api::MessageToSend(
 				Api::SendAction(session->data().history(peer)));
@@ -184,16 +221,16 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 		lt_client,
 		call.clientName,
 		lt_chat,
-		peer->name());
-	const auto quoted = tr::lng_owpengram_claude_confirm_reply_to(
-		tr::now,
-		lt_text,
-		Preview(item));
+		SingleLine(peer->name()));
+	const auto quoted = tr::lng_owpengram_claude_confirm_reply_to(tr::now);
 	const auto replyTo = item->id;
 	return Prepared{ .plan = Plan{
 		.session = session,
 		.level = EffectiveLevel(peer),
-		.summary = header + u"\n\n"_q + text + u"\n\n"_q + quoted,
+		.summary = header
+			+ u"\n"_q + Quoted(text)
+			+ u"\n"_q + quoted
+			+ u"\n"_q + Quoted(Preview(item)),
 		.perform = [=] {
 			auto message = Api::MessageToSend(
 				Api::SendAction(session->data().history(peer)));
@@ -251,17 +288,14 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 		lt_client,
 		call.clientName,
 		lt_chat,
-		peer->name(),
+		SingleLine(peer->name()),
 		lt_emoji,
-		emoji);
-	const auto target = tr::lng_owpengram_claude_confirm_react_to(
-		tr::now,
-		lt_text,
-		Preview(item));
+		Sanitized(emoji));
+	const auto target = tr::lng_owpengram_claude_confirm_react_to(tr::now);
 	return Prepared{ .plan = Plan{
 		.session = session,
 		.level = EffectiveLevel(peer),
-		.summary = header + u"\n\n"_q + target,
+		.summary = header + u"\n"_q + target + u"\n"_q + Quoted(Preview(item)),
 		.perform = [=] {
 			item->toggleReaction(reaction, HistoryReactionSource::Selector);
 			return OkResult(QJsonObject{ { u"status"_q, u"reacted"_q } });
@@ -334,13 +368,13 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 		lt_number,
 		QString::number(items.size()),
 		lt_from,
-		source->name(),
+		SingleLine(source->name()),
 		lt_chat,
-		target->name());
+		SingleLine(target->name()));
 	return Prepared{ .plan = Plan{
 		.session = session,
 		.level = targetLevel,
-		.summary = header + u"\n\n"_q + previews.join(QChar('\n')),
+		.summary = header + u"\n"_q + Quoted(previews.join(QChar('\n'))),
 		.perform = [=] {
 			auto action = Api::SendAction(session->data().history(target));
 			action.clearDraft = false;
@@ -358,6 +392,13 @@ using PrepareFn = Prepared (*)(const ToolCall &call);
 // ---- The common gate: prepare, confirm if needed, re-check, perform. ----
 
 void Run(ToolCall call, Done done, PrepareFn prepare) {
+	// The client name is chosen by the client: sanitize, cap, and mark it.
+	auto name = Truncated(SingleLine(call.clientName).trimmed(), 64);
+	if (name.isEmpty()) {
+		name = u"unknown"_q;
+	}
+	call.clientName = u"MCP client: "_q + name;
+
 	auto prepared = prepare(call);
 	if (!prepared.plan) {
 		done(std::move(prepared.result));
@@ -370,10 +411,11 @@ void Run(ToolCall call, Done done, PrepareFn prepare) {
 		return;
 	}
 	const auto guarded = GuardedBySession(plan.session, std::move(done));
+	const auto seen = plan.summary;
 	RequestConfirmationWithReason(
 		plan.session,
 		call.clientName,
-		plan.summary,
+		seen,
 		[=](ConfirmResult result) {
 			switch (result) {
 			case ConfirmResult::Approved: {
@@ -381,15 +423,24 @@ void Run(ToolCall call, Done done, PrepareFn prepare) {
 				// was open: everything is checked again from the raw
 				// arguments, nothing from before the box is reused.
 				auto again = prepare(call);
-				guarded(again.plan
-					? again.plan->perform()
-					: std::move(again.result));
+				if (!again.plan) {
+					guarded(std::move(again.result));
+				} else if (again.plan->summary != seen) {
+					// What would be done is not what the user saw.
+					guarded(ErrorResult(
+						u"changed while waiting for confirmation; retry"_q));
+				} else {
+					guarded(again.plan->perform());
+				}
 			} break;
 			case ConfirmResult::TimedOut:
 				guarded(ErrorResult(u"denied: timeout"_q));
 				break;
 			case ConfirmResult::Unavailable:
 				guarded(ErrorResult(u"denied: no window for this account"_q));
+				break;
+			case ConfirmResult::SessionClosed:
+				guarded(ErrorResult(u"denied: account session closed"_q));
 				break;
 			case ConfirmResult::Denied:
 				guarded(ErrorResult(u"denied by user"_q));
@@ -442,7 +493,8 @@ void RegisterActTools(ToolRegistry &registry) {
 	AddAct(
 		registry,
 		u"send_message"_q,
-		u"Send a text message as the user."_q + note,
+		u"Send a text message as the user. A message that is just one dice "
+		"emoji is sent as an animated dice."_q + note,
 		Schema({
 			{ u"account"_q, account },
 			{ u"chat"_q, chat },
@@ -476,7 +528,8 @@ void RegisterActTools(ToolRegistry &registry) {
 		u"forward"_q,
 		u"Forward messages from one chat to another, as the user. The "
 		"source chat needs Read, the target Act. Only forwarding within "
-		"one account is supported."_q + note,
+		"one account is supported. status \"forwarded\" means the request "
+		"was sent, not that delivery is confirmed."_q + note,
 		Schema({
 			{ u"from_account"_q, account },
 			{ u"from_chat"_q, chat },

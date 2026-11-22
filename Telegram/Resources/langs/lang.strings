@@ -8816,9 +8816,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_claude_confirm_deny" = "Deny";
 "lng_owpengram_claude_confirm_send" = "{client} wants to send a message in «{chat}»:";
 "lng_owpengram_claude_confirm_reply" = "{client} wants to reply to a message in «{chat}»:";
-"lng_owpengram_claude_confirm_reply_to" = "In reply to: {text}";
+"lng_owpengram_claude_confirm_reply_to" = "In reply to:";
 "lng_owpengram_claude_confirm_react" = "{client} wants to react to a message in «{chat}» with {emoji}";
-"lng_owpengram_claude_confirm_react_to" = "Message: {text}";
+"lng_owpengram_claude_confirm_react_to" = "Message:";
 "lng_owpengram_claude_confirm_forward" = "{client} wants to forward {number} message(s) from «{from}» to «{chat}»:";
 
 // Keys finished
