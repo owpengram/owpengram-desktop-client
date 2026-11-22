@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "owpengram/claude/claude_sessions.h"
 
 #include "base/qt/qt_common_adapters.h"
+#include "base/basic_types.h"
 #include "owpengram/claude/claude_session_format.h"
 #include "logs.h"
 #include "settings.h"
@@ -21,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QUuid>
 
 #include <algorithm>
+#include <optional>
 
 namespace Owpengram::Claude {
 namespace {
@@ -180,28 +182,45 @@ void Session::appendTranscript(QString role, QString text) {
 	if (!persistent()) {
 		return;
 	}
+	auto entry = PendingEntry{
+		std::move(role),
+		std::move(text),
+		QDateTime::currentDateTime(),
+	};
 	if (_info.folder.isEmpty()) {
-		// The folder is created lazily, at the first message.
-		ensureFolder((role == u"user"_q) ? text : QString());
+		// The folder is created lazily, at the first user message (or at
+		// any message if the session already has a title). Earlier
+		// entries wait in memory.
+		if (entry.role != u"user"_q && _info.title.isEmpty()) {
+			_pending.push_back(std::move(entry));
+			return;
+		}
+		ensureFolder(entry.text);
 	} else if (!QFileInfo::exists(_info.folder)) {
 		// Removed externally: restore it.
 		QDir().mkpath(_info.folder);
 		writeMeta();
 	}
-	const auto now = QDateTime::currentDateTime();
-	const auto date = now.date();
-	const auto time = now.time();
-	const auto entry = TranscriptEntry(
-		role.toStdString(),
+	for (const auto &pending : base::take(_pending)) {
+		writeEntry(pending);
+	}
+	writeEntry(entry);
+}
+
+void Session::writeEntry(const PendingEntry &entry) const {
+	const auto date = entry.when.date();
+	const auto time = entry.when.time();
+	const auto text = TranscriptEntry(
+		entry.role.toStdString(),
 		date.year(),
 		date.month(),
 		date.day(),
 		time.hour(),
 		time.minute(),
-		text.toStdString());
+		entry.text.toStdString());
 	QFile file(transcriptPath());
 	if (!file.open(QIODevice::WriteOnly | QIODevice::Append)
-		|| file.write(entry.data(), qint64(entry.size())) < 0) {
+		|| file.write(text.data(), qint64(text.size())) < 0) {
 		LOG(("Claude: could not write transcript."));
 	}
 }

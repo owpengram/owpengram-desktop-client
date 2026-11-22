@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "owpengram/claude/claude_access_rules.h"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <QtCore/QDateTime>
@@ -54,11 +55,20 @@ private:
 	explicit Session(SessionInfo info, QString claudeSessionId);
 
 	[[nodiscard]] bool persistent() const;
+	struct PendingEntry {
+		QString role;
+		QString text;
+		QDateTime when;
+	};
+
+	void writeEntry(const PendingEntry &entry) const;
 	void ensureFolder(const QString &firstUserText);
 	void writeMeta() const;
 
 	SessionInfo _info;
 	QString _claudeSessionId;
+	// Entries before the first user message (no folder yet).
+	std::vector<PendingEntry> _pending;
 
 };
 
