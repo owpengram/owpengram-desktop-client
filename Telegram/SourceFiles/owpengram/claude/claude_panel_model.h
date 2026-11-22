@@ -78,13 +78,15 @@ public:
 	[[nodiscard]] rpl::producer<int> appended() const;
 	[[nodiscard]] rpl::producer<bool> thinkingValue() const;
 	[[nodiscard]] rpl::producer<std::vector<Connector>> connectorsValue() const;
-	[[nodiscard]] rpl::producer<QString> modelNameValue() const;
 
+	// Text is sent as typed (only an all-whitespace text is ignored).
 	void send(const QString &text);
 	// Restarts the process (Failed notice, connector "Reconnect").
 	void reconnect();
-	// Enables the MCP server and re-sends the undelivered message.
+	// Enables the MCP server and re-sends all undelivered messages.
 	void enableMcpAndRetry();
+	// Ends an idle process, the next send() resumes the conversation.
+	void stopProcess();
 
 private:
 	struct PrivateTag {
@@ -97,6 +99,9 @@ private:
 	void attach(std::shared_ptr<Session> session);
 	void ensureProcess();
 	void handle(const ProcessEvent &event);
+	// Writes the text to claude, false if the process is not running.
+	bool deliver(const QString &text);
+	void setPending(int pending);
 	void add(FeedEntryType type, QString text);
 	void loadTranscript();
 
@@ -104,13 +109,15 @@ private:
 	std::shared_ptr<Session> _session;
 	std::unique_ptr<ClaudeProcess> _process;
 	std::vector<FeedEntry> _entries;
-	// The last message that did not reach claude (MCP off / not installed).
-	QString _undelivered;
+	// Messages that did not reach claude because MCP was off.
+	std::vector<QString> _undelivered;
+	// Sent messages without a result yet ("Thinking…" while > 0).
+	int _pending = 0;
+	bool _mcpNoticeShown = false;
 	rpl::event_stream<int> _appended;
 	rpl::variable<bool> _thinking = false;
 	std::vector<Connector> _connectors;
 	rpl::event_stream<> _connectorsChanges;
-	rpl::variable<QString> _modelName;
 	rpl::lifetime _processLifetime;
 
 };
@@ -130,12 +137,18 @@ struct PanelState {
 	not_null<Window::SessionController*> controller);
 
 // The model for the panel opened in this chat (or with no chat): the
-// current one if it is bound to the same chat, else the newest Chat-scope
+// current one if it covers this chat (All, Account of the same account,
+// Chat / Temporary of the same chat), else the newest Chat-scope
 // session of the chat, else a pending Chat-scope session created on the
 // first message. Becomes the current model of the window.
 std::shared_ptr<PanelModel> ChooseModelForChat(
 	not_null<Window::SessionController*> controller,
 	PeerData *peer);
+
+// The user closed the panel: a Temporary session is released, any other
+// keeps its feed but, unless the panel is pinned, its idle claude process
+// is stopped (the next message resumes it with --resume).
+void HandlePanelClosed(not_null<Window::SessionController*> controller);
 
 // Replaces the current model with a pending session of this scope bound to
 // the active chat (Temporary / Chat need one, else nothing happens).

@@ -65,7 +65,7 @@ void ShowHistory(not_null<Window::SessionController*> controller) {
 
 } // namespace
 
-PanelMemento::PanelMemento(std::shared_ptr<PanelModel> model)
+PanelMemento::PanelMemento(std::weak_ptr<PanelModel> model)
 : _model(std::move(model)) {
 }
 
@@ -74,16 +74,20 @@ object_ptr<Window::SectionWidget> PanelMemento::createWidget(
 		not_null<Window::SessionController*> controller,
 		Window::Column column,
 		const QRect &geometry) {
-	if (_model) {
-		PanelStateFor(controller).current = _model;
+	if (const auto model = _model.lock()) {
+		PanelStateFor(controller).current = model;
+	} else {
+		ChooseModelForChat(
+			controller,
+			controller->activeChatCurrent().peer());
 	}
 	auto result = object_ptr<PanelWidget>(parent, controller);
 	result->setGeometry(geometry);
 	return result;
 }
 
-const std::shared_ptr<PanelModel> &PanelMemento::model() const {
-	return _model;
+std::shared_ptr<PanelModel> PanelMemento::model() const {
+	return _model.lock();
 }
 
 PanelWidget::PanelWidget(
@@ -156,7 +160,17 @@ void PanelWidget::setupTop() {
 		updateControlsGeometry();
 	}, _chip->lifetime());
 
-	_close->setClickedCallback([=] { _removeRequests.fire({}); });
+	_close->setClickedCallback([=] {
+		HandlePanelClosed(controller());
+		_removeRequests.fire({});
+	});
+	const auto tooltip = [](not_null<Ui::IconButton*> button, QString text) {
+		button->setAccessibleName(text);
+		button->setToolTip(text);
+	};
+	tooltip(_close, tr::lng_owpengram_claude_panel_close(tr::now));
+	tooltip(_menuToggle, tr::lng_owpengram_claude_panel_menu(tr::now));
+	tooltip(_history, tr::lng_owpengram_claude_panel_history(tr::now));
 	_menuToggle->setClickedCallback([=] { showMenu(); });
 	_history->setClickedCallback([=] { ShowHistory(controller()); });
 
@@ -166,6 +180,9 @@ void PanelWidget::setupTop() {
 		pinned = !pinned.current();
 	});
 	state.pinned.value() | rpl::on_next([=](bool pinned) {
+		tooltip(_pin, pinned
+			? tr::lng_owpengram_claude_panel_unpin(tr::now)
+			: tr::lng_owpengram_claude_panel_pin(tr::now));
 		_pin->setIconOverride(
 			pinned ? &st::owpengramClaudePanelPinActive : nullptr,
 			pinned ? &st::owpengramClaudePanelPinActive : nullptr);
@@ -380,7 +397,7 @@ bool PanelWidget::showInternal(
 		not_null<Window::SectionMemento*> memento,
 		const Window::SectionShow &params) {
 	if (const auto panel = dynamic_cast<PanelMemento*>(memento.get())) {
-		if (const auto &model = panel->model()) {
+		if (const auto model = panel->model()) {
 			PanelStateFor(controller()).current = model;
 		}
 		return true;

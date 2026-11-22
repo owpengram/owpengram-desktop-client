@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "owpengram/claude/claude_panel_model.h"
 
+#include "base/assertion.h"
 #include "base/flat_map.h"
 #include "base/variant.h"
 #include "data/data_peer.h"
@@ -48,6 +49,23 @@ base::flat_map<
 		not_null<Window::SessionController*> controller) {
 	const auto peer = controller->activeChatCurrent().peer();
 	return peer ? peer->id : PeerId();
+}
+
+[[nodiscard]] bool CoversChat(
+		const PanelModel &model,
+		const QString &accountKey,
+		PeerId peer) {
+	switch (model.scope()) {
+	case SessionScope::All:
+		return true;
+	case SessionScope::Account:
+		return (model.accountKey() == accountKey);
+	case SessionScope::Chat:
+	case SessionScope::Temporary:
+		return (model.accountKey() == accountKey)
+			&& (!peer || model.peer() == peer);
+	}
+	Unexpected("Scope in CoversChat.");
 }
 
 } // namespace
@@ -137,10 +155,6 @@ rpl::producer<std::vector<Connector>> PanelModel::connectorsValue() const {
 	});
 }
 
-rpl::producer<QString> PanelModel::modelNameValue() const {
-	return _modelName.value();
-}
-
 void PanelModel::add(FeedEntryType type, QString text) {
 	_entries.push_back({ .type = type, .text = std::move(text) });
 	_appended.fire(int(_entries.size()) - 1);
@@ -164,37 +178,52 @@ void PanelModel::ensureProcess() {
 	}, _processLifetime);
 }
 
+bool PanelModel::deliver(const QString &text) {
+	ensureProcess();
+	_process->send(text);
+	if (!_process || !_process->running()) {
+		return false;
+	}
+	setPending(_pending + 1);
+	return true;
+}
+
+void PanelModel::setPending(int pending) {
+	_pending = std::max(pending, 0);
+	_thinking = (_pending > 0);
+}
+
 void PanelModel::send(const QString &text) {
-	const auto trimmed = text.trimmed();
-	if (trimmed.isEmpty()) {
+	if (text.trimmed().isEmpty()) {
 		return;
 	}
-	add(FeedEntryType::User, trimmed);
-	_undelivered = trimmed;
-	_thinking = true;
-	ensureProcess();
-	_process->send(trimmed);
-	if (_process->running()) {
-		_undelivered = QString();
+	add(FeedEntryType::User, text);
+	if (!deliver(text)) {
+		_undelivered.push_back(text);
 	}
 }
 
 void PanelModel::reconnect() {
 	ensureProcess();
+	setPending(0);
 	_process->reconnect();
+}
+
+void PanelModel::stopProcess() {
+	if (_process) {
+		_process->stop();
+	}
+	setPending(0);
 }
 
 void PanelModel::enableMcpAndRetry() {
 	Access().setMcpEnabled(true);
-	if (_undelivered.isEmpty()) {
-		return;
-	}
-	// The text is already in the feed, send it again without adding.
-	_thinking = true;
-	ensureProcess();
-	_process->send(_undelivered);
-	if (_process->running()) {
-		_undelivered = QString();
+	_mcpNoticeShown = false;
+	// The texts are already in the feed, send them again without adding.
+	for (const auto &text : base::take(_undelivered)) {
+		if (!deliver(text)) {
+			_undelivered.push_back(text);
+		}
 	}
 }
 
@@ -210,26 +239,30 @@ void PanelModel::handle(const ProcessEvent &event) {
 				? name
 				: (name + QString::fromUtf8(" \xC2\xB7 ") + data.summary));
 	}, [&](const Result &data) {
-		_thinking = false;
+		setPending(_pending - 1);
 		if (data.isError) {
 			add(FeedEntryType::Error, data.text);
 		}
 	}, [&](const Init &data) {
-		_modelName = data.model;
 		_connectors = data.connectors;
 		_connectorsChanges.fire({});
 	}, [&](const Failed &data) {
-		_thinking = false;
+		setPending(0);
+		_undelivered.clear();
 		add(FeedEntryType::Failed, data.message);
 	}, [&](const NotInstalled &) {
-		_thinking = false;
+		setPending(0);
+		_undelivered.clear();
 		add(FeedEntryType::NotInstalled, QString());
 	}, [&](const McpDisabled &) {
-		_thinking = false;
-		add(FeedEntryType::McpDisabled, QString());
+		// One notice for all the messages queued while MCP is off.
+		if (!_mcpNoticeShown) {
+			_mcpNoticeShown = true;
+			add(FeedEntryType::McpDisabled, QString());
+		}
 	}, [&](const Exited &) {
 		// Silent: the next send() starts the process again.
-		_thinking = false;
+		setPending(0);
 	});
 }
 
@@ -295,8 +328,7 @@ std::shared_ptr<PanelModel> ChooseModelForChat(
 	const auto key = AccountKey(&controller->session().account());
 	const auto peerId = peer ? peer->id : PeerId();
 	if (const auto current = state.current.current()) {
-		if (current->accountKey() == key
-			&& (!peerId || current->peer() == peerId)) {
+		if (CoversChat(*current, key, peerId)) {
 			return current;
 		}
 	}
@@ -315,6 +347,18 @@ std::shared_ptr<PanelModel> ChooseModelForChat(
 	}
 	state.current = result;
 	return result;
+}
+
+void HandlePanelClosed(not_null<Window::SessionController*> controller) {
+	auto &state = PanelStateFor(controller);
+	const auto current = state.current.current();
+	if (!current) {
+		return;
+	} else if (current->scope() == SessionScope::Temporary) {
+		state.current = nullptr;
+	} else if (!state.pinned.current()) {
+		current->stopProcess();
+	}
 }
 
 void StartNewSession(

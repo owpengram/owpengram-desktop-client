@@ -32,7 +32,9 @@ class PanelMessages;
 
 class PanelMemento final : public Window::SectionMemento {
 public:
-	explicit PanelMemento(std::shared_ptr<PanelModel> model);
+	// Holds the model weakly: PanelState owns it, a memento left in the
+	// navigation stack must not keep an old claude process alive.
+	explicit PanelMemento(std::weak_ptr<PanelModel> model);
 
 	object_ptr<Window::SectionWidget> createWidget(
 		QWidget *parent,
@@ -40,10 +42,11 @@ public:
 		Window::Column column,
 		const QRect &geometry) override;
 
-	[[nodiscard]] const std::shared_ptr<PanelModel> &model() const;
+	// Null if the model is gone.
+	[[nodiscard]] std::shared_ptr<PanelModel> model() const;
 
 private:
-	std::shared_ptr<PanelModel> _model;
+	std::weak_ptr<PanelModel> _model;
 
 };
 

@@ -8843,6 +8843,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_claude_panel_pin" = "Pin panel";
 "lng_owpengram_claude_panel_unpin" = "Unpin panel";
 "lng_owpengram_claude_panel_close" = "Close";
+"lng_owpengram_claude_panel_menu" = "More";
 "lng_owpengram_claude_panel_new_session" = "New session";
 "lng_owpengram_claude_panel_open_folder" = "Open ai folder";
 "lng_owpengram_claude_panel_copy_folder" = "Copy ai folder path";
