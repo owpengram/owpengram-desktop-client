@@ -53,6 +53,12 @@ struct Failed {
 };
 struct NotInstalled {
 };
+// MCP server is off: claude is not started (the panel offers to enable it).
+struct McpDisabled {
+};
+// The process ended normally (or was terminated from outside).
+struct Exited {
+};
 
 } // namespace ProcessEvents
 
@@ -62,7 +68,9 @@ using ProcessEvent = std::variant<
 	ProcessEvents::Result,
 	ProcessEvents::Init,
 	ProcessEvents::Failed,
-	ProcessEvents::NotInstalled>;
+	ProcessEvents::NotInstalled,
+	ProcessEvents::McpDisabled,
+	ProcessEvents::Exited>;
 
 // Path from the settings (empty = search the default locations).
 void SetConfiguredClaudePath(const QString &path);
@@ -95,6 +103,9 @@ private:
 	void handleLine(const std::string &line);
 	void handleFinished(int code, bool crashed);
 	void emitFailed(QString message);
+	// Fires the event; false if this object was destroyed by a handler.
+	bool fire(ProcessEvent event);
+	void launch();
 	[[nodiscard]] QString stderrTail() const;
 	void removeConfig();
 
@@ -102,6 +113,13 @@ private:
 	QPointer<QProcess> _process;
 	LineSplitter _splitter;
 	QString _configPath;
+	QString _settingsPath;
+	// Lines written since the last start and not yet answered by init:
+	// re-sent if the --resume attempt falls back to --session-id.
+	std::vector<QByteArray> _unacked;
+	bool _resumeAttempt = false;
+	bool _gotInit = false;
+	bool _fellBack = false;
 	QByteArray _stderr;
 	// Continue the conversation (--resume) instead of creating it.
 	bool _resume = false;
