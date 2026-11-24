@@ -1660,6 +1660,8 @@ PRIVATE
     owpengram/claude/claude_history_box.h
     owpengram/claude/claude_panel.cpp
     owpengram/claude/claude_panel.h
+    owpengram/claude/claude_panel_controls.cpp
+    owpengram/claude/claude_panel_controls.h
     owpengram/claude/claude_panel_connectors.cpp
     owpengram/claude/claude_panel_connectors.h
     owpengram/claude/claude_panel_messages.cpp

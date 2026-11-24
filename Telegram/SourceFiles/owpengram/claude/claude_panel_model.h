@@ -91,6 +91,9 @@ public:
 	void stopWhenIdle();
 	// The panel shows this model again: keep the process.
 	void cancelStopWhenIdle();
+	// Model / effort / mode changed: restart claude (after the reply in
+	// flight), the next message resumes with them.
+	void applyOptions();
 
 private:
 	struct PrivateTag {

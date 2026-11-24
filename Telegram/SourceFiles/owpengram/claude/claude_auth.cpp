@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "owpengram/claude/claude_access_store.h"
 #include "owpengram/claude/claude_process.h"
 
+#include <rpl/event_stream.h>
 #include <rpl/variable.h>
 
 #include <QtCore/QCoreApplication>
@@ -32,6 +33,8 @@ constexpr auto kStatusTimeout = 15000;
 struct AuthState {
 	rpl::variable<AuthStatus> status;
 	rpl::variable<QString> systemEmail;
+	ProcessEvents::RateLimits limits;
+	rpl::event_stream<> limitsChanges;
 	QPointer<QProcess> check;
 	QPointer<QProcess> systemCheck;
 	QPointer<QProcess> login;
@@ -295,6 +298,7 @@ void SelectAccount(const QString &profileId) {
 	}
 	access.selectClaudeProfile(profileId);
 	auto &state = State();
+	SetUsageLimits({});
 	if (state.check) {
 		// Its answer is about the previous profile.
 		state.check->kill();
@@ -315,6 +319,25 @@ QString SystemEmail() {
 		RefreshSystemEmail();
 	}
 	return State().systemEmail.current();
+}
+
+rpl::producer<ProcessEvents::RateLimits> UsageLimitsValue() {
+	return rpl::single(
+		rpl::empty
+	) | rpl::then(
+		State().limitsChanges.events()
+	) | rpl::map([] {
+		return State().limits;
+	});
+}
+
+ProcessEvents::RateLimits CurrentUsageLimits() {
+	return State().limits;
+}
+
+void SetUsageLimits(const ProcessEvents::RateLimits &limits) {
+	State().limits = limits;
+	State().limitsChanges.fire({});
 }
 
 rpl::producer<QString> SystemEmailValue() {

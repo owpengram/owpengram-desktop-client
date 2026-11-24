@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
+#include <QtCore/QDateTime>
 #include <QtCore/QString>
 
 #include <memory>
@@ -60,6 +61,16 @@ struct McpDisabled {
 // The process ended normally (or was terminated from outside).
 struct Exited {
 };
+// Subscription usage reported by claude after a request.
+struct RateLimits {
+	struct Window {
+		bool known = false;
+		double utilization = 0.; // 0..1
+		QDateTime resetsAt;
+	};
+	Window fiveHour;
+	Window weekly;
+};
 
 } // namespace ProcessEvents
 
@@ -71,7 +82,8 @@ using ProcessEvent = std::variant<
 	ProcessEvents::Failed,
 	ProcessEvents::NotInstalled,
 	ProcessEvents::McpDisabled,
-	ProcessEvents::Exited>;
+	ProcessEvents::Exited,
+	ProcessEvents::RateLimits>;
 
 // Path from the settings (empty = search the default locations).
 void SetConfiguredClaudePath(const QString &path);

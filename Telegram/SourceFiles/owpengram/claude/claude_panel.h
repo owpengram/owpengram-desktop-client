@@ -29,6 +29,7 @@ class ScrollArea;
 namespace Owpengram::Claude {
 
 class PanelModel;
+class PanelControls;
 class PanelMessages;
 
 class PanelMemento final : public Window::SectionMemento {
@@ -80,6 +81,7 @@ private:
 	void setupInput();
 	void setModel(std::shared_ptr<PanelModel> model);
 	void submit();
+	void chooseAttachment();
 	void showMenu();
 	void showScopeMenu();
 	void showConnectors();
@@ -102,6 +104,8 @@ private:
 	const not_null<Ui::RpWidget*> _inputWrap;
 	const not_null<Ui::InputField*> _field;
 	const not_null<Ui::IconButton*> _send;
+	const not_null<Ui::IconButton*> _attach;
+	const not_null<PanelControls*> _controls;
 	const not_null<Ui::RpWidget*> _auth;
 	const not_null<Ui::FlatLabel*> _authText;
 	const not_null<Ui::LinkButton*> _authButton;

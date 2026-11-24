@@ -117,7 +117,7 @@ owpengramClaudePanelBubbleLeftSkip: 40px;
 owpengramClaudePanelNoticeButtonSkip: 6px;
 
 owpengramClaudePanelInputMargin: margins(8px, 5px, 8px, 5px);
-owpengramClaudePanelInputPadding: margins(12px, 1px, 1px, 1px);
+owpengramClaudePanelInputPadding: margins(1px, 1px, 1px, 1px);
 owpengramClaudePanelInputRadius: 12px;
 owpengramClaudePanelInputBorder: 1px;
 owpengramClaudePanelInputBorderFg: inputBorderFg;
@@ -142,6 +142,21 @@ owpengramClaudePanelSend: IconButton(defaultIconButton) {
 	rippleAreaSize: 30px;
 	ripple: defaultRippleAnimationBgOver;
 }
+
+owpengramClaudePanelAttach: IconButton(owpengramClaudePanelSend) {
+	icon: icon {{ "menu/add", historyComposeIconFg }};
+	iconOver: icon {{ "menu/add", historyComposeIconFgOver }};
+}
+
+// The row under the input: model / effort, mode, usage.
+owpengramClaudeControlFont: font(12px);
+owpengramClaudeControlHeight: 24px;
+owpengramClaudeControlPadding: 8px;
+owpengramClaudeControlRadius: 6px;
+owpengramClaudeControlSkip: 2px;
+owpengramClaudeControlsMargin: margins(8px, 0px, 8px, 6px);
+owpengramClaudeUsageRingSize: 14px;
+owpengramClaudeUsageRingLine: 2px;
 
 owpengramClaudePanelConnectorsPadding: margins(16px, 4px, 16px, 12px);
 owpengramClaudePanelConnectorsTitle: FlatLabel(owpengramClaudePanelSubText) {

@@ -7,6 +7,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "owpengram/claude/claude_panel.h"
 
+#include "owpengram/claude/claude_panel_controls.h"
+
+#include "core/file_utilities.h"
+
 #include "dialogs/dialogs_key.h"
 #include "lang/lang_keys.h"
 #include "owpengram/claude/claude_access_store.h"
@@ -34,12 +38,49 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_widgets.h"
 
 #include <QtCore/QDir>
+#include <QtCore/QRegularExpression>
+#include <QtCore/QFileInfo>
+#include <QtCore/QDateTime>
 #include <QtCore/QUrl>
 #include <QtGui/QClipboard>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QGuiApplication>
 
 namespace Owpengram::Claude {
+
+namespace {
+
+// Copies a user file to ai/memory/attachments/ (the folder Claude may read)
+// under a safe name; returns the new absolute path or empty on failure.
+[[nodiscard]] QString CopyAttachment(const QString &path) {
+	const auto info = QFileInfo(path);
+	if (!info.isFile()) {
+		return QString();
+	}
+	// No dot-names (denied by approve), no separators or odd characters.
+	auto name = info.fileName();
+	name.replace(QRegularExpression(u"[^\\w.\\-]+"_q), u"_"_q);
+	while (name.startsWith('.')) {
+		name = name.mid(1);
+	}
+	if (name.isEmpty() || name.contains(u"CLAUDE"_q, Qt::CaseInsensitive)) {
+		name = u"file"_q + (info.suffix().isEmpty()
+			? QString()
+			: ('.' + info.suffix().replace(
+				QRegularExpression(u"[^\\w]+"_q),
+				QString())));
+	}
+	const auto folder = AllSessions().aiPath() + u"memory/attachments/"_q;
+	if (!QDir().mkpath(folder)) {
+		return QString();
+	}
+	const auto stamp = QDateTime::currentDateTime().toString(
+		u"yyyy-MM-dd_HH-mm-ss"_q);
+	const auto target = folder + stamp + '_' + name.left(80);
+	return QFile::copy(path, target) ? target : QString();
+}
+
+} // namespace
 
 QString ScopeText(SessionScope scope) {
 	switch (scope) {
@@ -116,7 +157,10 @@ PanelWidget::PanelWidget(
 , _send(Ui::CreateChild<Ui::IconButton>(
 	_inputWrap.get(),
 	st::owpengramClaudePanelSend))
-, _auth(Ui::CreateChild<Ui::RpWidget>(this))
+, _attach(Ui::CreateChild<Ui::IconButton>(
+	_inputWrap.get(),
+	st::owpengramClaudePanelAttach))
+, _controls(Ui::CreateChild<PanelControls>(this)), _auth(Ui::CreateChild<Ui::RpWidget>(this))
 , _authText(Ui::CreateChild<Ui::FlatLabel>(
 	_auth.get(),
 	QString(),
@@ -219,6 +263,15 @@ void PanelWidget::setupInput() {
 		updateControlsGeometry();
 	}, _field->lifetime());
 	_send->setClickedCallback([=] { submit(); });
+	_attach->setClickedCallback([=] { chooseAttachment(); });
+	_attach->setToolTip(tr::lng_owpengram_claude_attach(tr::now));
+	_attach->setAccessibleName(tr::lng_owpengram_claude_attach(tr::now));
+	_controls->changed(
+	) | rpl::on_next([=] {
+		if (_model) {
+			_model->applyOptions();
+		}
+	}, _controls->lifetime());
 }
 
 void PanelWidget::setupAuth() {
@@ -297,6 +350,27 @@ void PanelWidget::submit() {
 	}
 	_field->clear();
 	_model->send(text);
+}
+
+void PanelWidget::chooseAttachment() {
+	FileDialog::GetOpenPath(
+		this,
+		tr::lng_owpengram_claude_attach(tr::now),
+		FileDialog::AllFilesFilter(),
+		crl::guard(this, [=](FileDialog::OpenResult &&result) {
+			if (result.paths.isEmpty()) {
+				return;
+			}
+			const auto copied = CopyAttachment(result.paths.front());
+			if (copied.isEmpty()) {
+				controller()->showToast(
+					tr::lng_owpengram_claude_attach_failed(tr::now));
+				return;
+			}
+			// Claude may read ai/memory/**: the path goes into the message.
+			_field->insertTag(QDir::toNativeSeparators(copied) + ' ');
+			_field->setFocus();
+		}));
 }
 
 void PanelWidget::fillNewSessionMenu(not_null<Ui::PopupMenu*> menu) {
@@ -469,18 +543,36 @@ void PanelWidget::updateControlsGeometry() {
 
 	auto bottom = height();
 
+	const auto &controlsMargin = st::owpengramClaudeControlsMargin;
+	_controls->resizeToWidth(
+		width - controlsMargin.left() - controlsMargin.right());
+	bottom -= controlsMargin.bottom() + _controls->height();
+	_controls->moveToLeft(controlsMargin.left(), bottom, width);
+	bottom -= controlsMargin.top();
+
 	const auto &margin = st::owpengramClaudePanelInputMargin;
 	const auto &padding = st::owpengramClaudePanelInputPadding;
 	const auto inputWidth = width - margin.left() - margin.right();
 	_field->resizeToWidth(std::max(
-		inputWidth - padding.left() - padding.right() - _send->width(),
+		(inputWidth
+			- padding.left()
+			- padding.right()
+			- _attach->width()
+			- _send->width()),
 		1));
 	const auto inputHeight = padding.top()
 		+ std::max(_field->height(), _send->height())
 		+ padding.bottom();
 	bottom -= margin.bottom() + inputHeight;
 	_inputWrap->setGeometry(margin.left(), bottom, inputWidth, inputHeight);
-	_field->moveToLeft(padding.left(), padding.top(), inputWidth);
+	_attach->moveToLeft(
+		padding.left(),
+		inputHeight - padding.bottom() - _attach->height(),
+		inputWidth);
+	_field->moveToLeft(
+		padding.left() + _attach->width(),
+		padding.top(),
+		inputWidth);
 	_send->moveToRight(
 		padding.right(),
 		inputHeight - padding.bottom() - _send->height(),

@@ -242,6 +242,43 @@ void AccessStore::selectClaudeProfile(const QString &id) {
 	_changes.fire({});
 }
 
+QString AccessStore::panelModel() const {
+	return _panelModel;
+}
+
+void AccessStore::setPanelModel(const QString &model) {
+	if (_panelModel != model) {
+		_panelModel = model;
+		scheduleSave();
+		_changes.fire({});
+	}
+}
+
+QString AccessStore::panelEffort() const {
+	return _panelEffort;
+}
+
+void AccessStore::setPanelEffort(const QString &effort) {
+	if (_panelEffort != effort) {
+		_panelEffort = effort;
+		scheduleSave();
+		_changes.fire({});
+	}
+}
+
+QString AccessStore::panelMode() const {
+	return (_panelMode == u"plan"_q) ? _panelMode : u"manual"_q;
+}
+
+void AccessStore::setPanelMode(const QString &mode) {
+	const auto value = (mode == u"plan"_q) ? mode : u"manual"_q;
+	if (panelMode() != value) {
+		_panelMode = value;
+		scheduleSave();
+		_changes.fire({});
+	}
+}
+
 bool AccessStore::panelOpen() const {
 	return _panelOpen;
 }
@@ -307,6 +344,15 @@ void AccessStore::load() {
 
 	const auto panel = root.value(u"panel"_q).toObject();
 	_panelOpen = panel.value(u"open"_q).toBool(false);
+	// Values go to the claude command line: only plain tokens.
+	static const auto token = QRegularExpression(u"^[A-Za-z0-9._\\-\\[\\]]{1,64}$"_q);
+	const auto read = [&](const QString &key) {
+		const auto value = panel.value(key).toString();
+		return token.match(value).hasMatch() ? value : QString();
+	};
+	_panelModel = read(u"model"_q);
+	_panelEffort = read(u"effort"_q);
+	_panelMode = read(u"mode"_q);
 	_panelPinned = panel.value(u"pinned"_q).toBool(false);
 
 	const auto accounts = root.value(u"accounts"_q).toObject();
@@ -393,6 +439,9 @@ void AccessStore::save() {
 	auto panel = QJsonObject();
 	panel.insert(u"open"_q, _panelOpen);
 	panel.insert(u"pinned"_q, _panelPinned);
+	panel.insert(u"model"_q, _panelModel);
+	panel.insert(u"effort"_q, _panelEffort);
+	panel.insert(u"mode"_q, panelMode());
 	root.insert(u"panel"_q, panel);
 	root.insert(u"accounts"_q, accounts);
 

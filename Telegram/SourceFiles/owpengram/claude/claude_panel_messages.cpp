@@ -164,7 +164,9 @@ void PanelMessages::addUser(const QString &text) {
 			padding.top(),
 			padding.right(),
 			0),
-		style::al_right);
+		// Not al_right: VerticalLayout tests al_left first and al_right
+		// shares its AlignVCenter bit, so al_right lays out on the left.
+		style::al_topright);
 	bubble->entity()->setSelectable(true);
 	bubble->paintRequest(
 	) | rpl::on_next([=] {

@@ -382,13 +382,21 @@ void ClaudeProcess::launch() {
 		u"--settings"_q,
 		QString::fromUtf8(QJsonDocument(settings).toJson(
 			QJsonDocument::Compact)),
-		u"--permission-mode"_q, u"manual"_q,
+		// Only "manual" / "plan": modes that auto-accept would skip
+		// approve (the ai/ and connector checks).
+		u"--permission-mode"_q, Access().panelMode(),
 		u"--permission-prompts"_q, u"host"_q,
 		u"--tools"_q, u"Read,Write,Edit,Glob,Grep"_q,
 		u"--mcp-config"_q, _configPath,
 		u"--permission-prompt-tool"_q, u"mcp__owpengram__approve"_q,
 		u"--append-system-prompt"_q, BuildContext(_session.get()),
 	};
+	if (const auto model = Access().panelModel(); !model.isEmpty()) {
+		args << u"--model"_q << model;
+	}
+	if (const auto effort = Access().panelEffort(); !effort.isEmpty()) {
+		args << u"--effort"_q << effort;
+	}
 	if (info.scope == SessionScope::Temporary) {
 		args << u"--no-session-persistence"_q;
 	}
@@ -620,6 +628,30 @@ void ClaudeProcess::handleLine(const std::string &line) {
 				return;
 			}
 		}
+	} else if (type == u"rate_limit_event"_q) {
+		const auto windows = root.value(u"rate_limit_info"_q).toObject(
+		).value(u"unifiedWindows"_q).toObject();
+		const auto window = [&](const QString &key) {
+			const auto object = windows.value(key).toObject();
+			auto result = ProcessEvents::RateLimits::Window();
+			if (object.contains(u"utilization"_q)) {
+				result.known = true;
+				result.utilization = std::clamp(
+					object.value(u"utilization"_q).toDouble(),
+					0.,
+					1.);
+				const auto reset = object.value(u"resetsAt"_q).toDouble();
+				if (reset > 0) {
+					result.resetsAt = QDateTime::fromSecsSinceEpoch(
+						qint64(reset));
+				}
+			}
+			return result;
+		};
+		fire(ProcessEvent{ ProcessEvents::RateLimits{
+			.fiveHour = window(u"five_hour"_q),
+			.weekly = window(u"seven_day"_q),
+		} });
 	} else if (type == u"result"_q) {
 		fire(ProcessEvent{ ProcessEvents::Result{
 			.isError = root.value(u"is_error"_q).toBool(),

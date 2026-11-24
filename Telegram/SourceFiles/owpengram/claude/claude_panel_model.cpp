@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "dialogs/dialogs_key.h"
 #include "main/main_session.h"
 #include "owpengram/claude/claude_access_store.h"
+#include "owpengram/claude/claude_auth.h"
 #include "owpengram/claude/claude_sessions.h"
 #include "window/window_session_controller.h"
 
@@ -227,6 +228,20 @@ void PanelModel::stopWhenIdle() {
 	}
 }
 
+void PanelModel::applyOptions() {
+	// A Temporary conversation can't be resumed: the new model / effort /
+	// mode apply to its next session.
+	if (_session && _session->info().scope == SessionScope::Temporary) {
+		return;
+	}
+	// The next message resumes the conversation with the new options.
+	if (_pending > 0) {
+		_stopWhenIdle = true;
+	} else {
+		stopProcess();
+	}
+}
+
 void PanelModel::cancelStopWhenIdle() {
 	_stopWhenIdle = false;
 }
@@ -291,6 +306,8 @@ void PanelModel::handle(const ProcessEvent &event) {
 			_mcpNoticeShown = true;
 			add(FeedEntryType::McpDisabled, QString());
 		}
+	}, [&](const RateLimits &data) {
+		SetUsageLimits(data);
 	}, [&](const Exited &) {
 		// Silent: the next send() starts the process again.
 		setPending(0);

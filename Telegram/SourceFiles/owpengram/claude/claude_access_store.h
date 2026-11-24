@@ -76,6 +76,16 @@ public:
 	[[nodiscard]] QString selectedClaudeProfile() const;
 	void selectClaudeProfile(const QString &id);
 
+	// Panel session options passed to claude: model alias / full name and
+	// effort level (empty - claude's default), permission mode ("manual" or
+	// "plan", the only modes where every action still reaches approve).
+	[[nodiscard]] QString panelModel() const;
+	void setPanelModel(const QString &model);
+	[[nodiscard]] QString panelEffort() const;
+	void setPanelEffort(const QString &effort);
+	[[nodiscard]] QString panelMode() const;
+	void setPanelMode(const QString &mode);
+
 	// Claude side panel: open (restored only when pinned) and pinned.
 	[[nodiscard]] bool panelOpen() const;
 	void setPanelOpen(bool open);
@@ -102,6 +112,9 @@ private:
 	QString _mcpToken;
 	std::vector<ClaudeProfile> _claudeProfiles;
 	QString _selectedClaudeProfile;
+	QString _panelModel;
+	QString _panelEffort;
+	QString _panelMode;
 	bool _panelOpen = false;
 	bool _panelPinned = false;
 

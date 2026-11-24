@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "owpengram/claude/claude_process.h"
+
 #include <rpl/producer.h>
 
 #include <QtCore/QString>
@@ -51,5 +53,11 @@ void CancelLogin();
 
 // Makes the profile the one panel sessions use (empty id - system).
 void SelectAccount(const QString &profileId);
+
+// Subscription usage of the selected account, from the last claude reply
+// (unknown until then, reset on SelectAccount).
+[[nodiscard]] rpl::producer<ProcessEvents::RateLimits> UsageLimitsValue();
+[[nodiscard]] ProcessEvents::RateLimits CurrentUsageLimits();
+void SetUsageLimits(const ProcessEvents::RateLimits &limits);
 
 } // namespace Owpengram::Claude
