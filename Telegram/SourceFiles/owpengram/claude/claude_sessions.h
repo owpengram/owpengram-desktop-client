@@ -88,6 +88,9 @@ public:
 	// Continues a saved session (returns the open one if it is open).
 	std::shared_ptr<Session> open(const QString &id);
 
+	// Deletes the saved session folder. False if the session is open (its
+	// transcript would recreate the folder) or the folder is not found.
+	bool remove(const QString &id);
 	// Only currently open sessions (for MCP).
 	[[nodiscard]] std::shared_ptr<Session> find(const QString &id) const;
 

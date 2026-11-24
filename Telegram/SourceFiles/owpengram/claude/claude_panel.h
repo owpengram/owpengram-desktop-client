@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "base/object_ptr.h"
 #include "base/unique_qptr.h"
+#include "owpengram/claude/claude_access_rules.h"
 #include "window/section_widget.h"
 #include "window/section_memento.h"
 
@@ -108,9 +109,7 @@ private:
 [[nodiscard]] std::shared_ptr<PanelMemento> MakePanelMemento(
 	not_null<Window::SessionController*> controller);
 
-// Filled by the session history (Task 6), called by the panel's history
-// button and menu item. Without a handler a toast is shown.
-void SetPanelHistoryHandler(
-	Fn<void(not_null<Window::SessionController*>)> handler);
+// "Temporary", "This chat", "This account", "Everything".
+[[nodiscard]] QString ScopeText(SessionScope scope);
 
 } // namespace Owpengram::Claude

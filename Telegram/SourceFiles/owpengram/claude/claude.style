@@ -161,3 +161,9 @@ owpengramClaudePanelReconnect: LinkButton(defaultLinkButton) {
 	font: font(12px);
 	overFont: font(12px underline);
 }
+
+// Session history box.
+owpengramClaudeHistoryRowHeight: 56px;
+owpengramClaudeHistoryRowTitleTop: 9px;
+owpengramClaudeHistoryRowAboutTop: 30px;
+owpengramClaudeHistoryEmptyPadding: margins(24px, 24px, 24px, 24px);

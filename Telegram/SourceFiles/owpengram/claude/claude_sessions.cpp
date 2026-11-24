@@ -321,6 +321,31 @@ std::shared_ptr<Session> Sessions::open(const QString &id) {
 	return nullptr;
 }
 
+bool Sessions::remove(const QString &id) {
+	pruneOpen();
+	if (id.isEmpty() || find(id)) {
+		return false;
+	}
+	const auto root = QDir(SessionsPath()).canonicalPath();
+	const auto dirs = QDir(SessionsPath()).entryInfoList(
+		QDir::Dirs | QDir::NoDotAndDotDot);
+	for (const auto &dir : dirs) {
+		const auto loaded = LoadFolder(dir.absoluteFilePath());
+		if (!loaded || loaded->info.id != id) {
+			continue;
+		}
+		// Only a direct, real child of ai/sessions/ (not a symlink out).
+		const auto canonical = dir.canonicalFilePath();
+		if (dir.isSymLink()
+			|| root.isEmpty()
+			|| QFileInfo(canonical).absolutePath() != root) {
+			return false;
+		}
+		return QDir(canonical).removeRecursively();
+	}
+	return false;
+}
+
 std::shared_ptr<Session> Sessions::find(const QString &id) const {
 	pruneOpen();
 	const auto i = _open.find(id);

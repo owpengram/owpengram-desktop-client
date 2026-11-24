@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "dialogs/dialogs_key.h"
 #include "lang/lang_keys.h"
+#include "owpengram/claude/claude_history_box.h"
 #include "owpengram/claude/claude_panel_connectors.h"
 #include "owpengram/claude/claude_panel_messages.h"
 #include "owpengram/claude/claude_panel_model.h"
@@ -34,14 +35,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtGui/QGuiApplication>
 
 namespace Owpengram::Claude {
-namespace {
 
-Fn<void(not_null<Window::SessionController*>)> &HistoryHandler() {
-	static auto result = Fn<void(not_null<Window::SessionController*>)>();
-	return result;
-}
-
-[[nodiscard]] QString ScopeText(SessionScope scope) {
+QString ScopeText(SessionScope scope) {
 	switch (scope) {
 	case SessionScope::Temporary:
 		return tr::lng_owpengram_claude_panel_scope_temporary(tr::now);
@@ -54,17 +49,6 @@ Fn<void(not_null<Window::SessionController*>)> &HistoryHandler() {
 	}
 	Unexpected("Scope in ScopeText.");
 }
-
-void ShowHistory(not_null<Window::SessionController*> controller) {
-	if (const auto &handler = HistoryHandler()) {
-		handler(controller);
-	} else {
-		controller->showToast(
-			tr::lng_owpengram_claude_panel_history_soon(tr::now));
-	}
-}
-
-} // namespace
 
 PanelMemento::PanelMemento(std::weak_ptr<PanelModel> model)
 : _model(std::move(model)) {
@@ -178,7 +162,7 @@ void PanelWidget::setupTop() {
 	tooltip(_menuToggle, tr::lng_owpengram_claude_panel_menu(tr::now));
 	tooltip(_history, tr::lng_owpengram_claude_panel_history(tr::now));
 	_menuToggle->setClickedCallback([=] { showMenu(); });
-	_history->setClickedCallback([=] { ShowHistory(controller()); });
+	_history->setClickedCallback([=] { ShowHistoryBox(controller()); });
 
 	auto &state = PanelStateFor(controller());
 	_pin->setClickedCallback([=] {
@@ -301,7 +285,7 @@ void PanelWidget::showMenu() {
 		&st::menuIconAddToFolder);
 	menu->addAction(
 		tr::lng_owpengram_claude_panel_history(tr::now),
-		crl::guard(this, [=] { ShowHistory(controller()); }),
+		crl::guard(this, [=] { ShowHistoryBox(controller()); }),
 		&st::menuIconSchedule);
 	menu->addSeparator();
 
@@ -439,9 +423,5 @@ std::shared_ptr<PanelMemento> MakePanelMemento(
 		controller->activeChatCurrent().peer()));
 }
 
-void SetPanelHistoryHandler(
-		Fn<void(not_null<Window::SessionController*>)> handler) {
-	HistoryHandler() = std::move(handler);
-}
 
 } // namespace Owpengram::Claude

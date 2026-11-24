@@ -1654,6 +1654,8 @@ PRIVATE
     owpengram/claude/claude_http_request.h
     owpengram/claude/claude_mcp_server.cpp
     owpengram/claude/claude_mcp_server.h
+    owpengram/claude/claude_history_box.cpp
+    owpengram/claude/claude_history_box.h
     owpengram/claude/claude_panel.cpp
     owpengram/claude/claude_panel.h
     owpengram/claude/claude_panel_connectors.cpp
