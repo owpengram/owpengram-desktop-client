@@ -336,7 +336,16 @@ void PanelWidget::setModel(std::shared_ptr<PanelModel> model) {
 	const auto messages = _scroll->setOwnedWidget(
 		object_ptr<PanelMessages>(this, _model));
 	_messages = messages.data();
-	Ui::SetStickyBottomScroll(_scroll.get(), messages.data());
+	// Not Ui::SetStickyBottomScroll: with Ui::ScrollArea its scrollHeight()
+	// is the content height, so it scrolls to the top on every message.
+	messages->heightValue(
+	) | rpl::combine_previous(
+	) | rpl::on_next([=](int previous, int height) {
+		const auto visible = _scroll->height();
+		if (_scroll->scrollTop() + visible >= previous - st::lineWidth) {
+			_scroll->scrollToY(std::max(height - visible, 0));
+		}
+	}, messages->lifetime());
 
 
 	updateControlsGeometry();

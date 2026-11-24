@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_session_controller.h"
 
+#include "owpengram/claude/claude_panel_toggle.h"
+
 #include "apiwrap.h"
 #include "api/api_cloud_password.h"
 #include "api/api_text_entities.h"
@@ -2679,6 +2681,11 @@ int SessionController::countDialogsWidthFromRatio(int bodyWidth) const {
 }
 
 int SessionController::countThirdColumnWidthFromRatio(int bodyWidth) const {
+	const auto self = const_cast<SessionController*>(this);
+	if (Owpengram::Claude::PanelInThirdColumn(self)) {
+		return Owpengram::Claude::PanelThirdColumnWidth(
+			bodyWidth - countDialogsWidthFromRatio(bodyWidth));
+	}
 	auto result = Core::App().settings().thirdColumnWidth();
 	accumulate_max(result, st::columnMinimalWidthThird);
 	accumulate_min(result, st::columnMaximalWidthThird);

@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/painter.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/menu/menu_action.h"
+#include "ui/widgets/menu/menu_item_base.h"
 #include "ui/widgets/popup_menu.h"
 #include "styles/style_claude.h"
 #include "styles/style_menu_icons.h"
@@ -78,6 +79,162 @@ struct ModelOption {
 			lt_when,
 			QLocale().dayName(local.date().dayOfWeek(), QLocale::ShortFormat)
 				+ ' ' + time);
+}
+
+// Blue, yellow from 75%, red from 90% (bars and the ring).
+[[nodiscard]] const style::color &UsageColor(double used) {
+	return (used >= 0.9)
+		? st::owpengramClaudeUsageDanger
+		: (used >= 0.75)
+		? st::owpengramClaudeUsageWarning
+		: st::owpengramClaudeUsageNormal;
+}
+
+[[nodiscard]] QString PlanName(const QString &plan) {
+	if (plan.isEmpty()) {
+		return QString();
+	}
+	return plan.left(1).toUpper() + plan.mid(1);
+}
+
+// The card in the usage popup: "Plan usage limits · Pro" with "See all"
+// and a row with a progress bar per limit window.
+class UsageItem final : public Ui::Menu::ItemBase {
+public:
+	UsageItem(
+		not_null<Ui::Menu::Menu*> parent,
+		const style::Menu &st,
+		Fn<void()> close);
+
+	not_null<QAction*> action() const override;
+	bool isEnabled() const override;
+
+protected:
+	void paintEvent(QPaintEvent *e) override;
+
+private:
+	struct Row {
+		QString name;
+		QString about;
+		double used = 0.;
+	};
+
+	int contentHeight() const override;
+
+	std::vector<Row> _rows;
+	QString _title;
+	const not_null<Ui::LinkButton*> _seeAll;
+	const not_null<QAction*> _dummyAction;
+
+};
+
+UsageItem::UsageItem(
+	not_null<Ui::Menu::Menu*> parent,
+	const style::Menu &st,
+	Fn<void()> close)
+: Ui::Menu::ItemBase(parent, st)
+, _seeAll(Ui::CreateChild<Ui::LinkButton>(
+	this,
+	tr::lng_owpengram_claude_usage_see_all(tr::now)
+		+ QString::fromUtf8(" \xE2\x86\x92"),
+	st::owpengramClaudeUsageLink))
+, _dummyAction(Ui::CreateChild<QAction>(parent)) {
+	setPointerCursor(false);
+
+	const auto plan = PlanName(CurrentAuthStatus().plan);
+	_title = tr::lng_owpengram_claude_usage_title(tr::now)
+		+ (plan.isEmpty() ? QString() : (u" \u00B7 "_q + plan));
+	const auto limits = CurrentUsageLimits();
+	const auto add = [&](
+			const ProcessEvents::RateLimits::Window &window,
+			QString name) {
+		if (!window.known) {
+			return;
+		}
+		auto about = ResetText(window.resetsAt);
+		if (!about.isEmpty()) {
+			about = about.left(1).toUpper() + about.mid(1) + u"  "_q;
+		}
+		about += QString::number(int(std::round(window.utilization * 100)))
+			+ '%';
+		_rows.push_back({ std::move(name), std::move(about), window.utilization });
+	};
+	add(limits.fiveHour, tr::lng_owpengram_claude_usage_five_hour(tr::now));
+	add(limits.weekly, tr::lng_owpengram_claude_usage_weekly(tr::now));
+
+	_seeAll->setClickedCallback([=] {
+		QDesktopServices::openUrl(QUrl(QString::fromLatin1(kUsageUrl)));
+		close();
+	});
+	setMinWidth(st::owpengramClaudeUsageWidth);
+	fitToMenuWidth();
+	widthValue() | rpl::on_next([=](int width) {
+		const auto &padding = st::owpengramClaudeUsagePadding;
+		_seeAll->moveToRight(padding.right(), padding.top(), width);
+	}, lifetime());
+}
+
+not_null<QAction*> UsageItem::action() const {
+	return _dummyAction;
+}
+
+bool UsageItem::isEnabled() const {
+	return false;
+}
+
+int UsageItem::contentHeight() const {
+	const auto &padding = st::owpengramClaudeUsagePadding;
+	const auto line = st::owpengramClaudeUsageFont->height;
+	const auto row = st::owpengramClaudeUsageRowSkip
+		+ line
+		+ st::owpengramClaudeUsageBarTop
+		+ st::owpengramClaudeUsageBarHeight;
+	return padding.top() + line + int(_rows.size()) * row + padding.bottom();
+}
+
+void UsageItem::paintEvent(QPaintEvent *e) {
+	auto p = QPainter(this);
+	const auto &padding = st::owpengramClaudeUsagePadding;
+	const auto &font = st::owpengramClaudeUsageFont;
+	const auto left = padding.left();
+	const auto inner = width() - padding.left() - padding.right();
+	auto top = padding.top();
+
+	p.setFont(font);
+	p.setPen(st::windowSubTextFg);
+	p.drawText(
+		left,
+		top + font->ascent,
+		font->elided(_title, inner - _seeAll->width() - font->spacew));
+	top += font->height;
+
+	auto hq = PainterHighQualityEnabler(p);
+	const auto barHeight = st::owpengramClaudeUsageBarHeight;
+	const auto radius = barHeight / 2.;
+	for (const auto &row : _rows) {
+		top += st::owpengramClaudeUsageRowSkip;
+		const auto aboutWidth = font->width(row.about);
+		p.setPen(st::windowFg);
+		p.drawText(
+			left,
+			top + font->ascent,
+			font->elided(row.name, inner - aboutWidth - font->spacew * 2));
+		p.setPen(st::windowSubTextFg);
+		p.drawText(left + inner - aboutWidth, top + font->ascent, row.about);
+		top += font->height + st::owpengramClaudeUsageBarTop;
+
+		p.setPen(Qt::NoPen);
+		p.setBrush(st::owpengramClaudeUsageBarBg);
+		p.drawRoundedRect(QRectF(left, top, inner, barHeight), radius, radius);
+		if (row.used > 0.) {
+			p.setBrush(UsageColor(row.used));
+			p.drawRoundedRect(
+				QRectF(left, top, std::max(inner * row.used, 2. * radius), barHeight),
+				radius,
+				radius);
+		}
+		top += barHeight;
+	}
 }
 
 } // namespace
@@ -196,9 +353,7 @@ void UsageRing::paintEvent(QPaintEvent *e) {
 	p.setPen(QPen(st::windowSubTextFg->c, line));
 	p.drawEllipse(rect);
 	if (used > 0.) {
-		auto pen = QPen((used >= 0.9)
-			? st::attentionButtonFg->c
-			: st::windowActiveTextFg->c, line);
+		auto pen = QPen(UsageColor(used)->c, line);
 		pen.setCapStyle(Qt::RoundCap);
 		p.setPen(pen);
 		p.drawArc(rect, 90 * 16, -int(std::round(used * 360 * 16)));
@@ -329,35 +484,16 @@ void PanelControls::showModeMenu() {
 }
 
 void PanelControls::showUsage() {
-	_menu = base::make_unique_q<Ui::PopupMenu>(
-		this,
-		st::popupMenuWithIcons);
+	_menu = base::make_unique_q<Ui::PopupMenu>(this, st::popupMenuWithIcons);
 	const auto menu = _menu.get();
-	const auto limits = CurrentUsageLimits();
-	menu->addAction(
-		tr::lng_owpengram_claude_usage_title(tr::now),
-		[] {})->setEnabled(false);
-	const auto line = [&](
-			const ProcessEvents::RateLimits::Window &window,
-			QString name) {
-		if (!window.known) {
-			return;
-		}
-		auto text = name
-			+ u" · "_q
-			+ QString::number(int(std::round(window.utilization * 100)))
-			+ '%';
-		if (const auto reset = ResetText(window.resetsAt); !reset.isEmpty()) {
-			text += u" · "_q + reset;
-		}
-		menu->addAction(text, [] {})->setEnabled(false);
-	};
-	line(limits.fiveHour, tr::lng_owpengram_claude_usage_five_hour(tr::now));
-	line(limits.weekly, tr::lng_owpengram_claude_usage_weekly(tr::now));
-	menu->addSeparator();
-	menu->addAction(tr::lng_owpengram_claude_usage_see_all(tr::now), [] {
-		QDesktopServices::openUrl(QUrl(QString::fromLatin1(kUsageUrl)));
-	}, &st::menuIconStats);
+	menu->addAction(base::make_unique_q<UsageItem>(
+		menu->menu(),
+		menu->st().menu,
+		crl::guard(this, [=] {
+			if (_menu) {
+				_menu->hideMenu();
+			}
+		})));
 	menu->setForcedOrigin(Ui::PanelAnimation::Origin::BottomRight);
 	menu->popup(mapToGlobal(QPoint(
 		_usage->x() + _usage->width(),

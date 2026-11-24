@@ -186,7 +186,7 @@ void Track(not_null<QProcess*> process) {
 [[nodiscard]] QString Summary(
 		const QString &name,
 		const QJsonObject &input) {
-	// Prefer the most informative well-known argument.
+	// A file / search tool: its most informative argument alone.
 	for (const auto key : {
 		"file_path", "path", "pattern", "query", "command", "url",
 	}) {
@@ -195,14 +195,28 @@ void Track(not_null<QProcess*> process) {
 			return Truncated(value.toString(), kMaxSummary);
 		}
 	}
+	// Else every scalar argument, so that two calls (a next page, another
+	// chat) look different. The account is the same in almost every call.
+	auto parts = QStringList();
 	for (auto i = input.begin(); i != input.end(); ++i) {
-		if (i.value().isString() && !i.value().toString().isEmpty()) {
-			return Truncated(
-				i.key() + u": "_q + i.value().toString(),
-				kMaxSummary);
+		if (i.key() == u"account"_q) {
+			continue;
+		}
+		const auto value = i.value();
+		const auto text = value.isString()
+			? value.toString()
+			: value.isDouble()
+			? QString::number(value.toDouble())
+			: value.isBool()
+			? (value.toBool() ? u"true"_q : u"false"_q)
+			: QString();
+		if (!text.isEmpty()) {
+			parts.push_back(i.key() + u": "_q + text);
 		}
 	}
-	return name;
+	return parts.isEmpty()
+		? QString()
+		: Truncated(parts.join(QString::fromUtf8(" \xC2\xB7 ")), kMaxSummary);
 }
 
 [[nodiscard]] QStringList SearchPaths() {

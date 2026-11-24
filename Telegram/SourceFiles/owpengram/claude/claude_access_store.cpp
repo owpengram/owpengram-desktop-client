@@ -279,6 +279,17 @@ void AccessStore::setPanelMode(const QString &mode) {
 	}
 }
 
+int AccessStore::panelWidth() const {
+	return _panelWidth;
+}
+
+void AccessStore::setPanelWidth(int width) {
+	if (_panelWidth != width) {
+		_panelWidth = std::max(width, 0);
+		scheduleSave(); // No changes() event: only the layout reads it.
+	}
+}
+
 bool AccessStore::panelOpen() const {
 	return _panelOpen;
 }
@@ -353,6 +364,7 @@ void AccessStore::load() {
 	_panelModel = read(u"model"_q);
 	_panelEffort = read(u"effort"_q);
 	_panelMode = read(u"mode"_q);
+	_panelWidth = std::clamp(panel.value(u"width"_q).toInt(0), 0, 10000);
 	_panelPinned = panel.value(u"pinned"_q).toBool(false);
 
 	const auto accounts = root.value(u"accounts"_q).toObject();
@@ -442,6 +454,7 @@ void AccessStore::save() {
 	panel.insert(u"model"_q, _panelModel);
 	panel.insert(u"effort"_q, _panelEffort);
 	panel.insert(u"mode"_q, panelMode());
+	panel.insert(u"width"_q, _panelWidth);
 	root.insert(u"panel"_q, panel);
 	root.insert(u"accounts"_q, accounts);
 

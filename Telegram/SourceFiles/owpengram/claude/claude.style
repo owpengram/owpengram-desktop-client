@@ -38,6 +38,7 @@ owpengramClaudeTopBar: IconButton(topBarSearch) {
 	iconOver: icon {{ "owpengram/claude_spark-24x24", menuIconFgOver }};
 }
 owpengramClaudeTopBarFont: font(14px semibold);
+owpengramClaudeNoChatSkip: 8px;
 
 // The panel as a layer when the window has no room for a third column.
 owpengramClaudePanelLayerWidth: 420px;
@@ -115,6 +116,10 @@ owpengramClaudePanelBubblePadding: margins(12px, 8px, 12px, 8px);
 owpengramClaudePanelBubbleRadius: 14px;
 owpengramClaudePanelBubbleLeftSkip: 40px;
 owpengramClaudePanelNoticeButtonSkip: 6px;
+owpengramClaudePanelToolsToggle: LinkButton(defaultLinkButton) {
+	color: windowSubTextFg;
+	overColor: windowSubTextFg;
+}
 
 owpengramClaudePanelInputMargin: margins(8px, 5px, 8px, 5px);
 owpengramClaudePanelInputPadding: margins(1px, 1px, 1px, 1px);
@@ -157,6 +162,22 @@ owpengramClaudeControlSkip: 2px;
 owpengramClaudeControlsMargin: margins(8px, 0px, 8px, 6px);
 owpengramClaudeUsageRingSize: 14px;
 owpengramClaudeUsageRingLine: 2px;
+owpengramClaudeUsageNormal: windowActiveTextFg;
+owpengramClaudeUsageWarning: statisticsChartLineGolden;
+owpengramClaudeUsageDanger: statisticsChartLineRed;
+owpengramClaudeUsageBarBg: windowBgOver;
+owpengramClaudeUsageWidth: 320px;
+owpengramClaudeUsagePadding: margins(16px, 12px, 16px, 14px);
+owpengramClaudeUsageRowSkip: 14px;
+owpengramClaudeUsageBarTop: 6px;
+owpengramClaudeUsageBarHeight: 4px;
+owpengramClaudeUsageFont: font(13px);
+owpengramClaudeUsageLink: LinkButton(defaultLinkButton) {
+	color: windowFg;
+	overColor: windowFg;
+	font: font(13px);
+	overFont: font(13px underline);
+}
 
 owpengramClaudePanelConnectorsPadding: margins(16px, 4px, 16px, 12px);
 owpengramClaudePanelConnectorsTitle: FlatLabel(owpengramClaudePanelSubText) {

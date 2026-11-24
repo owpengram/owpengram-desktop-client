@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "dialogs/dialogs_key.h"
+#include "owpengram/claude/claude_access_store.h"
 #include "owpengram/claude/claude_panel.h"
 #include "owpengram/claude/claude_panel_model.h"
 #include "ui/layers/layer_widget.h"
@@ -17,6 +18,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_adaptive.h"
 #include "window/window_session_controller.h"
 #include "styles/style_claude.h"
+#include "styles/style_window.h"
 
 namespace Owpengram::Claude {
 namespace {
@@ -102,6 +104,21 @@ void PanelLayer::closeHook() {
 }
 
 } // namespace
+
+bool PanelInThirdColumn(not_null<Window::SessionController*> controller) {
+	const auto state = PanelStateIfExists(controller);
+	return state && ShownInThirdColumn(*state);
+}
+
+int PanelThirdColumnWidth(int chatAndThirdWidth) {
+	const auto minimal = int(st::columnMinimalWidthThird);
+	const auto maximal = std::max(chatAndThirdWidth / 2, minimal);
+	const auto stored = Access().panelWidth();
+	return std::clamp(
+		stored ? stored : int(st::columnMaximalWidthThird),
+		minimal,
+		maximal);
+}
 
 bool PanelShown(not_null<Window::SessionController*> controller) {
 	return PanelStateFor(controller).widgets.current() > 0;
@@ -207,13 +224,10 @@ bool HandleActiveChatChanged(
 			return true;
 		}
 		return false;
-	} else if (state.inLayer
-		|| !peer
-		|| !controller->adaptive().isThreeColumn()) {
-		// No chat: the third column goes away, the pinned panel comes
-		// back with the next chat.
+	} else if (state.inLayer || !controller->adaptive().isThreeColumn()) {
 		return false;
 	}
+	// Pinned: stays (with no chat too, Claude works without one).
 	if (!ShownInThirdColumn(state)) {
 		controller->showSection(
 			CurrentPanelMemento(controller),

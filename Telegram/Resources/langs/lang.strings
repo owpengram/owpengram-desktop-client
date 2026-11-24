@@ -8882,6 +8882,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_claude_usage_see_all" = "See all";
 "lng_owpengram_claude_attach" = "Attach file";
 "lng_owpengram_claude_attach_failed" = "Could not attach the file.";
+"lng_owpengram_claude_panel_tools_used#one" = "Used {count} tool";
+"lng_owpengram_claude_panel_tools_used#other" = "Used {count} tools";
 "lng_owpengram_claude_history_search" = "Search";
 "lng_owpengram_claude_history_empty" = "No saved sessions yet.";
 "lng_owpengram_claude_history_not_found" = "No sessions found.";

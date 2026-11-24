@@ -72,6 +72,10 @@ template <typename Widget>
 class SlideWrap;
 } // namespace Ui
 
+namespace Owpengram::Claude {
+class TopBarButton;
+} // namespace Owpengram::Claude
+
 namespace Window {
 class SessionController;
 template <typename Inner>
@@ -246,6 +250,7 @@ private:
 	void updateControlsGeometry();
 	void updateMainSectionShown();
 	void updateDialogsWidthAnimated();
+	void updateClaudeNoChatButton();
 	void updateThirdColumnToCurrentChat(
 		Dialogs::Key key,
 		bool canWrite);
@@ -351,6 +356,8 @@ private:
 	const base::unique_qptr<HistoryWidget> _history;
 	object_ptr<Window::SectionWidget> _mainSection = { nullptr };
 	object_ptr<Window::SectionWidget> _thirdSection = { nullptr };
+	// "AI" in the empty chat area: the Claude panel works without a chat.
+	object_ptr<Owpengram::Claude::TopBarButton> _claudeNoChat = { nullptr };
 	std::shared_ptr<Window::SectionMemento> _thirdSectionFromStack;
 	std::unique_ptr<Window::ConnectionState> _connecting;
 

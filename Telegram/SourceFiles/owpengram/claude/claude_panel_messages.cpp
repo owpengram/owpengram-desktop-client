@@ -138,6 +138,9 @@ PanelMessages::PanelMessages(
 
 void PanelMessages::addEntry(const FeedEntry &entry) {
 	_empty = false;
+	if (entry.type != FeedEntryType::Tool) {
+		finishToolGroup();
+	}
 	switch (entry.type) {
 	case FeedEntryType::User: addUser(entry.text); break;
 	case FeedEntryType::Assistant: addAssistant(entry.text); break;
@@ -146,6 +149,13 @@ void PanelMessages::addEntry(const FeedEntry &entry) {
 	case FeedEntryType::NotInstalled:
 	case FeedEntryType::Failed:
 	case FeedEntryType::Error: addNotice(entry); break;
+	}
+	fitEntries();
+}
+
+void PanelMessages::fitEntries() {
+	if (const auto width = _entries->width(); width > 0) {
+		_entries->resizeToWidth(width);
 	}
 }
 
@@ -196,18 +206,66 @@ void PanelMessages::addAssistant(const QString &text) {
 
 void PanelMessages::addTool(const QString &text) {
 	const auto &padding = st::owpengramClaudePanelFeedPadding;
-	const auto label = _entries->add(
-		object_ptr<Ui::FlatLabel>(
-			_entries,
-			QString::fromUtf8("\xF0\x9F\x94\xA7 ") + text,
-			st::owpengramClaudePanelSubText),
+	if (!_toolDetails) {
+		_toolCount = 0;
+		_toolHeader = _entries->add(
+			object_ptr<Ui::SlideWrap<Ui::LinkButton>>(
+				_entries,
+				object_ptr<Ui::LinkButton>(
+					_entries,
+					QString(),
+					st::owpengramClaudePanelToolsToggle),
+				style::margins(
+					padding.left(),
+					st::owpengramClaudePanelEntrySkip,
+					padding.right(),
+					0)),
+			style::margins(),
+			style::al_justify);
+		_toolHeader->hide(anim::type::instant);
+		_toolDetailsWrap = _entries->add(
+			object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+				_entries,
+				object_ptr<Ui::VerticalLayout>(_entries)),
+			style::margins(),
+			style::al_justify);
+		_toolDetails = _toolDetailsWrap->entity();
+		const auto details = _toolDetailsWrap;
+		_toolHeader->entity()->setClickedCallback([=] {
+			details->toggle(details->isHidden(), anim::type::normal);
+		});
+	}
+	++_toolCount;
+	auto owned = object_ptr<Ui::FlatLabel>(
+		_toolDetails,
+		QString::fromUtf8("\xF0\x9F\x94\xA7 ") + text,
+		st::owpengramClaudePanelSubText);
+	owned->setSelectable(true);
+	_toolDetails->add(
+		std::move(owned),
 		style::margins(
 			padding.left(),
 			st::owpengramClaudePanelEntrySkip,
 			padding.right(),
 			0),
 		style::al_justify);
-	label->setSelectable(true);
+	_toolDetailsWrap->resizeToWidth(_entries->width());
+}
+
+void PanelMessages::finishToolGroup() {
+	if (!_toolDetails) {
+		return;
+	}
+	_toolHeader->entity()->setText(QString::fromUtf8("\xF0\x9F\x94\xA7 ")
+		+ tr::lng_owpengram_claude_panel_tools_used(
+			tr::now,
+			lt_count,
+			_toolCount));
+	_toolHeader->show(anim::type::instant);
+	_toolDetailsWrap->hide(anim::type::instant);
+	_toolDetails = nullptr;
+	_toolDetailsWrap = nullptr;
+	_toolHeader = nullptr;
 }
 
 void PanelMessages::addNotice(const FeedEntry &entry) {

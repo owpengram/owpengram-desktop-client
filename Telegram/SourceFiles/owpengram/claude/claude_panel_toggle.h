@@ -30,6 +30,14 @@ namespace Owpengram::Claude {
 [[nodiscard]] rpl::producer<bool> PanelShownValue(
 	not_null<Window::SessionController*> controller);
 
+// The panel is the widget in the third column right now.
+[[nodiscard]] bool PanelInThirdColumn(
+	not_null<Window::SessionController*> controller);
+
+// Third column width while the panel is there: its own stored width, up to
+// half of the chat + panel width (Info keeps the usual maximum).
+[[nodiscard]] int PanelThirdColumnWidth(int chatAndThirdWidth);
+
 // The top bar button: closes a shown panel, else opens it.
 void TogglePanel(not_null<Window::SessionController*> controller);
 void OpenPanel(not_null<Window::SessionController*> controller);

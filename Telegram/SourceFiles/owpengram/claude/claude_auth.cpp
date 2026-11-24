@@ -99,6 +99,7 @@ struct ParsedStatus {
 	bool ok = false;
 	bool loggedIn = false;
 	QString email;
+	QString plan;
 };
 
 [[nodiscard]] ParsedStatus ParseStatus(const QByteArray &output) {
@@ -114,6 +115,9 @@ struct ParsedStatus {
 		.ok = true,
 		.loggedIn = loggedIn,
 		.email = loggedIn ? object.value(u"email"_q).toString() : QString(),
+		.plan = loggedIn
+			? object.value(u"subscriptionType"_q).toString()
+			: QString(),
 	};
 }
 
@@ -193,6 +197,7 @@ void RefreshAuthStatus() {
 			status.known = true;
 			status.loggedIn = parsed.loggedIn;
 			status.email = parsed.email;
+			status.plan = parsed.plan;
 		});
 		if (profile.isEmpty()) {
 			State().systemEmail = parsed.email;

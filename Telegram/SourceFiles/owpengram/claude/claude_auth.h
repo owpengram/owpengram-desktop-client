@@ -23,6 +23,8 @@ struct AuthStatus {
 	bool known = false;
 	bool loggedIn = false;
 	QString email;
+	// "pro", "max", ... (subscriptionType), empty if unknown.
+	QString plan;
 	// `claude auth login` is running (waits for the browser sign-in).
 	bool loginRunning = false;
 	// The sign-in page printed by claude, if the browser did not open.

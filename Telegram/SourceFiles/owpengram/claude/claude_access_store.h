@@ -85,6 +85,10 @@ public:
 	void setPanelEffort(const QString &effort);
 	[[nodiscard]] QString panelMode() const;
 	void setPanelMode(const QString &mode);
+	// Width of the panel in the third column (its own, not Info's), 0 -
+	// the default third column width.
+	[[nodiscard]] int panelWidth() const;
+	void setPanelWidth(int width);
 
 	// Claude side panel: open (restored only when pinned) and pinned.
 	[[nodiscard]] bool panelOpen() const;
@@ -115,6 +119,7 @@ private:
 	QString _panelModel;
 	QString _panelEffort;
 	QString _panelMode;
+	int _panelWidth = 0;
 	bool _panelOpen = false;
 	bool _panelPinned = false;
 
