@@ -83,6 +83,7 @@ private:
 	void showMenu();
 	void showScopeMenu();
 	void showConnectors();
+	void switchAccount(const QString &profileId);
 	void fillNewSessionMenu(not_null<Ui::PopupMenu*> menu);
 	void updateControlsGeometry();
 	void setupAuth();

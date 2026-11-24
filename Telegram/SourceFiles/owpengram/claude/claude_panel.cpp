@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "dialogs/dialogs_key.h"
 #include "lang/lang_keys.h"
+#include "owpengram/claude/claude_access_store.h"
 #include "owpengram/claude/claude_auth.h"
 #include "owpengram/claude/claude_history_box.h"
 #include "owpengram/claude/claude_panel_connectors.h"
@@ -326,6 +327,15 @@ void PanelWidget::showScopeMenu() {
 	_menu->popup(QCursor::pos());
 }
 
+void PanelWidget::switchAccount(const QString &profileId) {
+	SelectAccount(profileId);
+	// claude keeps conversations per account: continue in a new session
+	// of the same type under the chosen account.
+	if (_model) {
+		StartNewSession(controller(), _model->scope());
+	}
+}
+
 void PanelWidget::showConnectors() {
 	const auto model = _model;
 	if (!model) {
@@ -368,22 +378,40 @@ void PanelWidget::showMenu() {
 	FillClaudeSettingsMenu(menu, controller());
 	menu->addSeparator();
 
+	// Claude accounts: the system sign-in and the ones added here.
 	const auto auth = CurrentAuthStatus();
-	if (auth.loggedIn && !auth.email.isEmpty()) {
-		menu->addAction(
-			tr::lng_owpengram_claude_auth_signed_in(
-				tr::now,
-				lt_email,
-				auth.email),
-			[] {})->setEnabled(false);
+	const auto selected = Access().selectedClaudeProfile();
+	const auto addAccount = [&](const QString &id, const QString &email) {
+		const auto chosen = (id == selected);
+		const auto text = !email.isEmpty()
+			? tr::lng_owpengram_claude_account(tr::now, lt_email, email)
+			: tr::lng_owpengram_claude_account_signed_out(tr::now);
+		menu->addAction(text, crl::guard(this, [=] {
+			if (!chosen) {
+				switchAccount(id);
+			}
+		}), chosen ? &st::menuIconSelect : nullptr);
+	};
+	const auto systemEmail = (selected.isEmpty() && auth.known)
+		? auth.email
+		: SystemEmail();
+	if (!systemEmail.isEmpty() || selected.isEmpty()) {
+		addAccount(QString(), systemEmail);
+	}
+	for (const auto &profile : Access().claudeProfiles()) {
+		addAccount(profile.id, profile.email);
 	}
 	if (!auth.loginRunning) {
+		if (auth.known && !auth.loggedIn) {
+			menu->addAction(
+				tr::lng_owpengram_claude_auth_sign_in(tr::now),
+				[] { StartLogin(); },
+				&st::menuIconProfile);
+		}
 		menu->addAction(
-			(auth.loggedIn
-				? tr::lng_owpengram_claude_auth_switch(tr::now)
-				: tr::lng_owpengram_claude_auth_sign_in(tr::now)),
-			[] { StartLogin(); },
-			&st::menuIconProfile);
+			tr::lng_owpengram_claude_account_add(tr::now),
+			[] { AddAccount(); },
+			&st::menuIconAddToFolder);
 	}
 	menu->addSeparator();
 

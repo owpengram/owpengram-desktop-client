@@ -79,7 +79,13 @@ void SetConfiguredClaudePath(const QString &path);
 // /opt/homebrew/bin/claude, /usr/local/bin/claude. Empty if none.
 [[nodiscard]] QString FindClaudeBinary(const QString &configured);
 [[nodiscard]] QString ConfiguredClaudePath();
-// The system environment with PATH extended for a GUI-launched claude.
+// The system environment with PATH extended for a GUI-launched claude and
+// CLAUDE_CONFIG_DIR of the Claude account profile (empty id - the system
+// sign-in, the environment is left as is).
+[[nodiscard]] QProcessEnvironment ClaudeEnvironment(
+	const QString &binary,
+	const QString &profileId);
+// The same for the selected profile (AccessStore).
 [[nodiscard]] QProcessEnvironment ClaudeEnvironment(const QString &binary);
 
 // One `claude -p` process per open panel session. Main thread only.

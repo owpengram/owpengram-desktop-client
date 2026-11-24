@@ -13,8 +13,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 namespace Owpengram::Claude {
 
-// Sign-in of the local Claude Code (`claude auth status / login`), the
-// account the panel sessions use. Main thread only.
+// Sign-in of the local Claude Code (`claude auth status / login`) of the
+// selected account profile, the one the panel sessions use. Main thread only.
 struct AuthStatus {
 	// False until the first `claude auth status` finished (or when claude
 	// is not installed: the panel shows its own notice for that).
@@ -36,9 +36,20 @@ struct AuthStatus {
 [[nodiscard]] AuthStatus CurrentAuthStatus();
 void RefreshAuthStatus();
 
-// `claude auth login --claudeai`: opens the browser to sign in with the
-// Claude subscription, refreshes the status when it ends.
+// `claude auth login --claudeai` for the selected profile: opens the
+// browser to sign in with the Claude subscription, refreshes the status.
 void StartLogin();
+// The same into a new profile folder; on success the profile is saved with
+// its email and selected, else its folder is removed.
+void AddAccount();
 void CancelLogin();
+
+// The email of the system claude sign-in (no CLAUDE_CONFIG_DIR override),
+// empty if signed out or not checked yet.
+[[nodiscard]] rpl::producer<QString> SystemEmailValue();
+[[nodiscard]] QString SystemEmail();
+
+// Makes the profile the one panel sessions use (empty id - system).
+void SelectAccount(const QString &profileId);
 
 } // namespace Owpengram::Claude

@@ -246,7 +246,9 @@ QString FindClaudeBinary(const QString &configured) {
 	return QString();
 }
 
-QProcessEnvironment ClaudeEnvironment(const QString &binary) {
+QProcessEnvironment ClaudeEnvironment(
+		const QString &binary,
+		const QString &profileId) {
 	// GUI apps do not inherit the login PATH: claude's node / helpers must
 	// still resolve.
 	auto env = QProcessEnvironment::systemEnvironment();
@@ -263,7 +265,19 @@ QProcessEnvironment ClaudeEnvironment(const QString &binary) {
 		path += ':' + old;
 	}
 	env.insert(u"PATH"_q, path);
+	if (!profileId.isEmpty()) {
+		const auto dir = ClaudeProfilePath(profileId);
+		QDir().mkpath(dir);
+		// The folder holds the account credentials: owner only.
+		QFile(dir).setPermissions(
+			QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+		env.insert(u"CLAUDE_CONFIG_DIR"_q, QDir::cleanPath(dir));
+	}
 	return env;
+}
+
+QProcessEnvironment ClaudeEnvironment(const QString &binary) {
+	return ClaudeEnvironment(binary, Access().selectedClaudeProfile());
 }
 
 QString ConfiguredClaudePath() {

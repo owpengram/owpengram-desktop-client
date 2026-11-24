@@ -8850,8 +8850,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_claude_panel_folder_copied" = "Folder path copied.";
 "lng_owpengram_claude_auth_signed_out" = "Claude Code is not signed in. Sign in with your Claude subscription to use the panel.";
 "lng_owpengram_claude_auth_sign_in" = "Sign in with Claude";
-"lng_owpengram_claude_auth_switch" = "Sign in with another Claude account";
-"lng_owpengram_claude_auth_signed_in" = "Claude: {email}";
+"lng_owpengram_claude_account" = "Claude ({email})";
+"lng_owpengram_claude_account_signed_out" = "Claude (not signed in)";
+"lng_owpengram_claude_account_add" = "Add Claude account";
 "lng_owpengram_claude_auth_waiting" = "Finish signing in to Claude in your browser.";
 "lng_owpengram_claude_auth_open_page" = "Open the sign-in page";
 "lng_owpengram_claude_auth_cancel" = "Cancel sign-in";

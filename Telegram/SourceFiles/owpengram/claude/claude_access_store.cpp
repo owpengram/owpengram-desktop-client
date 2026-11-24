@@ -24,6 +24,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QRegularExpression>
+#include <QtCore/QJsonArray>
 #include <QtCore/QSaveFile>
 
 namespace Owpengram::Claude {
@@ -188,6 +190,58 @@ void AccessStore::regenerateMcpToken() {
 	_changes.fire({});
 }
 
+const std::vector<AccessStore::ClaudeProfile> &AccessStore::claudeProfiles(
+) const {
+	return _claudeProfiles;
+}
+
+void AccessStore::setClaudeProfile(const QString &id, const QString &email) {
+	if (id.isEmpty()) {
+		return;
+	}
+	for (auto &profile : _claudeProfiles) {
+		if (profile.id == id) {
+			if (profile.email != email) {
+				profile.email = email;
+				scheduleSave();
+				_changes.fire({});
+			}
+			return;
+		}
+	}
+	_claudeProfiles.push_back({ .id = id, .email = email });
+	scheduleSave();
+	_changes.fire({});
+}
+
+void AccessStore::removeClaudeProfile(const QString &id) {
+	const auto i = ranges::find(_claudeProfiles, id, &ClaudeProfile::id);
+	if (i == end(_claudeProfiles)) {
+		return;
+	}
+	_claudeProfiles.erase(i);
+	if (_selectedClaudeProfile == id) {
+		_selectedClaudeProfile = QString();
+	}
+	scheduleSave();
+	_changes.fire({});
+}
+
+QString AccessStore::selectedClaudeProfile() const {
+	return _selectedClaudeProfile;
+}
+
+void AccessStore::selectClaudeProfile(const QString &id) {
+	const auto known = id.isEmpty()
+		|| ranges::contains(_claudeProfiles, id, &ClaudeProfile::id);
+	if (!known || _selectedClaudeProfile == id) {
+		return;
+	}
+	_selectedClaudeProfile = id;
+	scheduleSave();
+	_changes.fire({});
+}
+
 bool AccessStore::panelOpen() const {
 	return _panelOpen;
 }
@@ -232,6 +286,24 @@ void AccessStore::load() {
 	const auto port = mcp.value(u"port"_q).toInt(kDefaultMcpPort);
 	_mcpPort = (port > 0 && port < 65536) ? port : kDefaultMcpPort;
 	_mcpToken = mcp.value(u"token"_q).toString();
+
+	const auto claude = root.value(u"claude"_q).toObject();
+	for (const auto &value : claude.value(u"profiles"_q).toArray()) {
+		const auto object = value.toObject();
+		const auto id = object.value(u"id"_q).toString();
+		// The id is a folder name: only what NewProfileId() makes.
+		static const auto valid = QRegularExpression(u"^[a-f0-9]{32}$"_q);
+		if (valid.match(id).hasMatch()) {
+			_claudeProfiles.push_back({
+				.id = id,
+				.email = object.value(u"email"_q).toString(),
+			});
+		}
+	}
+	const auto selected = claude.value(u"selected"_q).toString();
+	if (ranges::contains(_claudeProfiles, selected, &ClaudeProfile::id)) {
+		_selectedClaudeProfile = selected;
+	}
 
 	const auto panel = root.value(u"panel"_q).toObject();
 	_panelOpen = panel.value(u"open"_q).toBool(false);
@@ -307,6 +379,17 @@ void AccessStore::save() {
 	auto root = QJsonObject();
 	root.insert(u"version"_q, kFileVersion);
 	root.insert(u"mcp"_q, mcp);
+	auto profiles = QJsonArray();
+	for (const auto &profile : _claudeProfiles) {
+		auto object = QJsonObject();
+		object.insert(u"id"_q, profile.id);
+		object.insert(u"email"_q, profile.email);
+		profiles.push_back(object);
+	}
+	auto claude = QJsonObject();
+	claude.insert(u"profiles"_q, profiles);
+	claude.insert(u"selected"_q, _selectedClaudeProfile);
+	root.insert(u"claude"_q, claude);
 	auto panel = QJsonObject();
 	panel.insert(u"open"_q, _panelOpen);
 	panel.insert(u"pinned"_q, _panelPinned);
@@ -323,6 +406,10 @@ void AccessStore::save() {
 		|| !file.commit()) {
 		LOG(("Claude: could not write access file."));
 	}
+}
+
+QString ClaudeProfilePath(const QString &id) {
+	return cWorkingDir() + u"tdata/owpengram_claude_profiles/"_q + id + '/';
 }
 
 AccessStore &Access() {

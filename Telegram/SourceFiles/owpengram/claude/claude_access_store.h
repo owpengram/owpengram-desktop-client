@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <rpl/producer.h>
 
 #include <optional>
+#include <vector>
 
 #include <QtCore/QString>
 
@@ -61,6 +62,20 @@ public:
 	[[nodiscard]] QString mcpToken();
 	void regenerateMcpToken();
 
+	// Claude Code accounts added in OwpenGram, each in its own claude
+	// config folder (ClaudeProfilePath). The empty id is the system
+	// claude sign-in (no CLAUDE_CONFIG_DIR override).
+	struct ClaudeProfile {
+		QString id;
+		QString email;
+	};
+	[[nodiscard]] const std::vector<ClaudeProfile> &claudeProfiles() const;
+	void setClaudeProfile(const QString &id, const QString &email);
+	void removeClaudeProfile(const QString &id);
+	// Empty = the system sign-in.
+	[[nodiscard]] QString selectedClaudeProfile() const;
+	void selectClaudeProfile(const QString &id);
+
 	// Claude side panel: open (restored only when pinned) and pinned.
 	[[nodiscard]] bool panelOpen() const;
 	void setPanelOpen(bool open);
@@ -85,6 +100,8 @@ private:
 	bool _mcpEnabled = false;
 	int _mcpPort = kDefaultMcpPort;
 	QString _mcpToken;
+	std::vector<ClaudeProfile> _claudeProfiles;
+	QString _selectedClaudeProfile;
 	bool _panelOpen = false;
 	bool _panelPinned = false;
 
@@ -94,6 +111,9 @@ private:
 	rpl::event_stream<> _changes;
 
 };
+
+// tdata/owpengram_claude_profiles/<id>/ (holds the account's credentials).
+[[nodiscard]] QString ClaudeProfilePath(const QString &id);
 
 // Lazily created, lives until process exit (flushed on aboutToQuit).
 [[nodiscard]] AccessStore &Access();
