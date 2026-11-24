@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <vector>
 
 class QProcess;
+class QProcessEnvironment;
 
 namespace Owpengram::Claude {
 
@@ -77,6 +78,9 @@ void SetConfiguredClaudePath(const QString &path);
 // Configured path, ~/.local/bin/claude, ~/.claude/local/claude,
 // /opt/homebrew/bin/claude, /usr/local/bin/claude. Empty if none.
 [[nodiscard]] QString FindClaudeBinary(const QString &configured);
+[[nodiscard]] QString ConfiguredClaudePath();
+// The system environment with PATH extended for a GUI-launched claude.
+[[nodiscard]] QProcessEnvironment ClaudeEnvironment(const QString &binary);
 
 // One `claude -p` process per open panel session. Main thread only.
 // Every send() and every assistant text goes to Session::appendTranscript.

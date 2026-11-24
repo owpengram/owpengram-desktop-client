@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "dialogs/dialogs_key.h"
 #include "lang/lang_keys.h"
+#include "owpengram/claude/claude_auth.h"
 #include "owpengram/claude/claude_history_box.h"
 #include "owpengram/claude/claude_panel_connectors.h"
 #include "owpengram/claude/claude_panel_messages.h"
@@ -25,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/shadow.h"
 #include "window/window_session_controller.h"
 #include "styles/style_claude.h"
+#include "styles/style_info.h"
 #include "styles/style_menu_icons.h"
 #include "styles/style_widgets.h"
 
@@ -110,9 +112,16 @@ PanelWidget::PanelWidget(
 	tr::lng_owpengram_claude_panel_placeholder()))
 , _send(Ui::CreateChild<Ui::IconButton>(
 	_inputWrap.get(),
-	st::owpengramClaudePanelSend)) {
+	st::owpengramClaudePanelSend))
+, _auth(Ui::CreateChild<Ui::RpWidget>(this))
+, _authText(Ui::CreateChild<Ui::FlatLabel>(
+	_auth.get(),
+	QString(),
+	st::owpengramClaudePanelSubText))
+, _authButton(Ui::CreateChild<Ui::LinkButton>(_auth.get(), QString())) {
 	setupTop();
 	setupInput();
+	setupAuth();
 
 	auto &state = PanelStateFor(controller);
 	state.widgets = state.widgets.current() + 1;
@@ -141,7 +150,8 @@ void PanelWidget::setupTop() {
 		p.fillRect(_top->rect(), st::windowBg);
 		st::owpengramClaudePanelSpark.paint(
 			p,
-			st::owpengramClaudePanelSparkPosition,
+			st::owpengramClaudePanelSparkPosition.x(),
+			(_top->height() - st::owpengramClaudePanelSpark.height()) / 2,
 			_top->width());
 	}, _top->lifetime());
 
@@ -206,6 +216,57 @@ void PanelWidget::setupInput() {
 		updateControlsGeometry();
 	}, _field->lifetime());
 	_send->setClickedCallback([=] { submit(); });
+}
+
+void PanelWidget::setupAuth() {
+	_auth->hide();
+	_authText->setAttribute(Qt::WA_TransparentForMouseEvents);
+	AuthStatusValue(
+	) | rpl::on_next([=](const AuthStatus &status) {
+		const auto shown = status.loginRunning
+			|| (status.known && !status.loggedIn);
+		_auth->setVisible(shown);
+		if (status.loginRunning) {
+			_authText->setText(
+				tr::lng_owpengram_claude_auth_waiting(tr::now));
+			_authButton->setText(status.loginUrl.isEmpty()
+				? tr::lng_owpengram_claude_auth_cancel(tr::now)
+				: tr::lng_owpengram_claude_auth_open_page(tr::now));
+		} else {
+			_authText->setText(
+				tr::lng_owpengram_claude_auth_signed_out(tr::now));
+			_authButton->setText(
+				tr::lng_owpengram_claude_auth_sign_in(tr::now));
+		}
+		updateControlsGeometry();
+	}, _auth->lifetime());
+	_authButton->setClickedCallback([=] {
+		const auto status = CurrentAuthStatus();
+		if (!status.loginRunning) {
+			StartLogin();
+		} else if (!status.loginUrl.isEmpty()) {
+			QDesktopServices::openUrl(QUrl(status.loginUrl));
+		} else {
+			CancelLogin();
+		}
+	});
+}
+
+int PanelWidget::updateAuthGeometry(int width) {
+	if (_auth->isHidden()) {
+		return 0;
+	}
+	const auto &padding = st::owpengramClaudePanelFeedPadding;
+	const auto inner = std::max(width - padding.left() - padding.right(), 1);
+	_authText->resizeToWidth(inner);
+	_authText->moveToLeft(padding.left(), padding.top(), width);
+	const auto buttonTop = _authText->y()
+		+ _authText->height()
+		+ st::owpengramClaudePanelNoticeButtonSkip;
+	_authButton->moveToLeft(padding.left(), buttonTop, width);
+	const auto height = buttonTop + _authButton->height();
+	_auth->resize(width, height);
+	return height;
 }
 
 void PanelWidget::setModel(std::shared_ptr<PanelModel> model) {
@@ -292,6 +353,25 @@ void PanelWidget::showMenu() {
 	FillClaudeSettingsMenu(menu, controller());
 	menu->addSeparator();
 
+	const auto auth = CurrentAuthStatus();
+	if (auth.loggedIn && !auth.email.isEmpty()) {
+		menu->addAction(
+			tr::lng_owpengram_claude_auth_signed_in(
+				tr::now,
+				lt_email,
+				auth.email),
+			[] {})->setEnabled(false);
+	}
+	if (!auth.loginRunning) {
+		menu->addAction(
+			(auth.loggedIn
+				? tr::lng_owpengram_claude_auth_switch(tr::now)
+				: tr::lng_owpengram_claude_auth_sign_in(tr::now)),
+			[] { StartLogin(); },
+			&st::menuIconProfile);
+	}
+	menu->addSeparator();
+
 	const auto ai = AllSessions().aiPath();
 	menu->addAction(
 		tr::lng_owpengram_claude_panel_open_folder(tr::now),
@@ -317,20 +397,30 @@ void PanelWidget::updateControlsGeometry() {
 	if (width <= 0) {
 		return;
 	}
-	const auto topHeight = st::owpengramClaudePanelTopHeight;
+	// Same height as the chat top bar next to the panel.
+	const auto topHeight = st::topBarHeight;
 	_top->setGeometry(0, 0, width, topHeight);
 	auto right = st::owpengramClaudePanelButtonsRight;
 	for (const auto button : { _close, _menuToggle, _pin, _history }) {
-		button->moveToRight(right, 0, width);
+		button->moveToRight(
+			right,
+			(topHeight - button->height()) / 2,
+			width);
 		right += button->width();
 	}
-	_title->moveToLeft(
-		st::owpengramClaudePanelTitlePosition.x(),
-		st::owpengramClaudePanelTitlePosition.y(),
-		width);
+	// The title goes first when there is no room for both: the session
+	// type chip must never run under the buttons.
+	const auto left = st::owpengramClaudePanelTitlePosition.x();
+	const auto skip = st::owpengramClaudePanelChipSkip;
+	const auto buttonsLeft = width - right;
+	const auto withTitle = left + _title->width() + skip + _chip->width();
+	const auto showTitle = (withTitle + skip <= buttonsLeft);
+	_title->setVisible(showTitle);
+	_title->moveToLeft(left, (topHeight - _title->height()) / 2, width);
+	_chip->setVisible(left + _chip->width() + skip <= buttonsLeft);
 	_chip->moveToLeft(
-		_title->x() + _title->width() + st::owpengramClaudePanelChipSkip,
-		st::owpengramClaudePanelChipTop,
+		showTitle ? (left + _title->width() + skip) : left,
+		(topHeight - _chip->height()) / 2,
 		width);
 	_topShadow->setGeometry(0, topHeight, width, st::lineWidth);
 
@@ -358,6 +448,10 @@ void PanelWidget::updateControlsGeometry() {
 		inputHeight - padding.bottom() - _send->height(),
 		inputWidth);
 	bottom -= margin.top();
+
+	const auto authHeight = updateAuthGeometry(width);
+	bottom -= authHeight;
+	_auth->moveToLeft(0, bottom, width);
 
 	const auto scrollTop = topHeight + st::lineWidth;
 	const auto scrollHeight = std::max(bottom - scrollTop, 0);

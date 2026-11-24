@@ -18,6 +18,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace Ui {
 class FlatLabel;
 class IconButton;
+class LinkButton;
 class InputField;
 class PlainShadow;
 class PopupMenu;
@@ -84,6 +85,9 @@ private:
 	void showScopeMenu();
 	void fillNewSessionMenu(not_null<Ui::PopupMenu*> menu);
 	void updateControlsGeometry();
+	void setupAuth();
+	// Height of the sign-in banner above the input (0 when hidden).
+	int updateAuthGeometry(int width);
 
 	const not_null<Ui::RpWidget*> _top;
 	const not_null<Ui::FlatLabel*> _title;
@@ -97,6 +101,9 @@ private:
 	const not_null<Ui::RpWidget*> _inputWrap;
 	const not_null<Ui::InputField*> _field;
 	const not_null<Ui::IconButton*> _send;
+	const not_null<Ui::RpWidget*> _auth;
+	const not_null<Ui::FlatLabel*> _authText;
+	const not_null<Ui::LinkButton*> _authButton;
 
 	std::shared_ptr<PanelModel> _model;
 	QPointer<PanelMessages> _messages;

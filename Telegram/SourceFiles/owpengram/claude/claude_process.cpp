@@ -246,6 +246,30 @@ QString FindClaudeBinary(const QString &configured) {
 	return QString();
 }
 
+QProcessEnvironment ClaudeEnvironment(const QString &binary) {
+	// GUI apps do not inherit the login PATH: claude's node / helpers must
+	// still resolve.
+	auto env = QProcessEnvironment::systemEnvironment();
+	const auto dirs = QStringList{
+		QFileInfo(binary).absolutePath(),
+		u"/opt/homebrew/bin"_q,
+		u"/usr/local/bin"_q,
+		u"/usr/bin"_q,
+		u"/bin"_q,
+	};
+	auto path = dirs.join(':');
+	const auto old = env.value(u"PATH"_q);
+	if (!old.isEmpty()) {
+		path += ':' + old;
+	}
+	env.insert(u"PATH"_q, path);
+	return env;
+}
+
+QString ConfiguredClaudePath() {
+	return GConfiguredPath;
+}
+
 ClaudeProcess::ClaudeProcess(std::shared_ptr<Session> session)
 : _session(std::move(session))
 , _resume(!_session->info().folder.isEmpty()) {
@@ -362,22 +386,7 @@ void ClaudeProcess::launch() {
 		args << u"--session-id"_q << id;
 	}
 
-	// GUI apps do not inherit the login PATH: claude's node / helpers must
-	// still resolve.
-	auto env = QProcessEnvironment::systemEnvironment();
-	const auto dirs = QStringList{
-		QFileInfo(binary).absolutePath(),
-		u"/opt/homebrew/bin"_q,
-		u"/usr/local/bin"_q,
-		u"/usr/bin"_q,
-		u"/bin"_q,
-	};
-	auto path = dirs.join(':');
-	const auto old = env.value(u"PATH"_q);
-	if (!old.isEmpty()) {
-		path += ':' + old;
-	}
-	env.insert(u"PATH"_q, path);
+	const auto env = ClaudeEnvironment(binary);
 
 	_stderr.clear();
 	_gotInit = false;
