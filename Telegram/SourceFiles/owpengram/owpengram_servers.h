@@ -123,6 +123,17 @@ void RestoreServerToAccount(not_null<Main::Account*> account);
 [[nodiscard]] std::vector<not_null<Main::Account*>> AccountsUsingServer(
 	const QString &serverId);
 
+struct AccountOnServer {
+	not_null<Main::Account*> account;
+	Server server;
+};
+
+// Every signed-in account paired with its server, grouped by server:
+// the Telegram group first, then the rest by server name. Within a group
+// the domain's own account order is kept. Shared by the settings account
+// list and the "Forward To" message menu so both group the same way.
+[[nodiscard]] std::vector<AccountOnServer> AuthedAccountsByServer();
+
 // Stable key for grouping per-server local device state (currently: recent/frequently-used
 // custom emoji, see Core::Settings::recentEmojiForScope) by backend rather than by device. Two
 // different custom servers do NOT share a document-id namespace — a custom-emoji document id

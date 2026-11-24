@@ -92,6 +92,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "mainwidget.h"
 #include "iv/editor/iv_editor_session.h"
 #include "iv/iv_rich_message_html_export.h"
+#include "owpengram/owpengram_cross_forward.h"
 #include "menu/menu_item_download_files.h"
 #include "menu/menu_item_rate_transcribe.h"
 #include "menu/menu_item_rate_transcribe_session.h"
@@ -3431,6 +3432,12 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						forwardItem(itemId);
 					}, &st::menuIconForward);
 				}
+				if (!IsAnchoredEphemeral(item)) {
+					Owpengram::AddForwardToAccountAction(
+						_menu.get(),
+						_controller->uiShow(),
+						item);
+				}
 				if (HistoryView::CanAddOfferToMessage(item)) {
 					_menu->addAction(tr::lng_context_add_offer(tr::now), [=] {
 						Api::AddOfferToMessage(_controller->uiShow(), itemId);
@@ -3745,6 +3752,12 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					_menu->addAction(tr::lng_context_forward_msg(tr::now), [=] {
 						forwardAsGroup(itemId);
 					}, &st::menuIconForward);
+				}
+				if (!IsAnchoredEphemeral(item)) {
+					Owpengram::AddForwardToAccountAction(
+						_menu.get(),
+						_controller->uiShow(),
+						item);
 				}
 				if (HistoryView::CanAddOfferToMessage(item)) {
 					_menu->addAction(tr::lng_context_add_offer(tr::now), [=] {

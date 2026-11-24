@@ -8787,7 +8787,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_page_next" = "▶";
 "lng_owpengram_server_page" = "{current} / {total}";
 "lng_owpengram_tg_link_no_account" = "This link is for Telegram's official network. Please log in to a Telegram account in this app to open it.";
-"lng_owpengram_tg_link_switch_account" = "This link is for Telegram's official network. Please switch to your Telegram account to open it.";"lng_owpengram_owpg_other_server" = "This link belongs to a server you're not connected to:";
+"lng_owpengram_tg_link_switch_account" = "This link is for Telegram's official network. Please switch to your Telegram account to open it.";
+"lng_owpengram_owpg_other_server" = "This link belongs to a server you're not connected to:";
+"lng_owpengram_forward_to" = "Forward To";
+"lng_owpengram_forward_to_choose" = "Choose chat";
+"lng_owpengram_forward_to_downloading" = "Downloading media to forward…";
+"lng_owpengram_forward_to_failed" = "Couldn't prepare the media for forwarding.";
+"lng_owpengram_forward_to_sent" = "Sent to {chat}.";
 "lng_sr_country_column_name" = "Country name";
 "lng_sr_languages_column_native" = "Native name";
 "lng_sr_languages_column_name" = "Language name";
