@@ -1686,6 +1686,8 @@ PRIVATE
     owpengram/claude/claude_tools_act.cpp
     owpengram/claude/claude_tools_approve.cpp
     owpengram/claude/claude_tools_read.cpp
+    owpengram/owpengram_cross_forward.cpp
+    owpengram/owpengram_cross_forward.h
     owpengram/owpengram_servers.cpp
     owpengram/owpengram_servers.h
     owpengram/owpengram_updater.cpp

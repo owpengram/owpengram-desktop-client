@@ -38,6 +38,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "info/info_memento.h"
 #include "iv/editor/iv_editor_session.h"
 #include "iv/iv_rich_message_html_export.h"
+#include "owpengram/owpengram_cross_forward.h"
 #include "ui/effects/ripple_animation.h"
 #include "ui/widgets/popup_menu.h"
 #include "ui/widgets/menu/menu_action.h"
@@ -1404,6 +1405,14 @@ void AddMessageActions(
 		not_null<ListWidget*> list) {
 	AddPostLinkAction(menu, request);
 	AddForwardAction(menu, request, list);
+	if (request.item
+		&& request.selectedItems.empty()
+		&& !IsAnchoredEphemeral(request.item)) {
+		Owpengram::AddForwardToAccountAction(
+			menu,
+			list->controller()->uiShow(),
+			request.item);
+	}
 	AddOfferAction(menu, request, list);
 	AddSendNowAction(menu, request, list);
 	AddDeleteAction(menu, request, list);
