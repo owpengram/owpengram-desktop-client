@@ -1668,6 +1668,8 @@ PRIVATE
     owpengram/claude/claude_panel_model.h
     owpengram/claude/claude_panel_toggle.cpp
     owpengram/claude/claude_panel_toggle.h
+    owpengram/claude/claude_top_bar_button.cpp
+    owpengram/claude/claude_top_bar_button.h
     owpengram/claude/claude_path_rules.h
     owpengram/claude/claude_process.cpp
     owpengram/claude/claude_process.h

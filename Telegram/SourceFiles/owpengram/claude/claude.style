@@ -37,7 +37,7 @@ owpengramClaudeTopBar: IconButton(topBarSearch) {
 	icon: icon {{ "owpengram/claude_spark-24x24", menuIconFg }};
 	iconOver: icon {{ "owpengram/claude_spark-24x24", menuIconFgOver }};
 }
-owpengramClaudeTopBarActive: icon {{ "owpengram/claude_spark-24x24", windowActiveTextFg }};
+owpengramClaudeTopBarFont: font(14px semibold);
 
 // The panel as a layer when the window has no room for a third column.
 owpengramClaudePanelLayerWidth: 420px;
@@ -116,13 +116,13 @@ owpengramClaudePanelBubbleRadius: 14px;
 owpengramClaudePanelBubbleLeftSkip: 40px;
 owpengramClaudePanelNoticeButtonSkip: 6px;
 
-owpengramClaudePanelInputMargin: margins(12px, 8px, 12px, 8px);
-owpengramClaudePanelInputPadding: margins(12px, 8px, 4px, 6px);
+owpengramClaudePanelInputMargin: margins(8px, 5px, 8px, 5px);
+owpengramClaudePanelInputPadding: margins(12px, 1px, 1px, 1px);
 owpengramClaudePanelInputRadius: 12px;
 owpengramClaudePanelInputBorder: 1px;
 owpengramClaudePanelInputBorderFg: inputBorderFg;
 owpengramClaudePanelField: InputField(defaultInputField) {
-	textMargins: margins(0px, 4px, 0px, 4px);
+	textMargins: margins(0px, 7px, 0px, 7px);
 	textAlign: align(topleft);
 	placeholderMargins: margins(0px, 0px, 0px, 0px);
 	placeholderScale: 0.;
@@ -130,16 +130,16 @@ owpengramClaudePanelField: InputField(defaultInputField) {
 	placeholderShift: -50px;
 	border: 0px;
 	borderActive: 0px;
-	heightMin: 30px;
+	heightMin: 34px;
 	heightMax: 160px;
 }
 owpengramClaudePanelSend: IconButton(defaultIconButton) {
-	width: 36px;
-	height: 36px;
+	width: 34px;
+	height: 34px;
 	icon: icon {{ "chat/input_send", historySendIconFg }};
 	iconOver: icon {{ "chat/input_send", historySendIconFgOver }};
 	rippleAreaPosition: point(2px, 2px);
-	rippleAreaSize: 32px;
+	rippleAreaSize: 30px;
 	ripple: defaultRippleAnimationBgOver;
 }
 

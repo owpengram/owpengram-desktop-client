@@ -44,6 +44,10 @@ namespace Calls {
 struct StartOutgoingCallArgs;
 } // namespace Calls
 
+namespace Owpengram::Claude {
+class TopBarButton;
+} // namespace Owpengram::Claude
+
 namespace HistoryView {
 
 class SendActionPainter;
@@ -251,7 +255,7 @@ private:
 
 	object_ptr<Ui::IconButton> _call;
 	object_ptr<Ui::IconButton> _groupCall;
-	object_ptr<Ui::IconButton> _claude;
+	object_ptr<Owpengram::Claude::TopBarButton> _claude;
 	object_ptr<Ui::IconButton> _search;
 	object_ptr<Ui::IconButton> _infoToggle;
 	object_ptr<Ui::IconButton> _menuToggle;

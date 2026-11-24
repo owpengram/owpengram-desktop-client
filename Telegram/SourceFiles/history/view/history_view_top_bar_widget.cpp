@@ -43,6 +43,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_peer_menu.h"
 #include "calls/calls_instance.h"
 #include "owpengram/claude/claude_panel_toggle.h"
+#include "owpengram/claude/claude_top_bar_button.h"
 #include "data/stickers/data_custom_emoji.h"
 #include "data/data_peer_values.h"
 #include "data/data_group_call.h" // GroupCall::input.
@@ -127,7 +128,7 @@ TopBarWidget::TopBarWidget(
 , _cancelChoose(this, st::topBarCloseChoose)
 , _call(this, st::topBarCall)
 , _groupCall(this, st::topBarGroupCall)
-, _claude(this, st::owpengramClaudeTopBar)
+, _claude(this)
 , _search(this, st::topBarSearch)
 , _infoToggle(this, st::topBarInfo)
 , _menuToggle(this, st::topBarMenuToggle)
@@ -167,10 +168,7 @@ TopBarWidget::TopBarWidget(
 	Owpengram::Claude::PanelShownValue(
 		_controller
 	) | rpl::on_next([=](bool shown) {
-		const auto icon = shown ? &st::owpengramClaudeTopBarActive : nullptr;
-		_claude->setIconOverride(icon, icon);
-		_claude->setRippleColorOverride(
-			shown ? &st::lightButtonBgOver : nullptr);
+		_claude->setActive(shown);
 		updateInfoToggleActive();
 	}, lifetime());
 	_menuToggle->setAcceptBoth(true, true);
