@@ -29,7 +29,6 @@ class ScrollArea;
 namespace Owpengram::Claude {
 
 class PanelModel;
-class PanelConnectors;
 class PanelMessages;
 
 class PanelMemento final : public Window::SectionMemento {
@@ -53,8 +52,8 @@ private:
 };
 
 // Claude side panel: header (spark, "Claude", session type chip, history,
-// pin, menu, close), the conversation feed, the input field and the
-// connectors. Shows PanelStateFor(controller).current and follows it.
+// pin, menu, close), the conversation feed and the input field (the
+// connectors are in the menu). Shows PanelStateFor(controller).current and follows it.
 class PanelWidget final : public Window::SectionWidget {
 public:
 	PanelWidget(
@@ -83,6 +82,7 @@ private:
 	void submit();
 	void showMenu();
 	void showScopeMenu();
+	void showConnectors();
 	void fillNewSessionMenu(not_null<Ui::PopupMenu*> menu);
 	void updateControlsGeometry();
 	void setupAuth();
@@ -107,7 +107,6 @@ private:
 
 	std::shared_ptr<PanelModel> _model;
 	QPointer<PanelMessages> _messages;
-	object_ptr<PanelConnectors> _connectors = { nullptr };
 	base::unique_qptr<Ui::PopupMenu> _menu;
 	rpl::event_stream<> _removeRequests;
 

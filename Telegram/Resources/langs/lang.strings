@@ -8868,7 +8868,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_claude_history_delete_open" = "This session is open. Start another session in the panel first.";
 "lng_owpengram_claude_history_switch_account" = "This session belongs to another account. Switch to it first.";
 "lng_owpengram_claude_panel_empty" = "Ask Claude about this chat.";
-"lng_owpengram_claude_panel_placeholder" = "Reply to Claude";
 "lng_owpengram_claude_panel_thinking" = "Thinking…";
 "lng_owpengram_claude_panel_mcp_disabled" = "Claude works through the OwpenGram MCP server, which is disabled.";
 "lng_owpengram_claude_panel_enable_mcp" = "Enable MCP";

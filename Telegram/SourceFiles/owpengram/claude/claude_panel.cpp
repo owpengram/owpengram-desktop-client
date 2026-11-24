@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "owpengram/claude/claude_panel_toggle.h"
 #include "owpengram/claude/claude_sessions.h"
 #include "owpengram/claude/claude_settings_menu.h"
+#include "ui/layers/generic_box.h"
 #include "ui/painter.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/fields/input_field.h"
@@ -26,6 +27,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/shadow.h"
 #include "window/window_session_controller.h"
 #include "styles/style_claude.h"
+#include "styles/style_layers.h"
 #include "styles/style_info.h"
 #include "styles/style_menu_icons.h"
 #include "styles/style_widgets.h"
@@ -109,7 +111,7 @@ PanelWidget::PanelWidget(
 	_inputWrap.get(),
 	st::owpengramClaudePanelField,
 	Ui::InputField::Mode::MultiLine,
-	tr::lng_owpengram_claude_panel_placeholder()))
+	rpl::single(QString())))
 , _send(Ui::CreateChild<Ui::IconButton>(
 	_inputWrap.get(),
 	st::owpengramClaudePanelSend))
@@ -282,12 +284,6 @@ void PanelWidget::setModel(std::shared_ptr<PanelModel> model) {
 	_messages = messages.data();
 	Ui::SetStickyBottomScroll(_scroll.get(), messages.data());
 
-	_connectors = object_ptr<PanelConnectors>(this, _model);
-	_connectors->show();
-	_connectors->heightValue(
-	) | rpl::on_next([=] {
-		updateControlsGeometry();
-	}, _connectors->lifetime());
 
 	updateControlsGeometry();
 	_scroll->scrollToY(_scroll->scrollTopMax());
@@ -330,6 +326,21 @@ void PanelWidget::showScopeMenu() {
 	_menu->popup(QCursor::pos());
 }
 
+void PanelWidget::showConnectors() {
+	const auto model = _model;
+	if (!model) {
+		return;
+	}
+	controller()->show(Box([=](not_null<Ui::GenericBox*> box) {
+		box->setWidth(st::boxWideWidth);
+		box->setMaxHeight(st::boxMaxListHeight);
+		box->addRow(
+			object_ptr<PanelConnectors>(box, model),
+			style::margins());
+		box->addButton(tr::lng_close(), [=] { box->closeBox(); });
+	}));
+}
+
 void PanelWidget::showMenu() {
 	_menu = base::make_unique_q<Ui::PopupMenu>(
 		this,
@@ -348,6 +359,10 @@ void PanelWidget::showMenu() {
 		tr::lng_owpengram_claude_panel_history(tr::now),
 		crl::guard(this, [=] { ShowHistoryBox(controller()); }),
 		&st::menuIconSchedule);
+	menu->addAction(
+		tr::lng_owpengram_claude_panel_connectors(tr::now),
+		crl::guard(this, [=] { showConnectors(); }),
+		&st::menuIconManage);
 	menu->addSeparator();
 
 	FillClaudeSettingsMenu(menu, controller());
@@ -425,11 +440,6 @@ void PanelWidget::updateControlsGeometry() {
 	_topShadow->setGeometry(0, topHeight, width, st::lineWidth);
 
 	auto bottom = height();
-	if (_connectors) {
-		_connectors->resizeToWidth(width);
-		bottom -= _connectors->height();
-		_connectors->moveToLeft(0, bottom, width);
-	}
 
 	const auto &margin = st::owpengramClaudePanelInputMargin;
 	const auto &padding = st::owpengramClaudePanelInputPadding;

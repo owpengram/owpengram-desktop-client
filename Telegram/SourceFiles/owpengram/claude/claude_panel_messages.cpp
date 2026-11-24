@@ -38,9 +38,26 @@ constexpr auto kInstallUrl = "https://claude.com/claude-code";
 	auto prepared = text;
 	prepared.replace(heading, u"**\\1**"_q);
 	prepared.replace(bullet, QString::fromUtf8("\\1\xE2\x80\xA2 "));
-	return TextUtilities::ParseEntities(
-		prepared,
-		TextParseLinks | TextParseMarkdown);
+
+	// "**bold**" is cut out here: the Telegram parser skips it next to
+	// non-separators ("**Як:**", "**Що потрібно:** 3 ...").
+	static const auto bold = QRegularExpression(u"\\*\\*([^*\\n]+?)\\*\\*"_q);
+	const auto parse = [](const QString &part) {
+		return TextUtilities::ParseEntities(
+			part,
+			TextParseLinks | TextParseMarkdown);
+	};
+	auto result = TextWithEntities();
+	auto from = 0;
+	auto matches = bold.globalMatch(prepared);
+	while (matches.hasNext()) {
+		const auto match = matches.next();
+		result.append(parse(prepared.mid(from, match.capturedStart() - from)));
+		result.append(Ui::Text::Bold(match.captured(1)));
+		from = match.capturedEnd();
+	}
+	result.append(parse(prepared.mid(from)));
+	return result;
 }
 
 [[nodiscard]] TextWithEntities NoticeText(const FeedEntry &entry) {
@@ -162,12 +179,17 @@ void PanelMessages::addUser(const QString &text) {
 
 void PanelMessages::addAssistant(const QString &text) {
 	const auto &padding = st::owpengramClaudePanelFeedPadding;
-	const auto label = _entries->add(
-		object_ptr<Ui::FlatLabel>(_entries, st::owpengramClaudePanelText),
+	// The text is set before adding: a label resized to the feed width and
+	// then given new text takes its natural (one line) width again.
+	auto owned = object_ptr<Ui::FlatLabel>(
+		_entries,
+		st::owpengramClaudePanelText);
+	owned->setMarkedText(PrepareAssistantText(text));
+	owned->setSelectable(true);
+	_entries->add(
+		std::move(owned),
 		style::margins(padding.left(), padding.top(), padding.right(), 0),
 		style::al_justify);
-	label->setMarkedText(PrepareAssistantText(text));
-	label->setSelectable(true);
 }
 
 void PanelMessages::addTool(const QString &text) {
@@ -190,16 +212,17 @@ void PanelMessages::addNotice(const FeedEntry &entry) {
 	const auto &padding = st::owpengramClaudePanelFeedPadding;
 	const auto error = (entry.type == FeedEntryType::Failed)
 		|| (entry.type == FeedEntryType::Error);
-	const auto label = _entries->add(
-		object_ptr<Ui::FlatLabel>(
-			_entries,
-			(error
-				? st::owpengramClaudePanelErrorText
-				: st::owpengramClaudePanelSubText)),
+	auto owned = object_ptr<Ui::FlatLabel>(
+		_entries,
+		(error
+			? st::owpengramClaudePanelErrorText
+			: st::owpengramClaudePanelSubText));
+	owned->setMarkedText(NoticeText(entry));
+	owned->setSelectable(true);
+	_entries->add(
+		std::move(owned),
 		style::margins(padding.left(), padding.top(), padding.right(), 0),
 		style::al_justify);
-	label->setMarkedText(NoticeText(entry));
-	label->setSelectable(true);
 
 	const auto addButton = [&](const QString &text, Fn<void()> callback) {
 		const auto button = _entries->add(
