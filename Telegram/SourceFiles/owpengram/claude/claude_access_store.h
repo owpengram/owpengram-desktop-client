@@ -61,6 +61,12 @@ public:
 	[[nodiscard]] QString mcpToken();
 	void regenerateMcpToken();
 
+	// Claude side panel: open (restored only when pinned) and pinned.
+	[[nodiscard]] bool panelOpen() const;
+	void setPanelOpen(bool open);
+	[[nodiscard]] bool panelPinned() const;
+	void setPanelPinned(bool pinned);
+
 	// Writes pending changes right now (used on quit).
 	void flush();
 
@@ -79,6 +85,8 @@ private:
 	bool _mcpEnabled = false;
 	int _mcpPort = kDefaultMcpPort;
 	QString _mcpToken;
+	bool _panelOpen = false;
+	bool _panelPinned = false;
 
 	base::Timer _saveTimer;
 	bool _dirty = false;

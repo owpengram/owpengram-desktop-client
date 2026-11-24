@@ -37,6 +37,11 @@ owpengramClaudeTopBar: IconButton(topBarSearch) {
 	icon: icon {{ "owpengram/claude_spark-24x24", menuIconFg }};
 	iconOver: icon {{ "owpengram/claude_spark-24x24", menuIconFgOver }};
 }
+owpengramClaudeTopBarActive: icon {{ "owpengram/claude_spark-24x24", windowActiveTextFg }};
+
+// The panel as a layer when the window has no room for a third column.
+owpengramClaudePanelLayerWidth: 420px;
+owpengramClaudePanelLayerMargin: 24px;
 
 // Side panel (third column).
 owpengramClaudePanelTopHeight: 48px;

@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "owpengram/claude/claude_panel_connectors.h"
 #include "owpengram/claude/claude_panel_messages.h"
 #include "owpengram/claude/claude_panel_model.h"
+#include "owpengram/claude/claude_panel_toggle.h"
 #include "owpengram/claude/claude_sessions.h"
 #include "owpengram/claude/claude_settings_menu.h"
 #include "ui/painter.h"
@@ -130,6 +131,12 @@ PanelWidget::PanelWidget(
 	setupInput();
 
 	auto &state = PanelStateFor(controller);
+	state.widgets = state.widgets.current() + 1;
+	lifetime().add([=] {
+		if (const auto state = PanelStateIfExists(controller)) {
+			state->widgets = state->widgets.current() - 1;
+		}
+	});
 	if (!state.current.current()) {
 		ChooseModelForChat(
 			controller,
@@ -161,8 +168,7 @@ void PanelWidget::setupTop() {
 	}, _chip->lifetime());
 
 	_close->setClickedCallback([=] {
-		HandlePanelClosed(controller());
-		_removeRequests.fire({});
+		ClosePanel(controller());
 	});
 	const auto tooltip = [](not_null<Ui::IconButton*> button, QString text) {
 		button->setAccessibleName(text);

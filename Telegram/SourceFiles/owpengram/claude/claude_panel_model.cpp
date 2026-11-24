@@ -346,10 +346,28 @@ PanelState &PanelStateFor(not_null<Window::SessionController*> controller) {
 	const auto result = states.emplace(
 		controller,
 		std::make_unique<PanelState>()).first->second.get();
+	auto &access = Access();
+	result->pinned = access.panelPinned();
+	result->open = access.panelPinned() && access.panelOpen();
+	result->pinned.changes(
+	) | rpl::on_next([](bool pinned) {
+		Access().setPanelPinned(pinned);
+	}, result->lifetime);
+	result->open.changes(
+	) | rpl::on_next([](bool open) {
+		Access().setPanelOpen(open);
+	}, result->lifetime);
 	controller->lifetime().add([=] {
 		States().erase(controller);
 	});
 	return *result;
+}
+
+PanelState *PanelStateIfExists(
+		not_null<Window::SessionController*> controller) {
+	const auto &states = States();
+	const auto i = states.find(controller);
+	return (i != end(states)) ? i->second.get() : nullptr;
 }
 
 std::shared_ptr<PanelModel> ChooseModelForChat(

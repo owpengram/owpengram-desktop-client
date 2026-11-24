@@ -188,6 +188,28 @@ void AccessStore::regenerateMcpToken() {
 	_changes.fire({});
 }
 
+bool AccessStore::panelOpen() const {
+	return _panelOpen;
+}
+
+void AccessStore::setPanelOpen(bool open) {
+	if (_panelOpen != open) {
+		_panelOpen = open;
+		scheduleSave();
+	}
+}
+
+bool AccessStore::panelPinned() const {
+	return _panelPinned;
+}
+
+void AccessStore::setPanelPinned(bool pinned) {
+	if (_panelPinned != pinned) {
+		_panelPinned = pinned;
+		scheduleSave();
+	}
+}
+
 void AccessStore::load() {
 	QFile file(FilePath());
 	if (!file.exists()) {
@@ -210,6 +232,10 @@ void AccessStore::load() {
 	const auto port = mcp.value(u"port"_q).toInt(kDefaultMcpPort);
 	_mcpPort = (port > 0 && port < 65536) ? port : kDefaultMcpPort;
 	_mcpToken = mcp.value(u"token"_q).toString();
+
+	const auto panel = root.value(u"panel"_q).toObject();
+	_panelOpen = panel.value(u"open"_q).toBool(false);
+	_panelPinned = panel.value(u"pinned"_q).toBool(false);
 
 	const auto accounts = root.value(u"accounts"_q).toObject();
 	for (auto i = accounts.begin(); i != accounts.end(); ++i) {
@@ -281,6 +307,10 @@ void AccessStore::save() {
 	auto root = QJsonObject();
 	root.insert(u"version"_q, kFileVersion);
 	root.insert(u"mcp"_q, mcp);
+	auto panel = QJsonObject();
+	panel.insert(u"open"_q, _panelOpen);
+	panel.insert(u"pinned"_q, _panelPinned);
+	root.insert(u"panel"_q, panel);
 	root.insert(u"accounts"_q, accounts);
 
 	const auto path = FilePath();

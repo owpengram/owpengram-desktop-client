@@ -77,6 +77,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/qthelp_regex.h"
 #include "base/options.h"
 #include "mtproto/mtproto_dc_options.h"
+#include "owpengram/claude/claude_panel_toggle.h"
 #include "core/update_checker.h"
 #include "core/shortcuts.h"
 #include "core/application.h"
@@ -2685,7 +2686,12 @@ void MainWidget::updateControlsGeometry() {
 				anim::activation::background);
 			const auto active = _controller->activeChatCurrent();
 			if (const auto thread = active.thread()) {
-				if (Core::App().settings().tabbedSelectorSectionEnabled()) {
+				if (auto claude = Owpengram::Claude::ThirdColumnPanel(
+						_controller)) {
+					_controller->showSection(
+						std::move(claude),
+						params.withThirdColumn());
+				} else if (Core::App().settings().tabbedSelectorSectionEnabled()) {
 					if (_mainSection) {
 						_mainSection->pushTabbedSelectorToThirdSection(
 							thread,
@@ -2980,6 +2986,11 @@ auto MainWidget::thirdSectionForCurrentMainSection(
 void MainWidget::updateThirdColumnToCurrentChat(
 		Dialogs::Key key,
 		bool canWrite) {
+	if (Owpengram::Claude::HandleActiveChatChanged(
+			_controller,
+			key.peer())) {
+		return;
+	}
 	auto saveOldThirdSection = [&] {
 		if (saveThirdSectionToStackBack()) {
 			_stack.back()->setThirdSectionMemento(

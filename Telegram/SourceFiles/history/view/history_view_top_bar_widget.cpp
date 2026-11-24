@@ -42,7 +42,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_session_controller.h"
 #include "window/window_peer_menu.h"
 #include "calls/calls_instance.h"
-#include "owpengram/claude/claude_settings_menu.h"
+#include "owpengram/claude/claude_panel_toggle.h"
 #include "data/stickers/data_custom_emoji.h"
 #include "data/data_peer_values.h"
 #include "data/data_group_call.h" // GroupCall::input.
@@ -161,16 +161,18 @@ TopBarWidget::TopBarWidget(
 	});
 	_groupCall->setClickedCallback([=] { groupCall(); });
 	_menuToggle->addClickHandler([=](auto) { showPeerMenu(); });
-	_claude->addClickHandler([=] {
-		_menu = base::make_unique_q<Ui::PopupMenu>(
-			this,
-			st::popupMenuWithIcons);
-		Owpengram::Claude::FillClaudeSettingsMenu(_menu.get(), _controller);
-		_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
-		_menu->popup(mapToGlobal(QPoint(
-			_claude->x() + _claude->width(),
-			_claude->y() + _claude->height())));
+	_claude->setClickedCallback([=] {
+		Owpengram::Claude::TogglePanel(_controller);
 	});
+	Owpengram::Claude::PanelShownValue(
+		_controller
+	) | rpl::on_next([=](bool shown) {
+		const auto icon = shown ? &st::owpengramClaudeTopBarActive : nullptr;
+		_claude->setIconOverride(icon, icon);
+		_claude->setRippleColorOverride(
+			shown ? &st::lightButtonBgOver : nullptr);
+		updateInfoToggleActive();
+	}, lifetime());
 	_menuToggle->setAcceptBoth(true, true);
 	_infoToggle->setClickedCallback([=] { toggleInfoSection(); });
 	_back->setAcceptBoth();
@@ -457,7 +459,11 @@ void TopBarWidget::showCallMenu() {
 
 void TopBarWidget::toggleInfoSection() {
 	const auto isThreeColumn = _controller->adaptive().isThreeColumn();
+	// Info replaces the Claude panel instead of closing the column.
+	const auto replaceClaude = isThreeColumn
+		&& Owpengram::Claude::TakeThirdColumnForInfo(_controller);
 	if (isThreeColumn
+		&& !replaceClaude
 		&& (Core::App().settings().thirdSectionInfoEnabled()
 			|| Core::App().settings().tabbedReplacedWithInfo())) {
 		_controller->closeThirdSection();
@@ -1827,6 +1833,7 @@ void TopBarWidget::updateUnreadBadge() {
 
 void TopBarWidget::updateInfoToggleActive() {
 	auto infoThirdActive = _controller->adaptive().isThreeColumn()
+		&& !Owpengram::Claude::PanelShown(_controller)
 		&& (Core::App().settings().thirdSectionInfoEnabled()
 			|| Core::App().settings().tabbedReplacedWithInfo());
 	auto iconOverride = infoThirdActive

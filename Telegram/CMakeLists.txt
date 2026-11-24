@@ -1662,6 +1662,8 @@ PRIVATE
     owpengram/claude/claude_panel_messages.h
     owpengram/claude/claude_panel_model.cpp
     owpengram/claude/claude_panel_model.h
+    owpengram/claude/claude_panel_toggle.cpp
+    owpengram/claude/claude_panel_toggle.h
     owpengram/claude/claude_path_rules.h
     owpengram/claude/claude_process.cpp
     owpengram/claude/claude_process.h

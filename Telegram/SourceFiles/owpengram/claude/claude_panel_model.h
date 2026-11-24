@@ -136,11 +136,25 @@ private:
 // which ends its process and, for a Temporary session, the session itself.
 struct PanelState {
 	rpl::variable<std::shared_ptr<PanelModel>> current;
-	// Keeps the panel open on chat switch (persisted by Task 5).
+	// Keeps the panel open on chat switch (persisted in AccessStore).
 	rpl::variable<bool> pinned = false;
+	// The user opened the panel and did not close it (see
+	// claude_panel_toggle.h). Persisted, restored only when pinned.
+	rpl::variable<bool> open = false;
+	// Count of alive panel widgets (third column or layer).
+	rpl::variable<int> widgets = 0;
+	// The panel is shown as a layer (the window is too narrow).
+	bool inLayer = false;
+	// The active chat the panel last saw (HandleActiveChatChanged also
+	// fires for the same chat when its send rights change).
+	PeerData *chat = nullptr;
+	rpl::lifetime lifetime;
 };
 
 [[nodiscard]] PanelState &PanelStateFor(
+	not_null<Window::SessionController*> controller);
+// Null if PanelStateFor was not called or the window is gone.
+[[nodiscard]] PanelState *PanelStateIfExists(
 	not_null<Window::SessionController*> controller);
 
 // The model for the panel opened in this chat (or with no chat): the
