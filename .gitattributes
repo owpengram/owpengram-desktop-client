@@ -11,6 +11,11 @@
 # literally named "bash\r" and fails with "No such file or directory". Force
 # LF regardless of core.autocrlf, the same way *.bat is forced to CRLF above.
 *.sh text eol=lf
+# Keep the zxcvbn word lists byte-identical to upstream so their digests hold
+Telegram/Resources/zxcvbn/*.txt text eol=lf
 
 # Ensure lottie animations are treated as binary files
 *.lottie binary
+
+# Raw float tables, such as the 3D diamond model data
+*.bin binary

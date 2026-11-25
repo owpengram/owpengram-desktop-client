@@ -16,7 +16,7 @@ to use, and free from lock-in.
 > tab. The web client is live at [web.owpengram.org](https://web.owpengram.org);
 > macOS is planned.
 
-> 🔗 Built on **MTProto API layer 229**, on top of Telegram Desktop `v7.2.2`.
+> 🔗 Built on **MTProto API layer 232**, on top of Telegram Desktop `v7.3.5`.
 
 <p align="center">
   <img src="media/readme/desktop_hero.png" alt="OwpenGram Desktop — chats" width="880">
@@ -31,7 +31,7 @@ Builds live in the
 
 | Platform | File | What it is |
 |---|---|---|
-| 🪟 Windows | Windows x64 build | Unpack and run. Built against Qt 5.15.19, the same Qt the official Windows client uses. |
+| 🪟 Windows | Windows x64 build | Unpack and run. Built against Qt 6, like the official Windows client. |
 | 🐧 Ubuntu / Debian | `owpengram-desktop_<version>_amd64.deb` | A real distro package for **Ubuntu 18.04+ / Debian 10+** — installs to `/usr/bin`, adds the app-menu entry with proper icons, and a D-Bus activation service. Install with `sudo apt install ./owpengram-desktop_<version>_amd64.deb`. |
 | 🐧 Any modern distro | `OwpenGram` | **Not an installer — the client binary itself.** `chmod +x OwpenGram && ./OwpenGram` and you're in. Qt, WebRTC and the X11/EGL client libraries are bundled and lazy-loaded, so it needs nothing but a current glibc. |
 
@@ -151,10 +151,10 @@ MSBuild step, and remembers your answers in `.owpengram-build.local.json`
 GitHub tag `ON`); blank means a local build without self-update, and the
 `OWPENGRAM_BUILD` environment variable skips the question.
 
-**Requirements:** Visual Studio 2022 (C++ x64), Python 3.10, Git. x64 builds
-against **Qt 5.15.19**, the same Qt the official Windows client uses — Qt 6 on
-Windows x64 silently breaks clicks in nested popup submenus (Mute forever, Add
-to folder), so the fork stays on 5.15. For manual steps and other platforms,
+**Requirements:** Visual Studio 2022 Build Tools with the MSVC 14.44 (v143)
+toolset, Python 3.10, Git. x64 builds against **Qt 6**, the upstream default
+since tdesktop 7.3.5. Libraries and the app must be built with the same MSVC
+toolset, or the final link fails. For manual steps and other platforms,
 see `docs/building-win.md` and the upstream
 [Telegram Desktop](https://github.com/telegramdesktop/tdesktop) build docs.
 
@@ -239,6 +239,8 @@ Based on [Telegram Desktop](https://github.com/telegramdesktop/tdesktop) —
 * CMake ([New BSD License](https://github.com/Kitware/CMake/blob/master/Copyright.txt))
 * Hunspell ([LGPL](https://github.com/hunspell/hunspell/blob/master/COPYING.LESSER))
 * Ada ([Apache License 2.0](https://github.com/ada-url/ada/blob/main/LICENSE-APACHE))
+* zxcvbn-c ([MIT License](https://github.com/tsyrogit/zxcvbn-c/blob/master/LICENSE.txt))
+* FrequencyWords by Hermit Dave ([Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/))
 
 ---
 

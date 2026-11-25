@@ -111,6 +111,15 @@ function Find-VcVars {
     return ($found | Sort-Object -Descending | Select-Object -First 1)
 }
 
+# ffmpeg's prepare script appends ":$PKG_CONFIG_PATH". When the variable is
+# empty the trailing ':' stops MSYS from converting the path for the native
+# ucrt64 pkg-config, and ffmpeg then fails with "dav1d not found".
+function Get-PrepareEnvPrefix {
+    $pc = Join-Path (Split-Path $RepoRoot -Parent) 'Libraries\win64\local\lib\pkgconfig'
+    $posix = '/' + $pc.Substring(0, 1).ToLower() + $pc.Substring(2).Replace('\', '/')
+    return "set `"PKG_CONFIG_PATH=$posix`" && "
+}
+
 function Invoke-Vs([string]$Command, [string]$WorkingDirectory, [string]$Label) {
     if (-not $script:VcVars) { throw 'vcvars64 not resolved' }
 
@@ -252,10 +261,8 @@ try {
 
     if (-not (Test-Path $LibrariesMarker)) {
         Write-Step 'Prepare libraries (first time, long)'
-        # No 'qt6': x64 builds against Qt 5.15.19 like the official Windows
-        # binaries. Qt 6 on Windows is only exercised upstream for ARM, and
-        # there nested popup submenus stop receiving clicks.
-        Invoke-Vs -Command 'Telegram\build\prepare\win.bat silent' -WorkingDirectory $RepoRoot -Label 'prepare'
+        # Qt 6, like upstream tdesktop (its Windows default since 7.3.5).
+        Invoke-Vs -Command ((Get-PrepareEnvPrefix) + 'Telegram\build\prepare\win.bat silent') -WorkingDirectory $RepoRoot -Label 'prepare'
     }
     else {
         Write-Ok 'Libraries present, skip prepare'
