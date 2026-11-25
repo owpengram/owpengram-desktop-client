@@ -44,4 +44,18 @@ bool AddForwardToAccountAction(
 	std::shared_ptr<Ui::Show> show,
 	not_null<HistoryItem*> item);
 
+// "Copyright Check >" in the message context menu: the same copy as
+// "Forward To", but only for protected posts (forwarding and saving
+// restricted by the channel) and only into accounts whose server marks them
+// as copyright validators (owpengram_copyright_validator in the app config:
+// an account linked to a server operator with the copyright.validate right).
+// Lets a server's operators receive such a post to check who owns it.
+//
+// Adds nothing when the message is not protected or no other signed-in
+// account is a validator. Returns whether the item was added.
+bool AddCopyrightCheckAction(
+	not_null<Ui::PopupMenu*> menu,
+	std::shared_ptr<Ui::Show> show,
+	not_null<HistoryItem*> item);
+
 } // namespace Owpengram

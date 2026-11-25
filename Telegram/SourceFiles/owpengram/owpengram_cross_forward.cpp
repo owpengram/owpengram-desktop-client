@@ -28,6 +28,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 #include "lang/lang_keys.h"
 #include "main/main_account.h"
+#include "main/main_app_config.h"
 #include "main/main_session.h"
 #include "owpengram/owpengram_servers.h"
 #include "storage/localimageloader.h"
@@ -60,6 +61,34 @@ struct Snapshot {
 	TextWithTags text;
 	std::vector<Attachment> attachments;
 };
+
+// What differs between "Forward To" and "Copyright Check": the chat picker
+// title and the toast once the copy is sent. Everything else is shared.
+struct Texts {
+	Fn<rpl::producer<QString>()> choose;
+	Fn<QString(const QString &chat)> sent;
+};
+
+[[nodiscard]] Texts ForwardToTexts() {
+	return {
+		.choose = [] { return tr::lng_owpengram_forward_to_choose(); },
+		.sent = [](const QString &chat) {
+			return tr::lng_owpengram_forward_to_sent(tr::now, lt_chat, chat);
+		},
+	};
+}
+
+[[nodiscard]] Texts CopyrightCheckTexts() {
+	return {
+		.choose = [] { return tr::lng_owpengram_copyright_check_choose(); },
+		.sent = [](const QString &chat) {
+			return tr::lng_owpengram_copyright_check_sent(
+				tr::now,
+				lt_chat,
+				chat);
+		},
+	};
+}
 
 [[nodiscard]] HistoryItemsList ItemOrItsGroup(not_null<HistoryItem*> item) {
 	if (const auto group = item->history()->owner().groups().find(item)) {
@@ -338,14 +367,12 @@ void Deliver(
 		std::shared_ptr<Ui::Show> show,
 		not_null<Main::Session*> source,
 		not_null<Data::Thread*> thread,
-		std::shared_ptr<Snapshot> snapshot) {
+		std::shared_ptr<Snapshot> snapshot,
+		std::shared_ptr<Texts> texts) {
 	const auto name = thread->peer()->name();
 	const auto sent = [=] {
 		if (show->valid()) {
-			show->showToast(tr::lng_owpengram_forward_to_sent(
-				tr::now,
-				lt_chat,
-				name));
+			show->showToast(texts->sent(name));
 		}
 	};
 	if (snapshot->attachments.empty()) {
@@ -385,7 +412,8 @@ void Deliver(
 void StartCrossForward(
 		std::shared_ptr<Ui::Show> show,
 		not_null<HistoryItem*> item,
-		not_null<Main::Account*> target) {
+		not_null<Main::Account*> target,
+		std::shared_ptr<Texts> texts) {
 	if (!target->sessionExists()) {
 		return;
 	}
@@ -410,7 +438,7 @@ void StartCrossForward(
 			const auto source = weakSource.get();
 			const auto thread = weakThread.get();
 			if (source && thread) {
-				Deliver(show, source, thread, snapshot);
+				Deliver(show, source, thread, snapshot, texts);
 			}
 		});
 		return true;
@@ -418,38 +446,38 @@ void StartCrossForward(
 	show->showBox(Window::PrepareChooseRecipientBox(
 		&target->session(),
 		std::move(chosen),
-		tr::lng_owpengram_forward_to_choose()));
+		texts->choose()));
 }
 
-} // namespace
-
-bool AddForwardToAccountAction(
+// The "<label> >" submenu: the accounts that pass the filter, grouped by
+// server with the server name as a disabled header. Adds nothing when no
+// account other than the item's own passes. Returns whether it was added.
+bool AddAccountsSubmenu(
 		not_null<Ui::PopupMenu*> menu,
 		std::shared_ptr<Ui::Show> show,
-		not_null<HistoryItem*> item) {
-	if (!item->isRegular()
-		|| !item->allowsForward()
-		|| item->forbidsSaving()) {
-		return false;
-	}
+		not_null<HistoryItem*> item,
+		Fn<bool(not_null<Main::Account*>)> filter,
+		const QString &label,
+		const style::icon *icon,
+		Texts texts) {
 	const auto current = &item->history()->session().account();
-	const auto grouped = AuthedAccountsByServer();
-	const auto hasOther = ranges::any_of(grouped, [&](const auto &entry) {
-		return (entry.account != current);
-	});
-	if (!hasOther) {
+	auto grouped = AuthedAccountsByServer();
+	grouped.erase(
+		ranges::remove_if(grouped, [&](const auto &entry) {
+			return (entry.account == current) || !filter(entry.account);
+		}),
+		grouped.end());
+	if (grouped.empty()) {
 		return false;
 	}
 
+	const auto shared = std::make_shared<Texts>(std::move(texts));
 	auto submenu = std::make_unique<Ui::PopupMenu>(menu.get(), menu->st());
 	const auto itemId = item->fullId();
 	const auto owner = &item->history()->owner();
 	auto lastServerId = QString();
 	for (const auto &entry : grouped) {
 		const auto account = entry.account;
-		if (account == current) {
-			continue;
-		}
 		if (entry.server.id != lastServerId) {
 			if (!lastServerId.isEmpty()) {
 				submenu->addSeparator();
@@ -465,15 +493,57 @@ bool AddForwardToAccountAction(
 			const auto account = weakAccount.get();
 			const auto item = owner->message(itemId);
 			if (account && item) {
-				StartCrossForward(show, item, account);
+				StartCrossForward(show, item, account, shared);
 			}
 		});
 	}
-	menu->addAction(
-		tr::lng_owpengram_forward_to(tr::now),
-		std::move(submenu),
-		&st::menuIconForward);
+	menu->addAction(label, std::move(submenu), icon);
 	return true;
+}
+
+[[nodiscard]] bool IsProtected(not_null<HistoryItem*> item) {
+	return !item->allowsForward() || item->forbidsSaving();
+}
+
+} // namespace
+
+bool AddForwardToAccountAction(
+		not_null<Ui::PopupMenu*> menu,
+		std::shared_ptr<Ui::Show> show,
+		not_null<HistoryItem*> item) {
+	if (!item->isRegular() || IsProtected(item)) {
+		return false;
+	}
+	return AddAccountsSubmenu(
+		menu,
+		std::move(show),
+		item,
+		[](not_null<Main::Account*>) { return true; },
+		tr::lng_owpengram_forward_to(tr::now),
+		&st::menuIconForward,
+		ForwardToTexts());
+}
+
+bool AddCopyrightCheckAction(
+		not_null<Ui::PopupMenu*> menu,
+		std::shared_ptr<Ui::Show> show,
+		not_null<HistoryItem*> item) {
+	if (!item->isRegular() || !IsProtected(item)) {
+		return false;
+	}
+	return AddAccountsSubmenu(
+		menu,
+		std::move(show),
+		item,
+		[](not_null<Main::Account*> account) {
+			return account->sessionExists()
+				&& account->appConfig().get<bool>(
+					u"owpengram_copyright_validator"_q,
+					false);
+		},
+		tr::lng_owpengram_copyright_check(tr::now),
+		&st::menuIconCopyright,
+		CopyrightCheckTexts());
 }
 
 } // namespace Owpengram

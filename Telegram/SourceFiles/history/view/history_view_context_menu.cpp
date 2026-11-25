@@ -1412,6 +1412,10 @@ void AddMessageActions(
 			menu,
 			list->controller()->uiShow(),
 			request.item);
+		Owpengram::AddCopyrightCheckAction(
+			menu,
+			list->controller()->uiShow(),
+			request.item);
 	}
 	AddOfferAction(menu, request, list);
 	AddSendNowAction(menu, request, list);

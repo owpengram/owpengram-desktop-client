@@ -8794,6 +8794,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_forward_to_downloading" = "Downloading media to forward…";
 "lng_owpengram_forward_to_failed" = "Couldn't prepare the media for forwarding.";
 "lng_owpengram_forward_to_sent" = "Sent to {chat}.";
+"lng_owpengram_copyright_check" = "Copyright Check";
+"lng_owpengram_copyright_check_choose" = "Choose chat for copyright check";
+"lng_owpengram_copyright_check_sent" = "Sent for copyright check to {chat}.";
 "lng_sr_country_column_name" = "Country name";
 "lng_sr_languages_column_native" = "Native name";
 "lng_sr_languages_column_name" = "Language name";

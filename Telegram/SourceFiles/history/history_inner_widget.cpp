@@ -3437,6 +3437,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						_menu.get(),
 						_controller->uiShow(),
 						item);
+					Owpengram::AddCopyrightCheckAction(
+						_menu.get(),
+						_controller->uiShow(),
+						item);
 				}
 				if (HistoryView::CanAddOfferToMessage(item)) {
 					_menu->addAction(tr::lng_context_add_offer(tr::now), [=] {
@@ -3755,6 +3759,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 				}
 				if (!IsAnchoredEphemeral(item)) {
 					Owpengram::AddForwardToAccountAction(
+						_menu.get(),
+						_controller->uiShow(),
+						item);
+					Owpengram::AddCopyrightCheckAction(
 						_menu.get(),
 						_controller->uiShow(),
 						item);
