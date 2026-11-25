@@ -185,7 +185,8 @@ struct Texts {
 
 // Makes every attachment available as a local file in the SOURCE session,
 // downloading what isn't loaded yet, then calls done() with the paths, or
-// fail() if a download was cancelled or a file couldn't be written.
+// fail() if a download was cancelled or failed, or a file couldn't be
+// written.
 void PrepareFiles(
 		not_null<Main::Session*> source,
 		std::vector<Attachment> attachments,
@@ -202,7 +203,14 @@ void PrepareFiles(
 		rpl::lifetime lifetime;
 	};
 	const auto state = std::make_shared<State>();
+	const auto folder = NewTempFolder();
+	if (folder.isEmpty()) {
+		fail();
+		return;
+	}
+	auto index = 0;
 	for (const auto &attachment : attachments) {
+		++index;
 		auto entry = Entry{ .attachment = attachment };
 		const auto origin = Data::FileOrigin(attachment.origin);
 		if (const auto photo = attachment.photo) {
@@ -212,7 +220,14 @@ void PrepareFiles(
 			entry.document = document->createMediaView();
 			if (document->filepath(true).isEmpty()
 				&& !entry.document->loaded(true)) {
-				document->save(origin, QString());
+				// Always into a file: a loader without a target file keeps
+				// the whole file in memory and asserts it is at most
+				// Storage::kMaxFileInMemory, so a larger video would crash.
+				// Protected media is never auto-saved to disk, so for those
+				// posts this is the usual path, not an edge case.
+				document->save(
+					origin,
+					folder + '/' + SafeFileName(document->filename(), index));
 			}
 		}
 		state->entries.push_back(std::move(entry));
@@ -232,7 +247,8 @@ void PrepareFiles(
 				if (!document->filepath(true).isEmpty()
 					|| entry.document->loaded(true)) {
 					continue;
-				} else if (document->cancelled()) {
+				} else if (document->cancelled()
+					|| document->status == FileDownloadFailed) {
 					state->finished = true;
 					fail();
 					return true;
@@ -242,11 +258,6 @@ void PrepareFiles(
 		}
 		state->finished = true;
 
-		const auto folder = NewTempFolder();
-		if (folder.isEmpty()) {
-			fail();
-			return true;
-		}
 		auto paths = QStringList();
 		auto index = 0;
 		for (const auto &entry : state->entries) {
@@ -505,6 +516,15 @@ bool AddAccountsSubmenu(
 	return !item->allowsForward() || item->forbidsSaving();
 }
 
+// A channel post (broadcast or supergroup) whose forwarding the channel
+// restricts: the case Copyright Check exists for. Private chats, bots and
+// media that merely can't be forwarded (invoices, paid media) don't count.
+[[nodiscard]] bool IsProtectedChannelPost(not_null<HistoryItem*> item) {
+	const auto peer = item->history()->peer;
+	return peer->isChannel()
+		&& (!peer->allowsForwarding() || item->forbidsForward());
+}
+
 } // namespace
 
 bool AddForwardToAccountAction(
@@ -528,7 +548,7 @@ bool AddCopyrightCheckAction(
 		not_null<Ui::PopupMenu*> menu,
 		std::shared_ptr<Ui::Show> show,
 		not_null<HistoryItem*> item) {
-	if (!item->isRegular() || !IsProtected(item)) {
+	if (!item->isRegular() || !IsProtectedChannelPost(item)) {
 		return false;
 	}
 	return AddAccountsSubmenu(

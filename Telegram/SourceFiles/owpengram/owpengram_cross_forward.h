@@ -45,8 +45,8 @@ bool AddForwardToAccountAction(
 	not_null<HistoryItem*> item);
 
 // "Copyright Check >" in the message context menu: the same copy as
-// "Forward To", but only for protected posts (forwarding and saving
-// restricted by the channel) and only into accounts whose server marks them
+// "Forward To", but only for protected channel posts (forwarding restricted
+// by the channel or supergroup) and only into accounts whose server marks them
 // as copyright validators (owpengram_copyright_validator in the app config:
 // an account linked to a server operator with the copyright.validate right).
 // Lets a server's operators receive such a post to check who owns it.
