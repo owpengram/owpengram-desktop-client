@@ -594,7 +594,7 @@ ToolbarStarButton::ToolbarStarButton(
 : RippleButton(parent, st.ripple)
 , _st(st) {
 	resize(_st.width, _st.height);
-	AmPremiumValue(session) | rpl::on_next([=](bool premium) {
+	RichFormattingUnlockedValue(session) | rpl::on_next([=](bool premium) {
 		_premium = premium;
 		_frame = QImage();
 		update();
@@ -935,7 +935,7 @@ void Toolbar::buildPills() {
 }
 
 void Toolbar::fillHeadingMenu(not_null<Ui::PopupMenu*> menu) {
-	const auto starSize = SessionPremium(_session)
+	const auto starSize = RichFormattingUnlocked(_session)
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
 	for (const auto level : std::array{ 1, 2, 3, 4, 5, 6 }) {
@@ -973,7 +973,7 @@ void Toolbar::fillBlockStyleMenu(not_null<Ui::PopupMenu*> menu) {
 			_editor->insertBlock({ .type = type });
 		}
 	};
-	const auto premium = SessionPremium(_session);
+	const auto premium = RichFormattingUnlocked(_session);
 	const auto starSize = premium
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
@@ -1074,7 +1074,7 @@ void Toolbar::showBlockStyleMenu(not_null<Ui::IconButton*> button) {
 
 void Toolbar::fillTextStyleMenu(not_null<Ui::PopupMenu*> menu) {
 	using Action = Widget::ToolbarFormatAction;
-	const auto premium = SessionPremium(_session);
+	const auto premium = RichFormattingUnlocked(_session);
 	const auto starSize = premium
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
@@ -1155,7 +1155,7 @@ void Toolbar::showTextStyleMenu(not_null<Ui::IconButton*> button) {
 }
 
 void Toolbar::fillAttachMenu(not_null<Ui::PopupMenu*> menu) {
-	const auto starSize = SessionPremium(_session)
+	const auto starSize = RichFormattingUnlocked(_session)
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
 	Menu::AddActiveColorAction(
@@ -1238,7 +1238,7 @@ void Toolbar::fillListStyleMenu(not_null<Ui::PopupMenu*> menu) {
 			_editor->insertBlock({ .type = type });
 		}
 	};
-	const auto starSize = SessionPremium(_session)
+	const auto starSize = RichFormattingUnlocked(_session)
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
 	const auto lists = !_editor || _editor->canInsertListAtCaret();
@@ -1952,7 +1952,7 @@ void WindowHost::Impl::setupWindow(ShowWindowDescriptor &&descriptor) {
 			}
 			updateBottomMask();
 		};
-		AmPremiumValue(
+		RichFormattingUnlockedValue(
 			session
 		) | rpl::on_next([=](bool value) {
 			*premium = value;

@@ -125,7 +125,7 @@ void ShowRichPasteToast(RichPasteToastArgs &&args) {
 	const auto markdown = (args.offer == RichPasteOffer::Markdown);
 	const auto locked = !undo
 		&& !field
-		&& !Iv::Editor::SessionPremium(session);
+		&& !Iv::Editor::RichFormattingUnlocked(session);
 	if (locked
 		&& Core::App().settings().readPref<bool>(
 			"rich_paste_toast_hidden",

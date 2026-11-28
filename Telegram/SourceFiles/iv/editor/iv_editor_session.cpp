@@ -281,10 +281,6 @@ private:
 	Unexpected("Request media type.");
 }
 
-[[nodiscard]] bool CanUseRichMessages(not_null<Main::Session*> session) {
-	return session->premium();
-}
-
 enum class RichMessagePosting {
 	Disabled,
 	Premium,
@@ -302,6 +298,21 @@ enum class RichMessagePosting {
 		return RichMessagePosting::Premium;
 	}
 	return RichMessagePosting::Disabled;
+}
+
+// owpengram: an OwpenGram server may make rich formatting free for every
+// account by sending its own owpengram_rich_formatting_free key. Official
+// Telegram never sends it, so Telegram accounts keep the Premium gate and
+// rich_message_posting keeps its upstream meaning.
+[[nodiscard]] bool RichFormattingFreeOnServer(
+		not_null<Main::Session*> session) {
+	return session->appConfig().get<bool>(
+		u"owpengram_rich_formatting_free"_q,
+		false);
+}
+
+[[nodiscard]] bool CanUseRichMessages(not_null<Main::Session*> session) {
+	return session->premium() || RichFormattingFreeOnServer(session);
 }
 
 [[nodiscard]] bool IsRichMessageMediaKind(RichPage::BlockKind kind) {
@@ -4957,6 +4968,22 @@ bool SessionPremium(not_null<Main::Session*> session) {
 
 rpl::producer<bool> AmPremiumValue(not_null<Main::Session*> session) {
 	return ::Data::AmPremiumValue(session);
+}
+
+bool RichFormattingUnlocked(not_null<Main::Session*> session) {
+	return CanUseRichMessages(session);
+}
+
+rpl::producer<bool> RichFormattingUnlockedValue(
+		not_null<Main::Session*> session) {
+	return rpl::combine(
+		::Data::AmPremiumValue(session),
+		session->appConfig().value() | rpl::map([=] {
+			return RichFormattingFreeOnServer(session);
+		})
+	) | rpl::map([](bool premium, bool free) {
+		return premium || free;
+	}) | rpl::distinct_until_changed();
 }
 
 rpl::producer<int> StarsPerMessageValue(

@@ -2549,7 +2549,7 @@ void ChatWidget::sendRichDraft(
 		controller()->showToast(tr::lng_attach_failed(tr::now));
 		return;
 	}
-	if (!session().premium()
+	if (!Iv::Editor::RichFormattingUnlocked(&session())
 		&& Iv::RichPageUsesPremiumFormatting(*page)) {
 		if (Iv::RichPageIsFlattenSafe(*page)) {
 			const auto weak = base::make_weak(this);

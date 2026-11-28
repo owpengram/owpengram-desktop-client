@@ -73,6 +73,10 @@ void ShowRichMessagesPremiumToast(std::shared_ptr<ChatHelpers::Show> show);
 [[nodiscard]] bool SessionPremium(not_null<Main::Session*> session);
 [[nodiscard]] rpl::producer<bool> AmPremiumValue(
 	not_null<Main::Session*> session);
+// Premium OR the OwpenGram-only owpengram_rich_formatting_free server key.
+[[nodiscard]] bool RichFormattingUnlocked(not_null<Main::Session*> session);
+[[nodiscard]] rpl::producer<bool> RichFormattingUnlockedValue(
+	not_null<Main::Session*> session);
 [[nodiscard]] rpl::producer<int> StarsPerMessageValue(
 	not_null<Main::Session*> session,
 	not_null<PeerData*> peer);

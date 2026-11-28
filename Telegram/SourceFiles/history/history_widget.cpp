@@ -5915,7 +5915,7 @@ void HistoryWidget::sendRichDraft(
 			return;
 		}
 	}
-	if (!session().premium()
+	if (!Iv::Editor::RichFormattingUnlocked(&session())
 		&& Iv::RichPageUsesPremiumFormatting(*page)) {
 		if (Iv::RichPageIsFlattenSafe(*page)) {
 			const auto weak = base::make_weak(this);
@@ -7002,7 +7002,7 @@ void HistoryWidget::updateSendButtonType() {
 	const auto richPage = shownRichMessage();
 	const auto richMessage = (richPage != nullptr);
 	_sendLockBadge.fire(richMessage
-		&& !session().premium()
+		&& !Iv::Editor::RichFormattingUnlocked(&session())
 		&& Iv::RichPageUsesPremiumFormatting(*richPage));
 	const auto messages = !_peer
 		? 0
