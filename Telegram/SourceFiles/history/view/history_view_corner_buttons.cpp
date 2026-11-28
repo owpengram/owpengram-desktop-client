@@ -27,9 +27,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "data/data_forum_topic.h"
 #include "lang/lang_keys.h"
+#include "owpengram/claude/claude_access_badge.h"
+#include "owpengram/claude/claude_access_store.h"
 #include "ui/toast/toast.h"
 #include "styles/style_chat_helpers.h"
 #include "styles/style_widgets.h"
+
+#include <algorithm>
 
 namespace HistoryView {
 namespace {
@@ -266,6 +270,11 @@ CornerButtons::CornerButtons(
 	filterScroll(_pollVotes);
 	filterScroll(_stash);
 
+	Owpengram::Claude::Access().changes(
+	) | rpl::on_next([=] {
+		updatePositions();
+	}, _column.lifetime());
+
 	SendMenu::SetupUnreadMentionsMenu(_mentions.widget.data(), [=] {
 		return _delegate->cornerButtonsThread();
 	});
@@ -276,6 +285,8 @@ CornerButtons::CornerButtons(
 		return _delegate->cornerButtonsThread();
 	});
 }
+
+CornerButtons::~CornerButtons() = default;
 
 void CornerButtons::updateAccessibleDescription(CornerButton &button) {
 	const auto count = button.widget->unreadCount();
@@ -292,6 +303,11 @@ bool CornerButtons::eventFilter(QObject *o, QEvent *e) {
 			|| o == _reactions.widget
 			|| o == _pollVotes.widget
 			|| o == _stash.widget)) {
+		return _scrollViewportEvent(e);
+	}
+	if (e->type() == QEvent::Wheel
+		&& _accessBadge
+		&& o == _accessBadge.get()) {
 		return _scrollViewportEvent(e);
 	}
 	return QObject::eventFilter(o, e);
@@ -439,6 +455,27 @@ bool CornerButtons::ignoresVisibility() const {
 	return _delegate->cornerButtonsIgnoreVisibility();
 }
 
+void CornerButtons::updateAccessBadge() {
+	const auto thread = _delegate->cornerButtonsThread();
+	// For forum topics the level is the one of the parent peer.
+	const auto peer = (thread && _delegate->cornerButtonsShowAccessBadge())
+		? thread->peer().get()
+		: nullptr;
+	if (_accessBadgePeer == peer) {
+		return;
+	}
+	_accessBadgePeer = peer;
+	if (!peer) {
+		_accessBadge = nullptr;
+	} else {
+		_accessBadge = base::make_unique_q<Owpengram::Claude::AccessBadge>(
+			&_column,
+			peer);
+		_accessBadge->installEventFilter(this);
+	}
+	updatePositions();
+}
+
 void CornerButtons::updateVisibility(Type type, bool shown) {
 	auto &button = buttonByType(type);
 	if (button.shown != shown) {
@@ -457,6 +494,7 @@ void CornerButtons::updateVisibility(Type type, bool shown) {
 }
 
 void CornerButtons::updateUnreadThingsVisibility() {
+	updateAccessBadge();
 	if (_delegate->cornerButtonsIgnoreVisibility()) {
 		return;
 	}
@@ -516,6 +554,7 @@ void CornerButtons::updateUnreadThingsVisibility() {
 }
 
 void CornerButtons::updateJumpDownVisibility(std::optional<int> counter) {
+	updateAccessBadge();
 	if (const auto shown = _delegate->cornerButtonsDownShown()) {
 		updateVisibility(Type::Down, *shown);
 	}
@@ -539,7 +578,8 @@ void CornerButtons::updatePositions() {
 
 	// All corner buttons is a child widgets of _column over _scroll, not me.
 
-	const auto columnWidth = st::historyToDown.width
+	// The Claude access badge takes the place to the left of the buttons.
+	const auto columnWidth = 2 * st::historyToDown.width
 		+ 2 * st::historyToDownPosition.x();
 	_column.resize(columnWidth, _parent->height());
 	_column.moveToRight(0, 0, _parent->width());
@@ -644,6 +684,31 @@ void CornerButtons::updatePositions() {
 		_stash.widget->moveToRight(right, top);
 	}
 
+	if (_accessBadge) {
+		// Same row as the lowest button. When something occupies that
+		// place (usually "down"), the badge stands to the left of it,
+		// otherwise it takes the place itself.
+		const auto occupied = std::max({
+			historyDownShown,
+			unreadMentionsShown,
+			unreadReactionsShown,
+			unreadPollVotesShown,
+		});
+		const auto right = anim::interpolate(
+			st::historyToDownPosition.x(),
+			st::historyToDownPosition.x() + st::historyToDown.width,
+			occupied);
+		_accessBadge->moveToRight(
+			right,
+			_parent->height()
+				- _accessBadge->height()
+				- st::historyToDownPosition.y());
+		const auto shouldBeHidden = !_accessBadge->shouldShow();
+		if (shouldBeHidden != _accessBadge->isHidden()) {
+			_accessBadge->setVisible(!shouldBeHidden);
+		}
+	}
+
 	checkVisibility(_down);
 	checkVisibility(_mentions);
 	checkVisibility(_reactions);
@@ -667,6 +732,9 @@ void CornerButtons::updatePositions() {
 	addToMask(_reactions);
 	addToMask(_pollVotes);
 	addToMask(_stash);
+	if (_accessBadge && !_accessBadge->isHidden()) {
+		mask += _accessBadge->geometry();
+	}
 	_column.setAttribute(Qt::WA_TransparentForMouseEvents, mask.isEmpty());
 	if (_columnMask != mask) {
 		_columnMask = mask;

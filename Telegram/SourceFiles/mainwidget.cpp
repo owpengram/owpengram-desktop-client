@@ -78,6 +78,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/qthelp_regex.h"
 #include "base/options.h"
 #include "mtproto/mtproto_dc_options.h"
+#include "owpengram/claude/claude_access_store.h"
+#include "owpengram/claude/claude_panel_toggle.h"
+#include "owpengram/claude/claude_top_bar_button.h"
 #include "core/update_checker.h"
 #include "core/shortcuts.h"
 #include "core/application.h"
@@ -99,6 +102,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_user_photos.h"
 #include "styles/style_dialogs.h"
 #include "styles/style_chat.h"
+#include "styles/style_claude.h"
 #include "styles/style_window.h"
 
 #include <QtCore/QCoreApplication>
@@ -2706,7 +2710,13 @@ void MainWidget::updateControlsGeometry() {
 				anim::type::instant,
 				anim::activation::background);
 			const auto active = _controller->activeChatCurrent();
-			if (const auto thread = active.thread()) {
+			// The Claude panel works without a chat too.
+			if (auto claude = Owpengram::Claude::ThirdColumnPanel(
+					_controller)) {
+				_controller->showSection(
+					std::move(claude),
+					params.withThirdColumn());
+			} else if (const auto thread = active.thread()) {
 				if (Core::App().settings().tabbedSelectorSectionEnabled()) {
 					if (_mainSection) {
 						_mainSection->pushTabbedSelectorToThirdSection(
@@ -2842,6 +2852,7 @@ void MainWidget::updateControlsGeometry() {
 			_contentScrollAddToY);
 	}
 	refreshResizeAreas();
+	updateClaudeNoChatButton();
 	if (_player) {
 		_player->entity()->updateDropdownsGeometry();
 	}
@@ -2930,16 +2941,56 @@ void MainWidget::ensureFirstColumnResizeAreaCreated() {
 		std::move(moveFinishedCallback));
 }
 
+void MainWidget::updateClaudeNoChatButton() {
+	const auto shown = !isOneColumn()
+		&& !_mainSection
+		&& !_controller->activeChatCurrent();
+	if (!shown) {
+		if (_claudeNoChat) {
+			_claudeNoChat->hide();
+		}
+		return;
+	}
+	if (!_claudeNoChat) {
+		_claudeNoChat.create(this);
+		_claudeNoChat->setClickedCallback([=] {
+			Owpengram::Claude::TogglePanel(_controller);
+		});
+		Owpengram::Claude::PanelShownValue(
+			_controller
+		) | rpl::on_next([=](bool shown) {
+			_claudeNoChat->setActive(shown);
+		}, _claudeNoChat->lifetime());
+	}
+	_claudeNoChat->moveToLeft(
+		_history->x() + _history->width() - _claudeNoChat->width()
+			- st::owpengramClaudeNoChatSkip,
+		getMainSectionTop());
+	_claudeNoChat->show();
+	_claudeNoChat->raise();
+}
+
 void MainWidget::ensureThirdColumnResizeAreaCreated() {
 	if (_thirdColumnResizeArea) {
 		return;
 	}
 	auto moveLeftCallback = [=](int globalLeft) {
 		auto newWidth = mapToGlobal(QPoint(width(), 0)).x() - globalLeft;
+		if (Owpengram::Claude::PanelInThirdColumn(_controller)) {
+			// The Claude panel has its own width (up to half of chat +
+			// panel), Info keeps its usual one.
+			Owpengram::Claude::Access().setPanelWidth(newWidth);
+			updateControlsGeometry();
+			return;
+		}
 		Core::App().settings().setThirdColumnWidth(newWidth);
 	};
 	auto moveFinishedCallback = [=] {
 		if (!isThreeColumn() || !_thirdSection) {
+			return;
+		}
+		if (Owpengram::Claude::PanelInThirdColumn(_controller)) {
+			Owpengram::Claude::Access().setPanelWidth(_thirdColumnWidth);
 			return;
 		}
 		Core::App().settings().setThirdColumnWidth(std::clamp(
@@ -3002,6 +3053,12 @@ auto MainWidget::thirdSectionForCurrentMainSection(
 void MainWidget::updateThirdColumnToCurrentChat(
 		Dialogs::Key key,
 		bool canWrite) {
+	updateClaudeNoChatButton();
+	if (Owpengram::Claude::HandleActiveChatChanged(
+			_controller,
+			key.peer())) {
+		return;
+	}
 	auto saveOldThirdSection = [&] {
 		if (saveThirdSectionToStackBack()) {
 			_stack.back()->setThirdSectionMemento(

@@ -1,0 +1,205 @@
+/*
+This file is part of Telegram Desktop,
+the official desktop application for the Telegram messaging service.
+
+For license and copyright information please follow this link:
+https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+*/
+using "ui/basic.style";
+using "ui/widgets/widgets.style";
+using "chat_helpers/chat_helpers.style";
+using "info/info.style";
+
+// Same size and ripple as the "jump down" button, the circle is painted
+// in code with the color of the access level.
+owpengramClaudeBadge: TwoIconButton(historyToDown) {
+}
+owpengramClaudeBadgeShadow: icon {{ "history_down_shadow", historyToDownShadow }};
+
+// Style files can only alias palette colors, so the level colors are
+// borrowed from the theme: muted gray, muted blue, accent blue, teal, orange.
+owpengramClaudeBadgeFg: windowFgActive;
+owpengramClaudeBadgeForbiddenBg: dialogsUnreadBgMuted;
+owpengramClaudeBadgeVisibleBg: msgFile1BgDark;
+owpengramClaudeBadgeReadBg: windowBgActive;
+owpengramClaudeBadgeActBg: msgFile2BgSelected;
+owpengramClaudeBadgeAutoBg: historyPeer8UserpicBg;
+
+owpengramClaudeEye: icon {{ "owpengram/claude_eye-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeEyeOff: icon {{ "owpengram/claude_eye_off-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeList: icon {{ "owpengram/claude_list-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeHand: icon {{ "owpengram/claude_hand-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeBolt: icon {{ "owpengram/claude_bolt-24x24", owpengramClaudeBadgeFg }};
+owpengramClaudeSpark: icon {{ "owpengram/claude_spark-24x24", owpengramClaudeBadgeFg }};
+
+// Top bar button before the search button.
+owpengramClaudeTopBar: IconButton(topBarSearch) {
+	icon: icon {{ "owpengram/claude_spark-24x24", menuIconFg }};
+	iconOver: icon {{ "owpengram/claude_spark-24x24", menuIconFgOver }};
+}
+owpengramClaudeTopBarFont: font(14px semibold);
+owpengramClaudeNoChatSkip: 8px;
+
+// The panel as a layer when the window has no room for a third column.
+owpengramClaudePanelLayerWidth: 420px;
+owpengramClaudePanelLayerMargin: 24px;
+
+// Side panel (third column).
+owpengramClaudePanelTopHeight: 48px;
+owpengramClaudePanelSpark: icon {{ "owpengram/claude_spark-24x24", historyPeer8UserpicBg }};
+owpengramClaudePanelSparkPosition: point(12px, 12px);
+owpengramClaudePanelTitle: FlatLabel(defaultFlatLabel) {
+	style: TextStyle(semiboldTextStyle) {
+		font: font(15px semibold);
+	}
+}
+owpengramClaudePanelTitlePosition: point(42px, 14px);
+owpengramClaudePanelChipSkip: 8px;
+owpengramClaudePanelChipTop: 12px;
+owpengramClaudePanelChip: RoundButton(defaultLightButton) {
+	textBg: windowBgOver;
+	textBgOver: windowBgOver;
+	width: -20px;
+	height: 24px;
+	radius: 12px;
+	textTop: 4px;
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px semibold);
+	}
+}
+owpengramClaudePanelButton: IconButton(defaultIconButton) {
+	width: 36px;
+	height: 48px;
+	iconPosition: point(-1px, -1px);
+	rippleAreaPosition: point(2px, 8px);
+	rippleAreaSize: 32px;
+	ripple: defaultRippleAnimationBgOver;
+}
+owpengramClaudePanelClose: IconButton(owpengramClaudePanelButton) {
+	icon: icon {{ "info/info_close", boxTitleCloseFg }};
+	iconOver: icon {{ "info/info_close", boxTitleCloseFgOver }};
+}
+owpengramClaudePanelMenu: IconButton(owpengramClaudePanelButton) {
+	icon: icon {{ "title_menu_dots", boxTitleCloseFg }};
+	iconOver: icon {{ "title_menu_dots", boxTitleCloseFgOver }};
+}
+owpengramClaudePanelPin: IconButton(owpengramClaudePanelButton) {
+	icon: icon {{ "menu/pin", boxTitleCloseFg }};
+	iconOver: icon {{ "menu/pin", boxTitleCloseFgOver }};
+}
+owpengramClaudePanelPinActive: icon {{ "menu/pin", windowActiveTextFg }};
+owpengramClaudePanelHistory: IconButton(owpengramClaudePanelButton) {
+	icon: icon {{ "emoji/emoji_recent", boxTitleCloseFg }};
+	iconOver: icon {{ "emoji/emoji_recent", boxTitleCloseFgOver }};
+}
+owpengramClaudePanelButtonsRight: 4px;
+
+owpengramClaudePanelFeedPadding: margins(12px, 12px, 12px, 12px);
+owpengramClaudePanelEntrySkip: 10px;
+owpengramClaudePanelText: FlatLabel(defaultFlatLabel) {
+	minWidth: 40px;
+	style: TextStyle(defaultTextStyle) {
+		lineHeight: 20px;
+	}
+}
+owpengramClaudePanelSubText: FlatLabel(owpengramClaudePanelText) {
+	textFg: windowSubTextFg;
+}
+owpengramClaudePanelErrorText: FlatLabel(owpengramClaudePanelText) {
+	textFg: boxTextFgError;
+}
+owpengramClaudePanelEmpty: FlatLabel(owpengramClaudePanelSubText) {
+	align: align(top);
+}
+owpengramClaudePanelBubbleBg: windowBgOver;
+owpengramClaudePanelBubblePadding: margins(12px, 8px, 12px, 8px);
+owpengramClaudePanelBubbleRadius: 14px;
+owpengramClaudePanelBubbleLeftSkip: 40px;
+owpengramClaudePanelNoticeButtonSkip: 6px;
+owpengramClaudePanelToolsToggle: LinkButton(defaultLinkButton) {
+	color: windowSubTextFg;
+	overColor: windowSubTextFg;
+}
+
+owpengramClaudePanelInputMargin: margins(8px, 5px, 8px, 5px);
+owpengramClaudePanelInputPadding: margins(1px, 1px, 1px, 1px);
+owpengramClaudePanelInputRadius: 12px;
+owpengramClaudePanelInputBorder: 1px;
+owpengramClaudePanelInputBorderFg: inputBorderFg;
+owpengramClaudePanelField: InputField(defaultInputField) {
+	textMargins: margins(0px, 7px, 0px, 7px);
+	textAlign: align(topleft);
+	placeholderMargins: margins(0px, 0px, 0px, 0px);
+	placeholderScale: 0.;
+	placeholderFont: normalFont;
+	placeholderShift: -50px;
+	border: 0px;
+	borderActive: 0px;
+	heightMin: 34px;
+	heightMax: 160px;
+}
+owpengramClaudePanelSend: IconButton(defaultIconButton) {
+	width: 34px;
+	height: 34px;
+	icon: icon {{ "chat/input_send", historySendIconFg }};
+	iconOver: icon {{ "chat/input_send", historySendIconFgOver }};
+	rippleAreaPosition: point(2px, 2px);
+	rippleAreaSize: 30px;
+	ripple: defaultRippleAnimationBgOver;
+}
+
+owpengramClaudePanelAttach: IconButton(owpengramClaudePanelSend) {
+	icon: icon {{ "menu/add", historyComposeIconFg }};
+	iconOver: icon {{ "menu/add", historyComposeIconFgOver }};
+}
+
+// The row under the input: model / effort, mode, usage.
+owpengramClaudeControlFont: font(12px);
+owpengramClaudeControlHeight: 24px;
+owpengramClaudeControlPadding: 8px;
+owpengramClaudeControlRadius: 6px;
+owpengramClaudeControlSkip: 2px;
+owpengramClaudeControlsMargin: margins(8px, 0px, 8px, 6px);
+owpengramClaudeUsageRingSize: 14px;
+owpengramClaudeUsageRingLine: 2px;
+owpengramClaudeUsageNormal: windowActiveTextFg;
+owpengramClaudeUsageWarning: statisticsChartLineGolden;
+owpengramClaudeUsageDanger: statisticsChartLineRed;
+owpengramClaudeUsageBarBg: windowBgOver;
+owpengramClaudeUsageWidth: 320px;
+owpengramClaudeUsagePadding: margins(16px, 12px, 16px, 14px);
+owpengramClaudeUsageRowSkip: 14px;
+owpengramClaudeUsageBarTop: 6px;
+owpengramClaudeUsageBarHeight: 4px;
+owpengramClaudeUsageFont: font(13px);
+owpengramClaudeUsageLink: LinkButton(defaultLinkButton) {
+	color: windowFg;
+	overColor: windowFg;
+	font: font(13px);
+	overFont: font(13px underline);
+}
+
+owpengramClaudePanelConnectorsPadding: margins(16px, 4px, 16px, 12px);
+owpengramClaudePanelConnectorsTitle: FlatLabel(owpengramClaudePanelSubText) {
+	style: TextStyle(semiboldTextStyle) {
+		font: font(12px semibold);
+	}
+}
+owpengramClaudePanelConnectorLabel: FlatLabel(defaultFlatLabel) {
+	minWidth: 40px;
+	textFg: windowSubTextFg;
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px);
+	}
+}
+owpengramClaudePanelConnectorSkip: 4px;
+owpengramClaudePanelReconnect: LinkButton(defaultLinkButton) {
+	font: font(12px);
+	overFont: font(12px underline);
+}
+
+// Session history box.
+owpengramClaudeHistoryRowHeight: 56px;
+owpengramClaudeHistoryRowTitleTop: 9px;
+owpengramClaudeHistoryRowAboutTop: 30px;
+owpengramClaudeHistoryEmptyPadding: margins(24px, 24px, 24px, 24px);
