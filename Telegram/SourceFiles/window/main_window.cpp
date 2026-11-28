@@ -28,6 +28,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/shortcuts.h"
 #include "core/update_channel.h"
 #include "lang/lang_keys.h"
+#include "owpengram/owpengram_account_color.h"
+#include "owpengram/owpengram_servers.h"
 #include "data/data_session.h"
 #include "data/data_forum_topic.h"
 #include "data/data_saved_sublist.h"
@@ -49,7 +51,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "mainwidget.h" // session->content()->windowShown().
 #include "tray.h"
+#include "base/platform/base_platform_info.h"
+#include "ui/effects/animation_value.h"
 #include "styles/style_window.h"
+#include "styles/style_widgets.h"
 #include "styles/style_dialogs.h" // ChildSkip().x() for new child windows.
 
 #ifdef Q_OS_MAC
@@ -67,6 +72,8 @@ namespace Window {
 namespace {
 
 constexpr auto kSaveWindowPositionTimeout = crl::time(1000);
+constexpr auto kAccountTitleTintActive = 0.4;
+constexpr auto kAccountTitleTintInactive = 0.2;
 
 using Core::WindowPosition;
 
@@ -88,6 +95,15 @@ using Core::WindowPosition;
 [[nodiscard]] QImage &OverridenIcon() {
 	static auto result = QImage();
 	return result;
+}
+
+// The window title names the server the active account lives on
+// ("Telegram", "OwpenGram", "gram.inet.io"), the same label the account
+// switcher groups accounts under, so it is clear which server you are on.
+[[nodiscard]] QString AccountServerTitle(
+		not_null<Main::Account*> account) {
+	const auto server = Owpengram::CurrentServerForAccount(account);
+	return !server.name.isEmpty() ? server.name : server.host;
 }
 
 base::options::toggle OptionNewWindowsSizeAsFirst({
@@ -424,6 +440,14 @@ MainWindow::MainWindow(not_null<Controller*> controller)
 	style::PaletteChanged(
 	) | rpl::on_next([=] {
 		updatePalette();
+		applyAccountTitleStyle();
+	}, lifetime());
+
+	rpl::merge(
+		Owpengram::AccountColorChanges(),
+		Core::App().domain().accountsChanges()
+	) | rpl::on_next([=] {
+		updateTitle();
 	}, lifetime());
 
 	Core::App().unreadBadgeChanges(
@@ -652,6 +676,72 @@ void MainWindow::activate() {
 		if (const auto session = sessionController()) {
 			session->content()->windowShown();
 		}
+	}
+}
+
+void MainWindow::updateAccountColor() {
+	const auto session = Core::App().passcodeLocked()
+		? nullptr
+		: _controller->sessionController();
+	const auto color = session
+		? Owpengram::ResolveAccountColor(&session->session().account())
+		: std::optional<QColor>();
+	if (_accountColor == color) {
+		return;
+	}
+	_accountColor = color;
+	if (!_accountColor) {
+		_accountStrip.destroy();
+	} else if (!_accountStrip) {
+		_accountStrip.create(body());
+		_accountStrip->setAttribute(Qt::WA_TransparentForMouseEvents);
+		_accountStrip->paintRequest(
+		) | rpl::on_next([=] {
+			if (_accountColor) {
+				QPainter(_accountStrip.data()).fillRect(
+					_accountStrip->rect(),
+					*_accountColor);
+			}
+		}, _accountStrip->lifetime());
+		_accountStrip->show();
+	} else {
+		_accountStrip->update();
+	}
+	applyAccountTitleStyle();
+	updateControlsGeometry();
+}
+
+void MainWindow::applyAccountTitleStyle() {
+	if (!::Platform::IsMac()) {
+		return;
+	} else if (!_accountColor) {
+		if (_accountTitleStyle) {
+			setTitleStyle(st::defaultWindowTitle);
+		}
+		return;
+	}
+	const auto active = anim::color(
+		st::titleBgActive,
+		*_accountColor,
+		kAccountTitleTintActive);
+	const auto inactive = anim::color(
+		st::titleBg,
+		*_accountColor,
+		kAccountTitleTintInactive);
+	if (!_accountTitleStyle) {
+		_accountTitleBgActive.emplace(active);
+		_accountTitleBg.emplace(inactive);
+		_accountTitleStyle = std::make_unique<style::WindowTitle>(
+			st::defaultWindowTitle);
+		_accountTitleStyle->bgActive = _accountTitleBgActive->color();
+		_accountTitleStyle->bg = _accountTitleBg->color();
+	} else {
+		_accountTitleBgActive->update(active);
+		_accountTitleBg->update(inactive);
+	}
+	setTitleStyle(*_accountTitleStyle);
+	if (const auto title = titleWidget()) {
+		title->update();
 	}
 }
 
@@ -884,6 +974,14 @@ void MainWindow::updateControlsGeometry() {
 	if (_titleShadow) {
 		_titleShadow->setGeometry(inner.x(), bodyTop, inner.width(), st::lineWidth);
 	}
+	if (_accountStrip) {
+		_accountStrip->setGeometry(
+			inner.x(),
+			bodyTop,
+			inner.width(),
+			st::windowAccountStripHeight);
+		bodyTop += _accountStrip->height();
+	}
 	if (_outdated) {
 		Ui::SendPendingMoveResizeEvents(_outdated.data());
 		_outdated->resizeToWidth(inner.width());
@@ -916,11 +1014,10 @@ void MainWindow::updateTitle() {
 		: Core::App().unreadBadge();
 	const auto added = (counter > 0) ? u" (%1)"_q.arg(counter) : QString();
 	const auto session = locked ? nullptr : _controller->sessionController();
-	const auto user = (session
-		&& !settings.hideAccountName
-		&& Core::App().domain().accountsAuthedCount() > 1)
-		? st::wrap_rtl(session->authedName())
+	const auto user = (session && !settings.hideAccountName)
+		? st::wrap_rtl(AccountServerTitle(&session->session().account()))
 		: QString();
+	updateAccountColor();
 	const auto separateSharedMediaTitle = session
 		? TitleFromSeparateSharedMedia(settings, session->windowId())
 		: QString();

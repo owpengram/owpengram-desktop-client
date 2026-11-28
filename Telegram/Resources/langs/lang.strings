@@ -9345,6 +9345,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_owpengram_server_page" = "{current} / {total}";
 "lng_owpengram_tg_link_no_account" = "This link is for Telegram's official network. Please log in to a Telegram account in this app to open it.";
 "lng_owpengram_tg_link_switch_account" = "This link is for Telegram's official network. Please switch to your Telegram account to open it.";
+"lng_owpengram_account_color" = "Account color";
+"lng_owpengram_account_color_about" = "While this account is active, its color is shown as a strip at the top of the window (and in the title bar on macOS), so you don't mix up accounts.";
+"lng_owpengram_account_color_show" = "Show account color";
+"lng_owpengram_account_color_auto" = "Auto";
 "lng_owpengram_owpg_other_server" = "This link belongs to a server you're not connected to:";
 "lng_owpengram_forward_to" = "Forward To";
 "lng_owpengram_forward_to_choose" = "Choose chat";

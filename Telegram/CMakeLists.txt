@@ -1734,6 +1734,8 @@ PRIVATE
     mtproto/facade.h
     mtproto/mtp_instance.cpp
     mtproto/mtp_instance.h
+    owpengram/owpengram_account_color.cpp
+    owpengram/owpengram_account_color.h
     owpengram/owpengram_cross_forward.cpp
     owpengram/owpengram_cross_forward.h
     owpengram/owpengram_servers.cpp
