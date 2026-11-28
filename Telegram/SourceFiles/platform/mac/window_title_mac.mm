@@ -69,11 +69,9 @@ void PreviewWindowTitle(Painter &p, const style::palette &palette, QRect body, i
 	if (QFontInfo(font).family() != font.family()) {
 		font = st::semiboldFont;
 		font.setPixelSize(13);
-	} else if (font.family() == u".AppleSystemUIFont"_q) {
+	} else {
 		font.setBold(true);
 		font.setPixelSize(13);
-	} else {
-		font.setPixelSize((titleHeight * 15) / 24);
 	}
 
 	p.setPen(st::titleFgActive[palette]);

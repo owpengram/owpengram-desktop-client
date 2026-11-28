@@ -1171,7 +1171,9 @@ private:
 	bool _notifyFromAll = true;
 	rpl::variable<bool> _nativeWindowFrame = false;
 	rpl::variable<std::optional<bool>> _systemDarkMode = std::nullopt;
-	rpl::variable<bool> _systemDarkModeEnabled = false;
+	// OwpenGram: follow the system light/dark theme by default (upstream
+	// default is off). Only affects fresh installs, saved settings win.
+	rpl::variable<bool> _systemDarkModeEnabled = true;
 	bool _systemAccentColorEnabled = false;
 	rpl::variable<WindowTitleContent> _windowTitleContent;
 	WindowPosition _windowPosition; // per-window
