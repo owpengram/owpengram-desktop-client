@@ -267,6 +267,9 @@ public:
 	std::optional<bool> cornerButtonsDownShown() override;
 	bool cornerButtonsUnreadMayBeShown() override;
 	bool cornerButtonsHas(CornerButtonType type) override;
+	bool cornerButtonsShowAccessBadge() override {
+		return true;
+	}
 
 private:
 	enum class Mode {

@@ -30,6 +30,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/vertical_list.h"
 #include "ui/unread_badge_paint.h"
 #include "ui/ui_utility.h"
+#include "ui/layers/generic_box.h"
+#include "ui/widgets/checkbox.h"
+#include "ui/widgets/color_editor.h"
+#include "owpengram/owpengram_account_color.h"
 #include "owpengram/owpengram_servers.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
@@ -803,6 +807,58 @@ void SetupAccountsWrap(
 	return (modifiers & Qt::ShiftModifier) && (modifiers & Qt::AltModifier);
 }
 
+void AccountColorBox(
+		not_null<Ui::GenericBox*> box,
+		not_null<::Main::Account*> account) {
+	using namespace Owpengram;
+	const auto setting = ReadAccountColor(account);
+	const auto initial = (setting.mode == AccountColorMode::Custom)
+		? setting.custom
+		: AutoAccountColor(account);
+
+	box->setTitle(tr::lng_owpengram_account_color());
+	box->addRow(
+		object_ptr<Ui::FlatLabel>(
+			box,
+			tr::lng_owpengram_account_color_about(),
+			st::boxLabel));
+	const auto enabled = box->addRow(
+		object_ptr<Ui::Checkbox>(
+			box,
+			tr::lng_owpengram_account_color_show(tr::now),
+			(setting.mode != AccountColorMode::Off),
+			st::defaultBoxCheckbox),
+		st::boxRowPadding + QMargins(0, st::boxLittleSkip, 0, 0));
+	const auto editor = box->addRow(
+		object_ptr<ColorEditor>(box, ColorEditor::Mode::HSL, initial),
+		QMargins());
+
+	const auto save = [=] {
+		const auto color = editor->color();
+		WriteAccountColor(account, !enabled->checked()
+			? AccountColorSetting{ .mode = AccountColorMode::Off }
+			: (setting.mode == AccountColorMode::Custom || color != initial)
+			? AccountColorSetting{
+				.mode = AccountColorMode::Custom,
+				.custom = color,
+			}
+			: AccountColorSetting());
+		box->closeBox();
+	};
+	editor->submitRequests(
+	) | rpl::on_next(save, editor->lifetime());
+	box->setFocusCallback([=] {
+		editor->setInnerFocus();
+	});
+	box->addButton(tr::lng_settings_save(), save);
+	box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
+	box->addLeftButton(tr::lng_owpengram_account_color_auto(), [=] {
+		WriteAccountColor(account, AccountColorSetting());
+		box->closeBox();
+	});
+	box->setWidth(editor->width());
+}
+
 [[nodiscard]] object_ptr<Ui::SettingsButton> MakeAccountButton(
 		QWidget *parent,
 		not_null<Window::SessionController*> window,
@@ -882,6 +938,19 @@ void SetupAccountsWrap(
 			p.setBrush(Qt::NoBrush);
 			p.drawEllipse(rect);
 		}
+		if (const auto color = Owpengram::ResolveAccountColor(account)) {
+			const auto dot = size / 3;
+			auto hq = PainterHighQualityEnabler(p);
+			const auto position = full - dot - st::lineWidth;
+			p.setPen(QPen(st::windowBg->c, st::lineWidth * 2));
+			p.setBrush(*color);
+			p.drawEllipse(position, position, dot, dot);
+		}
+	}, state->userpic.lifetime());
+
+	Owpengram::AccountColorChanges(
+	) | rpl::on_next([=] {
+		state->userpic.update();
 	}, state->userpic.lifetime());
 
 	raw->setAcceptBoth(true);
@@ -910,6 +979,10 @@ void SetupAccountsWrap(
 			Info::Profile::CopyPhoneToClipboard(
 				Info::Profile::PhoneValue(session->user()));
 		}, &st::menuIconCopy);
+
+		addAction(tr::lng_owpengram_account_color(tr::now), [=] {
+			window->show(Box(AccountColorBox, account));
+		}, &st::menuIconPalette);
 
 		if (!locked) {
 			if (!isActive) {
@@ -1100,32 +1173,14 @@ void AccountsList::rebuild() {
 
 	const auto list = _controller->session().domain().orderedAccounts();
 
-	// Pair each authorized account with its server, then group by server.
-	auto withServers = std::vector<
-		std::pair<not_null<::Main::Account*>, Owpengram::Server>>();
-	withServers.reserve(list.size());
-	for (const auto &account : list) {
-		if (account->sessionExists()) {
-			withServers.emplace_back(
-				account,
-				Owpengram::CurrentServerForAccount(account));
-		}
-	}
+	// Authorized accounts paired with their servers, grouped by server.
+	const auto withServers = Owpengram::AuthedAccountsByServer();
 	// Show the grouped list only when there's more than one account.
 	if (withServers.size() > 1) {
-		std::stable_sort(
-			withServers.begin(),
-			withServers.end(),
-			[](const auto &a, const auto &b) {
-				if (a.second.isTelegram != b.second.isTelegram) {
-					return a.second.isTelegram; // Telegram group first.
-				}
-				return a.second.name < b.second.name;
-			});
 		auto lastServerId = QString();
-		for (const auto &pair : withServers) {
-			const auto account = pair.first;
-			const auto &server = pair.second;
+		for (const auto &entry : withServers) {
+			const auto account = entry.account;
+			const auto &server = entry.server;
 			if (server.id != lastServerId) {
 				lastServerId = server.id;
 				Ui::AddSubsectionTitle(inner, rpl::single(server.name));

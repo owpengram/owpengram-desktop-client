@@ -1,0 +1,55 @@
+/*
+This file is part of Telegram Desktop,
+the official desktop application for the Telegram messaging service.
+
+For license and copyright information please follow this link:
+https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
+*/
+#pragma once
+
+#include <rpl/producer.h>
+
+#include <QtCore/QString>
+
+#include <optional>
+
+namespace Main {
+class Session;
+} // namespace Main
+
+namespace Owpengram::Claude {
+
+enum class ConfirmResult {
+	Approved,
+	Denied, // "Deny" pressed or the box closed in any other way.
+	TimedOut, // No answer for 2 minutes.
+	Unavailable, // No window for this account and none could be opened.
+	SessionClosed, // The account session was destroyed.
+	Cancelled, // `cancelled` fired (the requester is gone).
+};
+
+// Asks the user (a Yes / No box in a window of this account) to allow an
+// action that Claude wants to perform. Main thread only.
+//
+// `done(true)` only if the user pressed "Allow". `done(false)` if the user
+// denied, closed the box, 2 minutes passed, no window could be opened for the
+// account or the account session was destroyed. Allow is ignored during the
+// first second after the box is shown (no accidental Enter / click). `done` is called exactly once, and never
+// synchronously with true.
+void RequestConfirmation(
+	not_null<Main::Session*> session,
+	QString clientName,
+	QString summary,
+	Fn<void(bool approved)> done);
+
+// Same, but tells why the action was not approved. `done` is called exactly
+// once, and never synchronously with Approved. If `cancelled` fires while
+// the box is open, the box is closed and the result is Cancelled.
+void RequestConfirmationWithReason(
+	not_null<Main::Session*> session,
+	QString clientName,
+	QString summary,
+	Fn<void(ConfirmResult result)> done,
+	std::optional<rpl::producer<>> cancelled = std::nullopt);
+
+} // namespace Owpengram::Claude

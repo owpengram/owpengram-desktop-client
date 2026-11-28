@@ -1734,6 +1734,51 @@ PRIVATE
     mtproto/facade.h
     mtproto/mtp_instance.cpp
     mtproto/mtp_instance.h
+    owpengram/owpengram_account_color.cpp
+    owpengram/owpengram_account_color.h
+    owpengram/claude/claude_access_badge.cpp
+    owpengram/claude/claude_access_badge.h
+    owpengram/claude/claude_access_store.cpp
+    owpengram/claude/claude_access_store.h
+    owpengram/claude/claude_confirm.cpp
+    owpengram/claude/claude_confirm.h
+    owpengram/claude/claude_http_request.h
+    owpengram/claude/claude_mcp_server.cpp
+    owpengram/claude/claude_mcp_server.h
+    owpengram/claude/claude_auth.cpp
+    owpengram/claude/claude_auth.h
+    owpengram/claude/claude_history_box.cpp
+    owpengram/claude/claude_history_box.h
+    owpengram/claude/claude_panel.cpp
+    owpengram/claude/claude_panel.h
+    owpengram/claude/claude_panel_controls.cpp
+    owpengram/claude/claude_panel_controls.h
+    owpengram/claude/claude_panel_connectors.cpp
+    owpengram/claude/claude_panel_connectors.h
+    owpengram/claude/claude_panel_messages.cpp
+    owpengram/claude/claude_panel_messages.h
+    owpengram/claude/claude_panel_model.cpp
+    owpengram/claude/claude_panel_model.h
+    owpengram/claude/claude_panel_toggle.cpp
+    owpengram/claude/claude_panel_toggle.h
+    owpengram/claude/claude_top_bar_button.cpp
+    owpengram/claude/claude_top_bar_button.h
+    owpengram/claude/claude_path_rules.h
+    owpengram/claude/claude_process.cpp
+    owpengram/claude/claude_process.h
+    owpengram/claude/claude_session_format.h
+    owpengram/claude/claude_stream_parser.h
+    owpengram/claude/claude_sessions.cpp
+    owpengram/claude/claude_sessions.h
+    owpengram/claude/claude_settings_menu.cpp
+    owpengram/claude/claude_settings_menu.h
+    owpengram/claude/claude_tools.cpp
+    owpengram/claude/claude_tools.h
+    owpengram/claude/claude_tools_act.cpp
+    owpengram/claude/claude_tools_approve.cpp
+    owpengram/claude/claude_tools_read.cpp
+    owpengram/owpengram_cross_forward.cpp
+    owpengram/owpengram_cross_forward.h
     owpengram/owpengram_servers.cpp
     owpengram/owpengram_servers.h
     owpengram/owpengram_updater.cpp

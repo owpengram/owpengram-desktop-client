@@ -5018,7 +5018,7 @@ void ComposeControls::updateSendButtonType() {
 void ComposeControls::updateSendLockBadge() {
 	const auto page = shownRichMessage();
 	_sendLockBadge.fire(page
-		&& !session().premium()
+		&& !Iv::Editor::RichFormattingUnlocked(&session())
 		&& Iv::RichPageUsesPremiumFormatting(*page));
 }
 

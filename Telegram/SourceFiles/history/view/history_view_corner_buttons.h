@@ -14,6 +14,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 class History;
 class HistoryItem;
+class PeerData;
+
+namespace Owpengram::Claude {
+class AccessBadge;
+} // namespace Owpengram::Claude
 struct FullMsgId;
 
 namespace Ui {
@@ -61,6 +66,10 @@ public:
 	[[nodiscard]] virtual std::optional<bool> cornerButtonsDownShown() = 0;
 	[[nodiscard]] virtual bool cornerButtonsUnreadMayBeShown() = 0;
 	[[nodiscard]] virtual bool cornerButtonsHas(CornerButtonType type) = 0;
+	// Only real chat views show the Claude access level badge.
+	[[nodiscard]] virtual bool cornerButtonsShowAccessBadge() {
+		return false;
+	}
 };
 
 class CornerButtons final : private QObject {
@@ -73,6 +82,8 @@ public:
 		not_null<Ui::ElasticScroll*> parent,
 		not_null<const Ui::ChatStyle*> st,
 		not_null<CornerButtonsDelegate*> delegate);
+
+	~CornerButtons();
 
 	using Type = CornerButtonType;
 
@@ -123,6 +134,9 @@ private:
 	void showAt(MsgId id);
 	void showStashMenu();
 
+	// The Claude access badge lives next to the "jump down" button.
+	void updateAccessBadge();
+
 	// The unread counter is painted as a badge, so a screen reader should
 	// have it too - as the description, next to the unchanging name.
 	void updateAccessibleDescription(CornerButton &button);
@@ -149,6 +163,9 @@ private:
 	rpl::event_stream<> _stashClicks;
 	Fn<void(not_null<Ui::PopupMenu*>)> _stashMenuFiller;
 	base::unique_qptr<Ui::PopupMenu> _stashMenu;
+
+	base::unique_qptr<Owpengram::Claude::AccessBadge> _accessBadge;
+	PeerData *_accessBadgePeer = nullptr;
 
 	HistoryItem *_replyReturn = nullptr;
 	QVector<FullMsgId> _replyReturns;

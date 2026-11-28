@@ -861,6 +861,28 @@ std::vector<not_null<Main::Account*>> AccountsUsingServer(
 	return result;
 }
 
+std::vector<AccountOnServer> AuthedAccountsByServer() {
+	auto result = std::vector<AccountOnServer>();
+	for (const auto &account : Core::App().domain().orderedAccounts()) {
+		if (account->sessionExists()) {
+			result.push_back({
+				.account = account,
+				.server = CurrentServerForAccount(account),
+			});
+		}
+	}
+	std::stable_sort(
+		result.begin(),
+		result.end(),
+		[](const AccountOnServer &a, const AccountOnServer &b) {
+			if (a.server.isTelegram != b.server.isTelegram) {
+				return a.server.isTelegram; // Telegram group first.
+			}
+			return a.server.name < b.server.name;
+		});
+	return result;
+}
+
 QString ServerScopeKeyForAccount(not_null<Main::Account*> account) {
 	const auto server = CurrentServerForAccount(account);
 	if (server.isTelegram || server.host.isEmpty()) {

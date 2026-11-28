@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/timer.h"
 #include "base/object_ptr.h"
 #include "core/core_settings.h"
+#include "ui/style/style_core_types.h"
 
 namespace Main {
 class Session;
@@ -194,6 +195,8 @@ private:
 	void refreshTitleWidget();
 	void setupCanaryTitleLabel();
 	[[nodiscard]] QString nativeTitleSuffix() const;
+	void updateAccountColor();
+	void applyAccountTitleStyle();
 	void updateMinimumSize();
 	void updatePalette();
 
@@ -210,6 +213,11 @@ private:
 	bool _positionInited = false;
 
 	object_ptr<Ui::PlainShadow> _titleShadow = { nullptr };
+	object_ptr<Ui::RpWidget> _accountStrip = { nullptr };
+	std::optional<QColor> _accountColor;
+	std::optional<style::owned_color> _accountTitleBgActive;
+	std::optional<style::owned_color> _accountTitleBg;
+	std::unique_ptr<style::WindowTitle> _accountTitleStyle;
 	object_ptr<Ui::RpWidget> _outdated;
 	object_ptr<Ui::RpWidget> _screenReaderBar;
 	object_ptr<Ui::RpWidget> _body;
